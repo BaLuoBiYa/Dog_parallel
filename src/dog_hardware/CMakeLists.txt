@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(hardware)
+project(dog_hardware)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -18,14 +18,23 @@ else()
 endif()
 # 根据平台选择库文件
 
-include_directories(include)
-
 # find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(hardware_interface REQUIRED)
+find_package(pluginlib REQUIRED)
+
+include_directories(include)
 
 add_library(${PROJECT_NAME} SHARED
-    src/example_goM8010_6_motor
+    src/example_goM8010_6_motor.cpp
+    src/Base.cpp
+)
+
+ament_target_dependencies(${PROJECT_NAME}
+  "rclcpp"
+  "pluginlib"
+  "hardware_interface"
 )
 
 add_executable(example_goM8010_6_motor
@@ -36,11 +45,23 @@ target_link_libraries(example_goM8010_6_motor
     ${ARCH_LIB}
 )
 
+pluginlib_export_plugin_description_file(hardware_interface dog_hardwareInterface.xml)
+
 install(
     TARGETS ${PROJECT_NAME}
         example_goM8010_6_motor
     DESTINATION lib
 )
 
+install(
+  DIRECTORY include/
+  DESTINATION include
+)
+
 ament_export_libraries(${PROJECT_NAME})
+ament_export_dependencies(
+  rclcpp
+  pluginlib
+  hardware_interface
+)
 ament_package()
