@@ -1,0 +1,247 @@
+<?xml version="1.0"?>
+
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+    <!-- ...existing code... -->
+
+    <xacro:macro name="parallel_leg_4bar"
+        params="
+        prefix
+        parent:=base
+        motor_spacing
+        upper_len
+        lower_len
+        link_radius:=0.012
+        foot_radius:=0.020
+        upper_mass:=0.40
+        lower_mass:=0.30
+        foot_mass:=0.08
+        dummy_mass:=0.001
+        joint_effort:=60.0
+        joint_velocity:=20.0
+        motor_lower:=-1.57
+        motor_upper:=1.57
+        passive_lower:=-3.1415926
+        passive_upper:=3.1415926
+        damping:=0.05
+        friction:=0.0
+        *origin">
+
+        <!--
+            树状展开后的结构：
+            parent
+              ├─ M1 ─ upper_1 ─ K1 ─ lower_1 ─ FOOT_J     ─ FOOT
+              └─ M2 ─ upper_2 ─ K2 ─ lower_2 ─ FOOT_CUT_J ─ FOOT_CUT
+
+            说明：
+            1. FOOT 是真实足端，可保留碰撞。
+            2. FOOT_CUT 是闭环切断后的虚拟端点，默认不加 collision。
+            3. 理想闭环下，FOOT 与 FOOT_CUT 应由运动学/约束保持重合。
+        -->
+
+        <xacro:property name="upper_ixx"
+            value="${upper_mass * (3.0*link_radius*link_radius + upper_len*upper_len) / 12.0}" />
+        <xacro:property name="upper_izz" value="${0.5 * upper_mass * link_radius * link_radius}" />
+
+        <xacro:property name="lower_ixx"
+            value="${lower_mass * (3.0*link_radius*link_radius + lower_len*lower_len) / 12.0}" />
+        <xacro:property name="lower_izz" value="${0.5 * lower_mass * link_radius * link_radius}" />
+
+        <xacro:property name="foot_i" value="${(2.0 * foot_mass * foot_radius * foot_radius) / 5.0}" />
+        <xacro:property name="dummy_i" value="1e-8" />
+
+        <joint name="${prefix}_mount_fixed" type="fixed">
+            <xacro:insert_block name="origin" />
+            <parent link="${parent}" />
+            <child link="${prefix}_mount" />
+        </joint>
+
+        <link name="${prefix}_mount">
+            <inertial>
+                <origin xyz="0 0 0" rpy="0 0 0" />
+                <mass value="${dummy_mass}" />
+                <inertia ixx="${dummy_i}" ixy="0" ixz="0" iyy="${dummy_i}" iyz="0" izz="${dummy_i}" />
+            </inertial>
+        </link>
+
+        <!-- branch 1 -->
+        <joint name="${prefix}_M1" type="revolute">
+            <origin xyz="${motor_spacing/2.0} 0 0" rpy="0 0 0" />
+            <parent link="${prefix}_mount" />
+            <child link="${prefix}_upper_1" />
+            <axis xyz="0 1 0" />
+            <dynamics damping="${damping}" friction="${friction}" />
+            <limit effort="${joint_effort}" velocity="${joint_velocity}" lower="${motor_lower}"
+                upper="${motor_upper}" />
+        </joint>
+
+        <link name="${prefix}_upper_1">
+            <visual>
+                <origin xyz="0 0 ${-upper_len/2.0}" rpy="0 0 0" />
+                <geometry>
+                    <cylinder length="${upper_len}" radius="${link_radius}" />
+                </geometry>
+            </visual>
+            <collision>
+                <origin xyz="0 0 ${-upper_len/2.0}" rpy="0 0 0" />
+                <geometry>
+                    <cylinder length="${upper_len}" radius="${link_radius}" />
+                </geometry>
+            </collision>
+            <inertial>
+                <origin xyz="0 0 ${-upper_len/2.0}" rpy="0 0 0" />
+                <mass value="${upper_mass}" />
+                <inertia ixx="${upper_ixx}" ixy="0" ixz="0" iyy="${upper_ixx}" iyz="0"
+                    izz="${upper_izz}" />
+            </inertial>
+        </link>
+
+        <joint name="${prefix}_K1" type="revolute">
+            <origin xyz="0 0 ${-upper_len}" rpy="0 0 0" />
+            <parent link="${prefix}_upper_1" />
+            <child link="${prefix}_lower_1" />
+            <axis xyz="0 1 0" />
+            <dynamics damping="${damping}" friction="${friction}" />
+            <limit effort="${joint_effort}" velocity="${joint_velocity}" lower="${passive_lower}"
+                upper="${passive_upper}" />
+        </joint>
+
+        <link name="${prefix}_lower_1">
+            <visual>
+                <origin xyz="0 0 ${-lower_len/2.0}" rpy="0 0 0" />
+                <geometry>
+                    <cylinder length="${lower_len}" radius="${link_radius}" />
+                </geometry>
+            </visual>
+            <collision>
+                <origin xyz="0 0 ${-lower_len/2.0}" rpy="0 0 0" />
+                <geometry>
+                    <cylinder length="${lower_len}" radius="${link_radius}" />
+                </geometry>
+            </collision>
+            <inertial>
+                <origin xyz="0 0 ${-lower_len/2.0}" rpy="0 0 0" />
+                <mass value="${lower_mass}" />
+                <inertia ixx="${lower_ixx}" ixy="0" ixz="0" iyy="${lower_ixx}" iyz="0"
+                    izz="${lower_izz}" />
+            </inertial>
+        </link>
+
+        <joint name="${prefix}_FOOT_J" type="revolute">
+            <origin xyz="0 0 ${-lower_len}" rpy="0 0 0" />
+            <parent link="${prefix}_lower_1" />
+            <child link="${prefix}_FOOT" />
+            <axis xyz="0 1 0" />
+            <dynamics damping="${damping}" friction="${friction}" />
+            <limit effort="${joint_effort}" velocity="${joint_velocity}" lower="${passive_lower}"
+                upper="${passive_upper}" />
+        </joint>
+
+        <link name="${prefix}_FOOT">
+            <visual>
+                <origin xyz="0 0 0" rpy="0 0 0" />
+                <geometry>
+                    <sphere radius="${foot_radius}" />
+                </geometry>
+            </visual>
+            <collision>
+                <origin xyz="0 0 0" rpy="0 0 0" />
+                <geometry>
+                    <sphere radius="${foot_radius}" />
+                </geometry>
+            </collision>
+            <inertial>
+                <origin xyz="0 0 0" rpy="0 0 0" />
+                <mass value="${foot_mass}" />
+                <inertia ixx="${foot_i}" ixy="0" ixz="0" iyy="${foot_i}" iyz="0" izz="${foot_i}" />
+            </inertial>
+        </link>
+
+        <!-- branch 2 -->
+        <joint name="${prefix}_M2" type="revolute">
+            <origin xyz="${-motor_spacing/2.0} 0 0" rpy="0 0 0" />
+            <parent link="${prefix}_mount" />
+            <child link="${prefix}_upper_2" />
+            <axis xyz="0 1 0" />
+            <dynamics damping="${damping}" friction="${friction}" />
+            <limit effort="${joint_effort}" velocity="${joint_velocity}" lower="${motor_lower}"
+                upper="${motor_upper}" />
+        </joint>
+
+        <link name="${prefix}_upper_2">
+            <visual>
+                <origin xyz="0 0 ${-upper_len/2.0}" rpy="0 0 0" />
+                <geometry>
+                    <cylinder length="${upper_len}" radius="${link_radius}" />
+                </geometry>
+            </visual>
+            <collision>
+                <origin xyz="0 0 ${-upper_len/2.0}" rpy="0 0 0" />
+                <geometry>
+                    <cylinder length="${upper_len}" radius="${link_radius}" />
+                </geometry>
+            </collision>
+            <inertial>
+                <origin xyz="0 0 ${-upper_len/2.0}" rpy="0 0 0" />
+                <mass value="${upper_mass}" />
+                <inertia ixx="${upper_ixx}" ixy="0" ixz="0" iyy="${upper_ixx}" iyz="0"
+                    izz="${upper_izz}" />
+            </inertial>
+        </link>
+
+        <joint name="${prefix}_K2" type="revolute">
+            <origin xyz="0 0 ${-upper_len}" rpy="0 0 0" />
+            <parent link="${prefix}_upper_2" />
+            <child link="${prefix}_lower_2" />
+            <axis xyz="0 1 0" />
+            <dynamics damping="${damping}" friction="${friction}" />
+            <limit effort="${joint_effort}" velocity="${joint_velocity}" lower="${passive_lower}"
+                upper="${passive_upper}" />
+        </joint>
+
+        <link name="${prefix}_lower_2">
+            <visual>
+                <origin xyz="0 0 ${-lower_len/2.0}" rpy="0 0 0" />
+                <geometry>
+                    <cylinder length="${lower_len}" radius="${link_radius}" />
+                </geometry>
+            </visual>
+            <collision>
+                <origin xyz="0 0 ${-lower_len/2.0}" rpy="0 0 0" />
+                <geometry>
+                    <cylinder length="${lower_len}" radius="${link_radius}" />
+                </geometry>
+            </collision>
+            <inertial>
+                <origin xyz="0 0 ${-lower_len/2.0}" rpy="0 0 0" />
+                <mass value="${lower_mass}" />
+                <inertia ixx="${lower_ixx}" ixy="0" ixz="0" iyy="${lower_ixx}" iyz="0"
+                    izz="${lower_izz}" />
+            </inertial>
+        </link>
+
+        <joint name="${prefix}_FOOT_CUT_J" type="revolute">
+            <origin xyz="0 0 ${-lower_len}" rpy="0 0 0" />
+            <parent link="${prefix}_lower_2" />
+            <child link="${prefix}_FOOT_CUT" />
+            <axis xyz="0 1 0" />
+            <dynamics damping="${damping}" friction="${friction}" />
+            <limit effort="${joint_effort}" velocity="${joint_velocity}" lower="${passive_lower}"
+                upper="${passive_upper}" />
+        </joint>
+
+        <link name="${prefix}_FOOT_CUT">
+            <visual>
+                <origin xyz="0 0 0" rpy="0 0 0" />
+                <geometry>
+                    <sphere radius="${foot_radius*0.35}" />
+                </geometry>
+            </visual>
+            <inertial>
+                <origin xyz="0 0 0" rpy="0 0 0" />
+                <mass value="${dummy_mass}" />
+                <inertia ixx="${dummy_i}" ixy="0" ixz="0" iyy="${dummy_i}" iyz="0" izz="${dummy_i}" />
+            </inertial>
+        </link>
+    </xacro:macro>
+</robot>

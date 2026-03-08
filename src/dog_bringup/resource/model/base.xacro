@@ -1,0 +1,42 @@
+<?xml version="1.0"?>
+
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="dog">
+
+    <xacro:include filename="leg.xacro" />
+    <xacro:include filename="const.xacro" />
+
+    <link name="base">
+        <visual>
+            <origin rpy="0 0 0" xyz="0 0 0" />
+            <geometry>
+                <box size="${trunk_length} ${trunk_width} ${trunk_height}" />
+            </geometry>
+        </visual>
+        <collision>
+            <origin rpy="0 0 0" xyz="0 0 0" />
+            <geometry>
+                <box size="${trunk_length} ${trunk_width} ${trunk_height}" />
+            </geometry>
+        </collision>
+        <inertial>
+            <origin rpy="0 0 0" xyz="${trunk_com_x} ${trunk_com_y} ${trunk_com_z}" />
+            <mass value="${trunk_mass}" />
+            <inertia
+                ixx="${trunk_ixx}" ixy="${trunk_ixy}" ixz="${trunk_ixz}"
+                iyy="${trunk_iyy}" iyz="${trunk_iyz}"
+                izz="${trunk_izz}" />
+        </inertial>
+    </link>
+
+    <xacro:parallel_leg_4bar
+        prefix="LF"
+        parent="base"
+        motor_spacing="0"
+        upper_len="0.160"
+        lower_len="0.180"
+        link_radius="0.012"
+        foot_radius="0.020">
+        <origin rpy="0 0 0" xyz="${leg_offset_x} ${leg_offset_y} 0" />
+    </xacro:parallel_leg_4bar>
+
+</robot>
