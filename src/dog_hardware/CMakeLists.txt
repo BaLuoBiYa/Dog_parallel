@@ -54,8 +54,10 @@ install(
 )
 
 install(
-  DIRECTORY include/
-  DESTINATION include
+  TARGETS ${PROJECT_NAME}
+        example_goM8010_6_motor
+  DESTINATION lib
+  RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 
 ament_export_libraries(${PROJECT_NAME})

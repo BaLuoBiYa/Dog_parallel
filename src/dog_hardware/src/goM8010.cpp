@@ -8,7 +8,7 @@
 #include <rclcpp/utilities.hpp>
 #include <thread>
 
-namespace Dog_Hardware {
+namespace Dog8Dof {
 
     goM8010Interface::goM8010Interface(uint8_t ID, std::shared_ptr<SerialPort> port) {
         command_.motorType = MotorType::GO_M8010_6;
@@ -141,4 +141,4 @@ namespace Dog_Hardware {
         port_->sendRecv(&command_, &state_);
     }
 
-} // namespace Dog_Hardware
+} // namespace Dog8Dof

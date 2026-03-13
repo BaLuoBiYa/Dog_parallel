@@ -1,19 +1,45 @@
-#include <iostream>
-#include <pinocchio/fwd.hpp>
+#include "pinocchio/parsers/urdf.hpp"
 
 #include "pinocchio/algorithm/joint-configuration.hpp"
-#include "pinocchio/algorithm/rnea.hpp"
-#include "pinocchio/multibody/sample-models.hpp"
+#include "pinocchio/algorithm/kinematics.hpp"
 
-int main() {
-    pinocchio::Model model;
-    pinocchio::buildModels::manipulator(model);
-    pinocchio::Data data(model);
+#include <iostream>
+#include <iterator>
+#include <pinocchio/algorithm/constraints/fwd.hpp>
+#include <pinocchio/algorithm/contact-info.hpp>
+#include <pinocchio/algorithm/fwd.hpp>
+#include <pinocchio/multibody/fwd.hpp>
+#include <pinocchio/spatial/fwd.hpp>
 
-    Eigen::VectorXd q = pinocchio::neutral(model);
-    Eigen::VectorXd v = Eigen::VectorXd::Zero(model.nv);
-    Eigen::VectorXd a = Eigen::VectorXd::Zero(model.nv);
+int main(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
+    using namespace pinocchio;
 
-    const Eigen::VectorXd &tau = pinocchio::rnea(model, data, q, v, a);
-    std::cout << "tau = " << tau.transpose() << std::endl;
+    // You should change here to set up your own URDF file or just pass it as an argument of this
+    // example.
+    const std::string urdf_filename = "/home/luo/Project/Horse/Dog_parallel/src/dog_bringup/resource/model/model.urdf";
+
+    // Load the urdf model
+    Model model;
+    pinocchio::urdf::buildModel(urdf_filename, model);
+    std::cout << "model name: " << model.name << std::endl;
+
+    // Create data required by the algorithms
+    Data data(model);
+
+    // Sample a random configuration
+    Eigen::VectorXd q = randomConfiguration(model);
+    std::cout << "q: " << q.transpose() << std::endl;
+
+    // RigidConstraintModel ci_RF(CONTACT_6D, model, RF_joint_id, LOCAL);
+    // ci_RF.joint1_placement.setRandom(); // Offset in joint frame
+
+    // Perform the forward kinematics over the kinematic tree
+    forwardKinematics(model, data, q);
+
+    // Print out the placement of each joint of the kinematic tree
+    for (JointIndex joint_id = 0; joint_id < (JointIndex)model.njoints; ++joint_id)
+        std::cout << std::setw(24) << std::left << model.names[joint_id] << ": " << std::fixed << std::setprecision(2)
+                  << data.oMi[joint_id].rotation().eulerAngles(2, 1, 0) << std::endl;
 }

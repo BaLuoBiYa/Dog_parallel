@@ -4,7 +4,7 @@
 #include <memory>
 #include <string>
 
-namespace Dog_Hardware {
+namespace Dog8Dof {
 
     /**
      * @brief 封装了 Unitree M8010 电机的基本控制接口
@@ -114,4 +114,4 @@ namespace Dog_Hardware {
         float posOffset_;
     };
 
-} // namespace Dog_Hardware
+} // namespace Dog8Dof

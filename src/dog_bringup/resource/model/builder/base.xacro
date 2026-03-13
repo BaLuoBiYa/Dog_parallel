@@ -4,6 +4,7 @@
 
     <xacro:include filename="leg.xacro" />
     <xacro:include filename="const.xacro" />
+    <xacro:include filename="materials.xacro" />
 
     <link name="base">
         <visual>
@@ -31,12 +32,11 @@
     <xacro:parallel_leg_4bar
         prefix="LF"
         parent="base"
-        motor_spacing="0"
         upper_len="0.160"
         lower_len="0.180"
         link_radius="0.012"
         foot_radius="0.020">
-        <origin rpy="0 0 0" xyz="${leg_offset_x} ${leg_offset_y} 0" />
+        <origin rpy="0 0 90" xyz="${leg_offset_x} ${leg_offset_y} 0" />
     </xacro:parallel_leg_4bar>
 
 </robot>

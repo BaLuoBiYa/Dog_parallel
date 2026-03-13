@@ -6,7 +6,7 @@
 #include <memory>
 #include <rclcpp/logging.hpp>
 
-namespace Dog_Hardware {
+namespace Dog8Dof {
     hardware_interface::CallbackReturn
     BaseInterface::on_init(const hardware_interface::HardwareComponentInterfaceParams &params) {
         if (hardware_interface::SystemInterface::on_init(params) != hardware_interface::CallbackReturn::SUCCESS) {
@@ -98,7 +98,7 @@ namespace Dog_Hardware {
         return hardware_interface::return_type::OK;
     }
 
-} // namespace Dog_Hardware
+} // namespace Dog8Dof
 
 #include "pluginlib/class_list_macros.hpp"
-PLUGINLIB_EXPORT_CLASS(Dog_Hardware::BaseInterface, hardware_interface::SystemInterface);
+PLUGINLIB_EXPORT_CLASS(Dog8Dof::BaseInterface, hardware_interface::SystemInterface);

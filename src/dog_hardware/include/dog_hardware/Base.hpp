@@ -8,7 +8,7 @@
 #include <memory>
 #include <string>
 
-namespace Dog_Hardware {
+namespace Dog8Dof {
     class BaseInterface : public hardware_interface::SystemInterface {
       public:
         hardware_interface::CallbackReturn
@@ -30,4 +30,4 @@ namespace Dog_Hardware {
 
         std::unique_ptr<goM8010Interface> motor_[8];
     };
-} // namespace Dog_Hardware
+} // namespace Dog8Dof

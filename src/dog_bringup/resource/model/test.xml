@@ -1,0 +1,95 @@
+<mujoco>
+    <default>
+        <joint type="hinge" frictionloss="0.1" damping='2' />
+        <position ctrllimited="true" ctrlrange="-3.14 3.14" forcelimited="true" forcerange="-50 50"
+            kp="10" />
+    </default>
+
+    <asset>
+        <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="512"
+            height="512" />
+        <texture name="texplane" type="2d" builtin="checker" rgb1=".2 .3 .4" rgb2=".1 0.15 0.2"
+            width="512" height="512" mark="cross" markrgb=".8 .8 .8" />
+
+        <material name="matplane" reflectance="0.3" texture="texplane" texrepeat="1 1"
+            texuniform="true" />
+    </asset>
+
+    <worldbody>
+        <light directional="true" diffuse=".4 .4 .4" specular="0.1 0.1 0.1" pos="0 0 5.0"
+            dir="0 0 -1" castshadow="false" />
+        <light directional="true" diffuse=".6 .6 .6" specular="0.2 0.2 0.2" pos="0 0 4" dir="0 0 -1" />
+
+        <geom name="ground" type="plane" size="0 0 1" pos="0 0 0" quat="1 0 0 0" material="matplane"
+            condim="1" />
+
+        <body name="base" pos="0 0 1">
+            <geom type="box" size="0.05 0.05 0.05" rgba=".8 .2 .1 1" />
+
+            <body name="LR" pos="-0.204275 0.18545 0" euler="0 0 -90">
+                <body name="LR_Front_Upper" pos="0 0 0" euler="0 90 0">
+                    <geom type="box" size="0.067915 0.01 0.01" rgba=".8 .2 .1 1" />
+                    <!-- 与 base 的关节，放在 upper 的负端 -->
+                    <joint name="LR_Front_Joint" type="hinge" pos="-0.067915 0 0" axis="0 0 1" />
+                    <!-- 下节的 body 原点放在 upper 的正端（upper 半长 -->
+                    <body name="LR_Front_Down" pos="0.067915 0 0" euler="0 0 0">
+                        <!-- 下节几何中心相对于子体原点偏移下半长 -->
+                        <geom type="box" size="0.092665 0.01 0.01" pos="0.092665 0 0"
+                            rgba=".8 .2 .1 1" />
+                        <!-- 关节锚点在此子体原点（即 upper 的正端） -->
+                        <joint name="LR_Front_Joint_Passive" type="hinge" axis="0 0 1" damping="0" />
+                        <!-- 末端放在下节的正端（子体原点 + 下半长） -->
+                        <body name="LR_Front_Connect" pos="0.18533 0 0">
+                            <geom type="sphere" size="0.01" rgba="1 1 1 .5" />
+                        </body>
+                        <!-- <site name="LR_Front_Connect" size="0.01" rgba="1 1 1 .5" pos="0.18533
+                        0 0" /> -->
+                        <body name="LR_Tip" pos="0.18533 0 0" euler="0 0 45">
+                            <geom type="cylinder" size="0.01282 0.01" rgba="0 0 0 1" />
+                        </body>
+                    </body>
+                </body>
+
+                <body name="LR_Back_Upper" pos="0 0 0" euler="0 90 0">
+                    <geom type="box" size="0.067915 0.01 0.01" rgba=".8 .2 .1 1" />
+                    <joint name="LR_Back_Joint" type="hinge" pos="-0.067915 0 0" axis="0 0 1" />
+                    <body name="LR_Back_Down" pos="0.067915 0 0" euler="0 0 0">
+                        <geom type="box" size="0.092665 0.01 0.01" pos="0.092665 0 0"
+                            rgba=".8 .2 .1 1" />
+                        <joint name="LR_Back_Joint_Passive" type="hinge" axis="0 0 1" damping="0" />
+                        <body name="LR_Back_Connect" pos="0.18533 0 0">
+                            <geom type="sphere" size="0.01" rgba="1 1 1 .5" />
+                        </body>
+                    </body>
+                </body>
+            </body>
+
+        </body>
+
+
+    </worldbody>
+
+    <equality>
+        <connect body1="LR_Front_Connect" body2="LR_Back_Connect" anchor="0 0 0" />
+    </equality>
+
+    <contact>
+
+        <exclude body1="LR_Front_Down" body2="LR_Back_Down"></exclude>
+        <exclude body1="LR_Front_Upper" body2="LR_Back_Upper"></exclude>
+
+        <exclude body1="LR_Tip" body2="LR_Front_Down"></exclude>
+        <exclude body1="LR_Tip" body2="LR_Back_Down"></exclude>
+
+        <exclude body1="LR_Front_Connect" body2="LR_Front_Down"></exclude>
+        <exclude body1="LR_Front_Connect" body2="LR_Back_Down"></exclude>
+        <exclude body1="LR_Front_Connect" body2="LR_Back_Connect"></exclude>
+
+        <exclude body1="base" body2="LR"></exclude>
+    </contact>
+
+    <actuator>
+        <position name="LR_Front" joint="LR_Front_Joint" ctrllimited="true" ctrlrange="0.01 3.14" />
+        <position name="LR_Back" joint="LR_Back_Joint" ctrllimited="true" ctrlrange="-3.14 0.01" />
+    </actuator>
+</mujoco>
