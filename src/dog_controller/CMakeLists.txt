@@ -11,8 +11,10 @@ find_package(rclcpp REQUIRED)
 find_package(pinocchio REQUIRED)
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 
+include_directories(include)
+
 add_library(${PROJECT_NAME}
-  src/PinocchioInterface.cpp
+  src/model.cpp
   src/PinocchionTest.cpp
 )
 
