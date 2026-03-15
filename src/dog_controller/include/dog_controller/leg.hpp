@@ -1,4 +1,5 @@
-#include "dog_controller/type.hpp"
+#pragma once
+#include "dog_tools/type.hpp"
 
 namespace Dog8Dof {
 
@@ -26,7 +27,8 @@ namespace Dog8Dof {
          * @param tau 足端在腿坐标系下的X,Z力矩。
          * @return 位置是否可达
          */
-        bool setTip(Eigen::Vector3<float> pos, Eigen::Vector3<float> vel, Eigen::Vector3<float> tau);
+        bool
+        setTip(const Eigen::Vector3<float> &pos, const Eigen::Vector3<float> &vel, const Eigen::Vector3<float> &tau);
 
         /**
          * @brief 逆运动学：根据电机当前状态逆向计算足端。
@@ -35,7 +37,9 @@ namespace Dog8Dof {
          * @param tau 前后电机力矩。
          * @return 是否成功更新模型状态
          */
-        bool updateMotor(Eigen::Vector2<float> pos, Eigen::Vector2<float> vel, Eigen::Vector2<float> tau);
+        bool updateMotor(const Eigen::Vector2<float> &pos,
+                         const Eigen::Vector2<float> &vel,
+                         const Eigen::Vector2<float> &tau);
 
         /**
          * @brief 获得电机的期望状态
@@ -117,14 +121,5 @@ namespace Dog8Dof {
          */
         bool motorTauToTip(float tau_front, float tau_rear);
     };
-
-    // class LeggedModel {
-    //   public:
-    //     LeggedModel();
-
-    //   private:
-    //     Leg2Dof legs_[4];
-    //     Body Base_;
-    // };
 
 } // namespace Dog8Dof

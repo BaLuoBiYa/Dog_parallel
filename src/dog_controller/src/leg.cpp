@@ -1,5 +1,4 @@
-#include "dog_controller/model.hpp"
-#include <Eigen/src/Core/Matrix.h>
+#include "dog_controller/leg.hpp"
 #include <cmath>
 
 namespace Dog8Dof {
@@ -28,7 +27,9 @@ namespace Dog8Dof {
         // updateMotor(frontInitPos, rearInitPos);
     }
 
-    bool Leg2Dof::setTip(Eigen::Vector3<float> pos, Eigen::Vector3<float> vel, Eigen::Vector3<float> tau) {
+    bool Leg2Dof::setTip(const Eigen::Vector3<float> &pos,
+                         const Eigen::Vector3<float> &vel,
+                         const Eigen::Vector3<float> &tau) {
         targetTip_.pos = pos;
         targetTip_.linerVel = vel;
         targetTip_.tau = tau;
@@ -45,7 +46,9 @@ namespace Dog8Dof {
         return true;
     }
 
-    bool Leg2Dof::updateMotor(Eigen::Vector2<float> pos, Eigen::Vector2<float> vel, Eigen::Vector2<float> tau) {
+    bool Leg2Dof::updateMotor(const Eigen::Vector2<float> &pos,
+                              const Eigen::Vector2<float> &vel,
+                              const Eigen::Vector2<float> &tau) {
         currentMotors_[FRONT].pos = pos[0];
         currentMotors_[REAR].pos = pos[1];
 
