@@ -60,6 +60,37 @@ namespace Dog8Dof {
         int steps_;
         Trajectory trajectory_;
         TrajectoryPoint target_;
+
+        /**
+         * @brief   线性插值函数，赋值target的位置，速度和力属性
+         * @param   currrentNanoSec 当前纳秒时间戳
+         * @note    需要接下来手动实现增益的赋值
+         */
+        void interpolate(size_t currentNanoSec) {
+            const auto searchBegin = trajectory_.time.begin() + trajectory_.progress;
+            const auto upperIt = std::lower_bound(searchBegin, trajectory_.time.end(), currentNanoSec);
+
+            const size_t upperIndex = static_cast<size_t>(upperIt - trajectory_.time.begin());
+            const size_t lowerIndex = upperIndex - 1;
+
+            const size_t t0 = trajectory_.time[lowerIndex];
+            const size_t t1 = trajectory_.time[upperIndex];
+
+            float alpha = 0.0f;
+            if (t1 > t0) {
+                alpha = static_cast<float>(currentNanoSec - t0) / static_cast<float>(t1 - t0);
+            }
+            alpha = std::clamp(alpha, 0.0f, 1.0f);
+
+            const TrajectoryPoint &p0 = trajectory_.points[lowerIndex];
+            const TrajectoryPoint &p1 = trajectory_.points[upperIndex];
+
+            target_.pos = p0.pos + (p1.pos - p0.pos) * alpha;
+            target_.vel = p0.vel + (p1.vel - p0.vel) * alpha;
+            target_.tau = p0.tau + (p1.tau - p0.tau) * alpha;
+
+            trajectory_.progress = upperIndex;
+        }
     };
 
 } // namespace Dog8Dof

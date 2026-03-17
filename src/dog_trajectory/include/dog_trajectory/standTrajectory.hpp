@@ -40,7 +40,6 @@ namespace Dog8Dof {
         LowPassFilter zFilter_;
 
         Eigen::Vector2<float> standTipPos_;
-        size_t progress_;
         parameters_t parameters_;
     };
 

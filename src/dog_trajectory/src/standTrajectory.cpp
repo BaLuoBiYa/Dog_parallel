@@ -24,9 +24,15 @@ namespace Dog8Dof {
         return true;
     }
 
+    bool StandTrajectory::setTarget(Body &standTip) {
+        standTipPos_[0] = standTip.pos[0];
+        standTipPos_[1] = standTip.pos[2];
+        return true;
+    }
+
     bool StandTrajectory::generate(const Body &currentTip) {
         finished_ = false;
-        progress_ = 0;
+        trajectory_.progress = 0;
         target_ = TrajectoryPoint();
         trajectory_ = Trajectory(Const::RESOLUTION);
 
@@ -49,10 +55,10 @@ namespace Dog8Dof {
             target_.vel.setZero();
             target_.tau[0] = 0;
             target_.tau[1] = 0;
-            target_.tau[3] = -(Const::BODY_MASS * Const::G) / 4;
+            target_.tau[3] = (Const::BODY_MASS * Const::G) / 4;
             finished_ = true;
             return true;
-        }
+        } // 判断无需进行路径规划直接保持位置
 
         const Eigen::Vector2<float> normVec0(-tangentVec[1], tangentVec[0]);
         const Eigen::Vector2<float> normVec1(tangentVec[1], -tangentVec[0]);
@@ -99,7 +105,7 @@ namespace Dog8Dof {
 
     bool StandTrajectory::start(const rclcpp::Time &startTime) {
         startTimeNanoSec_ = static_cast<size_t>(startTime.nanoseconds());
-        progress_ = 0;
+        trajectory_.progress = 0;
 
         // generate 已经判定“无需过渡”时，直接保持 target_
         if (finished_) {
@@ -125,6 +131,7 @@ namespace Dog8Dof {
         target_.kd[1] = parameters_.transitionKd;
         return true;
     }
+
     TrajectoryPoint StandTrajectory::get(const rclcpp::Time &currentTime) {
         if (finished_) {
             return target_;
@@ -141,6 +148,10 @@ namespace Dog8Dof {
         };
 
         auto assignStandGains = [this]() {
+            target_.vel.setZero();
+            target_.tau[0] = 0;
+            target_.tau[1] = 0;
+            target_.tau[3] = (Const::BODY_MASS * Const::G) / 4;
             target_.kp[0] = parameters_.standKp;
             target_.kp[1] = parameters_.standKp;
             target_.kd[0] = parameters_.standKd;
@@ -149,42 +160,21 @@ namespace Dog8Dof {
 
         if (currentNanoSec <= trajectory_.time.front()) {
             target_ = trajectory_.points.front();
-            assignStandGains();
-            progress_ = 0;
+            assignTransitionGains();
+            trajectory_.progress = 0;
             return target_;
         }
 
         if (currentNanoSec >= trajectory_.time.back()) {
             target_ = trajectory_.points.back();
             assignStandGains();
-            progress_ = pointCount;
+            trajectory_.progress = pointCount;
             finished_ = true;
             return target_;
         }
-        const auto searchBegin = trajectory_.time.begin() + progress_;
-        const auto upperIt = std::lower_bound(searchBegin, trajectory_.time.end(), currentNanoSec);
 
-        const size_t upperIndex = static_cast<size_t>(upperIt - trajectory_.time.begin());
-        const size_t lowerIndex = upperIndex - 1;
-
-        const size_t t0 = trajectory_.time[lowerIndex];
-        const size_t t1 = trajectory_.time[upperIndex];
-
-        float alpha = 0.0f;
-        if (t1 > t0) {
-            alpha = static_cast<float>(currentNanoSec - t0) / static_cast<float>(t1 - t0);
-        }
-        alpha = std::clamp(alpha, 0.0f, 1.0f);
-
-        const TrajectoryPoint &p0 = trajectory_.points[lowerIndex];
-        const TrajectoryPoint &p1 = trajectory_.points[upperIndex];
-
-        target_.pos = p0.pos + (p1.pos - p0.pos) * alpha;
-        target_.vel = p0.vel + (p1.vel - p0.vel) * alpha;
-        target_.tau = p0.tau + (p1.tau - p0.tau) * alpha;
-
+        interpolate(currentNanoSec);
         assignTransitionGains();
-        progress_ = upperIndex;
         return target_;
     }
 
