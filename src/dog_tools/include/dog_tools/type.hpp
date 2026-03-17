@@ -8,12 +8,33 @@ namespace Dog8Dof {
         Eigen::Vector3<float> tau;
         Eigen::Vector2<float> kp;
         Eigen::Vector2<float> kd;
+
+        TrajectoryPoint()
+            : pos(Eigen::Vector3<float>::Zero()), vel(Eigen::Vector3<float>::Zero()),
+              tau(Eigen::Vector3<float>::Zero()), kp(Eigen::Vector2<float>::Zero()),
+              kd(Eigen::Vector2<float>::Zero()){};
     }; // xyz方式排列,kp/kd顺序为Front->Rear
 
-    // template <uint16_t length> struct Trajectory {
-    //     TrajectoryPoint points[length];
-    //     int16_t progress;
-    // };
+    struct Trajectory {
+        std::vector<TrajectoryPoint> points;
+        std::vector<size_t> time;
+        size_t progress;
+
+        Trajectory() {}
+        Trajectory(size_t steps) {
+            points.resize(steps);
+            time.resize(steps);
+            progress = 0;
+        }
+
+        Trajectory operator+(const Trajectory &other) const {
+            Trajectory result = *this;
+            result.points.insert(result.points.end(), other.points.begin(), other.points.end());
+            result.time.insert(result.time.end(), other.time.begin(), other.time.end());
+            result.progress = 0;
+            return result;
+        }
+    };
 
     struct Motor {
         float pos;
@@ -33,15 +54,15 @@ namespace Dog8Dof {
     };
 
     // 统一状态枚举定义
-    enum class DogState {
-        PARALYSE = 0,
-        STAND = 1,
-        WALK = 2,
-        JUMP = 3,   // 添加跳跃模式
-        STRAFE = 4, // 添加平移模式
-        VISION = 5,
-        DEBUG = 6,
-        AUTO_RUN = 7
-    };
+    // enum class DogState {
+    //     PARALYSE = 0,
+    //     STAND = 1,
+    //     WALK = 2,
+    //     JUMP = 3,   // 添加跳跃模式
+    //     STRAFE = 4, // 添加平移模式
+    //     VISION = 5,
+    //     DEBUG = 6,
+    //     AUTO_RUN = 7
+    // };
 
 } // namespace Dog8Dof

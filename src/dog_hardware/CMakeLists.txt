@@ -27,21 +27,21 @@ find_package(pluginlib REQUIRED)
 include_directories(include)
 
 add_library(${PROJECT_NAME} SHARED
-    src/example_goM8010_6_motor.cpp
     src/Base.cpp
 )
-
 ament_target_dependencies(${PROJECT_NAME}
   "rclcpp"
   "pluginlib"
   "hardware_interface"
+)
+target_link_libraries(${PROJECT_NAME}
+  ${ARCH_LIB}
 )
 
 add_executable(example_goM8010_6_motor
   src/example_goM8010_6_motor.cpp
 )
 target_link_libraries(example_goM8010_6_motor
-    ${PROJECT_NAME}
     ${ARCH_LIB}
 )
 

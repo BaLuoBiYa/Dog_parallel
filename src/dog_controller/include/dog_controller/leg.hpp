@@ -18,8 +18,11 @@ namespace Dog8Dof {
          * @note
          * 一般使用方法：先调用updateMotor更新状态，再调用setTip设置足端目标，最后使用getMotorTargrt读取期望电机状态
          */
-        Leg2Dof(
-            float upperLength, float lowerLength, float tipLength, float frontInitPos = 0.0, float rearInitPos = 0.0);
+        Leg2Dof(float upperLength,
+                float lowerLength,
+                float tipLength,
+                float frontInitPos = 0.0,
+                float rearInitPos = 0.0);
         /**
          * @brief 设置期望足尖状态
          * @param pos 足端在腿坐标系下的X,Z坐标。
@@ -27,8 +30,9 @@ namespace Dog8Dof {
          * @param tau 足端在腿坐标系下的X,Z力矩。
          * @return 位置是否可达
          */
-        bool
-        setTip(const Eigen::Vector3<float> &pos, const Eigen::Vector3<float> &vel, const Eigen::Vector3<float> &tau);
+        bool setTip(const Eigen::Vector3<float> &pos,
+                    const Eigen::Vector3<float> &vel,
+                    const Eigen::Vector3<float> &tau);
 
         /**
          * @brief 逆运动学：根据电机当前状态逆向计算足端。
@@ -93,10 +97,10 @@ namespace Dog8Dof {
         /**
          * @brief 雅可比矩阵转换函数。
          * 将腿部在X和Z方向的力矢量转换为前后电机所需的力矩。
-         * @param tauX 腿部在X方向的力。
-         * @param tauZ 腿部在Z方向的力。
+         * @param fX 腿部在X方向的力。
+         * @param fZ 腿部在Z方向的力。
          */
-        bool tipTauToMotor(float tauX, float tauZ);
+        bool tipForceToMotor(float fX, float fZ);
 
         /**
          * @brief 逆运动学：根据关节角度逆向计算不带足端的足端坐标。

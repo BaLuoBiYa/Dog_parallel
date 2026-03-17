@@ -2,7 +2,8 @@
 #include <cmath>
 
 namespace Dog8Dof {
-    Leg2Dof::Leg2Dof(float upperLength, float lowerLength, float tipLength, float frontInitPos, float rearInitPos)
+    Leg2Dof::Leg2Dof(
+        float upperLength, float lowerLength, float tipLength, float frontInitPos, float rearInitPos)
         : upperLength_(upperLength), lowerLength_(lowerLength), tipLength_(tipLength),
           upperSQ_(upperLength * upperLength), lowerSQ_(lowerLength * lowerLength) {
         currentMotors_[FRONT] = Motor{frontInitPos, 0.0, 0.0, 0.0, 0.0};
@@ -40,7 +41,7 @@ namespace Dog8Dof {
         if (!tipVelToMotor(vel[0], vel[2])) {
             return false;
         }
-        if (!tipTauToMotor(tau[0], tau[2])) {
+        if (!tipForceToMotor(tau[0], tau[2])) {
             return false;
         }
         return true;
@@ -186,7 +187,7 @@ namespace Dog8Dof {
         return true;
     }
 
-    bool Leg2Dof::tipTauToMotor(float tauX, float tauZ) {
+    bool Leg2Dof::tipForceToMotor(float fX, float fZ) {
         // This function calculates the motor torques required to produce a given force vector
         // (Fx, Fz) at the foot. It uses the transpose of the Jacobian matrix: τ = J^T * F where
         // τ = [tau_front, tau_rear]^T, F = [leg_tau_x, leg_tau_z]^T. The formula is: tau_front
@@ -252,8 +253,8 @@ namespace Dog8Dof {
         const float dz_drear = (dz_dtheta * 0.5f + dz_dgamma * -0.5f) * d_drear;
 
         // 6. Calculate the final torques using J^T * F
-        targetMotors_[FRONT].tau = dx_dfront * tauX + dz_dfront * tauZ;
-        targetMotors_[REAR].tau = dx_drear * tauX + dz_drear * tauZ;
+        targetMotors_[FRONT].tau = dx_dfront * fX + dz_dfront * fZ;
+        targetMotors_[REAR].tau = dx_drear * fX + dz_drear * fZ;
         return true;
     }
 
@@ -265,7 +266,7 @@ namespace Dog8Dof {
         const float adjusted_rear_angle = M_PI_2 - posRear;
 
         const float angle_diff = (adjusted_front_angle - adjusted_rear_angle) * 0.5f; // 角度差的一半 (γ)
-        const float angle_sum = (adjusted_front_angle + adjusted_rear_angle) * 0.5f;  // 角度和的一半 (θ)
+        const float angle_sum = (adjusted_front_angle + adjusted_rear_angle) * 0.5f; // 角度和的一半 (θ)
 
         const float sin_theta = std::sin(angle_sum);
         const float cos_theta = std::cos(angle_sum);

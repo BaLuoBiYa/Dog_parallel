@@ -17,15 +17,12 @@ include_directories(include)
 
 add_library(${PROJECT_NAME}
   src/leg.cpp
-  src/PinocchionTest.cpp
 )
-
 ament_target_dependencies(${PROJECT_NAME} 
     rclcpp
     pinocchio 
     Eigen3
     dog_tools)
-
 target_link_libraries(${PROJECT_NAME}
     pinocchio::pinocchio
     Eigen3::Eigen
@@ -34,11 +31,14 @@ target_link_libraries(${PROJECT_NAME}
 add_executable(PinocchionTest
   src/PinocchionTest.cpp
 )
-target_link_libraries(PinocchionTest
-    ${PROJECT_NAME}
+ament_target_dependencies(PinocchionTest
+  rclcpp
+  pinocchio
 )
-
-
+target_link_libraries(PinocchionTest
+    pinocchio::pinocchio
+    Eigen3::Eigen
+)
 
 install(
   TARGETS ${PROJECT_NAME}
