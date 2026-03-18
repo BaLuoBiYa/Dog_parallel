@@ -1,5 +1,4 @@
 #pragma once
-#include "dog_tools/cubicBezier.hpp"
 #include "dog_trajectory/base.hpp"
 
 namespace Dog8Dof {

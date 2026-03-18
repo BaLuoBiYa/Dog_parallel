@@ -1,7 +1,5 @@
 #pragma once
 
-#include "dog_tools/quinticPolynomial.hpp"
-// #include "dog_tools/filters/lowpass_filter.hpp"
 #include "dog_trajectory/base.hpp"
 #include <Eigen/src/Core/Matrix.h>
 

@@ -17,6 +17,7 @@ include_directories(include)
 add_library(${PROJECT_NAME}
   src/base.cpp
   src/standTrajectory.cpp
+  src/walkTrajectory.cpp
   src/trajectoryInterface.cpp
 )
 target_link_libraries(${PROJECT_NAME}

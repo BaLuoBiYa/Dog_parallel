@@ -1,4 +1,5 @@
 #include "dog_trajectory/standTrajectory.hpp"
+#include "dog_tools/quinticPolynomial.hpp"
 
 namespace Dog8Dof {
     StandTrajectory::StandTrajectory(const std::string &configPath,

@@ -61,6 +61,66 @@ namespace Dog8Dof {
         return !trajectory_.points.empty();
     }
 
+    bool WalkTrajectory::start(const rclcpp::Time &startTime) {
+        startTimeNanoSec_ = static_cast<size_t>(startTime.nanoseconds());
+        trajectory_.progress = 0;
+
+        // generate 已经判定“无需过渡”时，直接保持 target_
+        if (finished_) {
+            return true;
+        }
+
+        if (trajectory_.points.empty()) {
+            return false;
+        }
+
+        for (size_t i = 0; i < trajectory_.time.size(); ++i) {
+            trajectory_.time[i] = startTimeNanoSec_ + i * durationNanoSec_;
+        }
+
+        target_ = trajectory_.points.front();
+        target_.kp[0] = parameters_.walkKp;
+        target_.kp[1] = parameters_.walkKp;
+        target_.kd[0] = parameters_.walkKd;
+        target_.kd[1] = parameters_.walkKd;
+        return true;
+    }
+
+    TrajectoryPoint WalkTrajectory::get(const rclcpp::Time &currentTime) {
+        if (finished_) {
+            return target_;
+        }
+
+        const size_t pointCount = trajectory_.points.size();
+        const size_t currentNanoSec = static_cast<size_t>(currentTime.nanoseconds());
+
+        auto assignTransitionGains = [this]() {
+            target_.kp[0] = parameters_.walkKp;
+            target_.kp[1] = parameters_.walkKp;
+            target_.kd[0] = parameters_.walkKd;
+            target_.kd[1] = parameters_.walkKd;
+        };
+
+        if (currentNanoSec <= trajectory_.time.front()) {
+            target_ = trajectory_.points.front();
+            assignTransitionGains();
+            trajectory_.progress = 0;
+            return target_;
+        }
+
+        if (currentNanoSec >= trajectory_.time.back()) {
+            target_ = trajectory_.points.back();
+            assignTransitionGains();
+            trajectory_.progress = pointCount;
+            finished_ = true;
+            return target_;
+        }
+
+        interpolate(currentNanoSec);
+        assignTransitionGains();
+        return target_;
+    }
+
     Trajectory WalkTrajectory::startFromSwing(const float transitionTime,
                                               const Body &initTip) {
         const Eigen::Vector2f p0(initTip.pos[0], initTip.pos[2]);
