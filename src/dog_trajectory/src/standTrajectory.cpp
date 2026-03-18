@@ -1,7 +1,8 @@
 #include "dog_trajectory/standTrajectory.hpp"
 
 namespace Dog8Dof {
-    StandTrajectory::StandTrajectory(const std::string &configPath, rclcpp::Duration period)
+    StandTrajectory::StandTrajectory(const std::string &configPath,
+                                     rclcpp::Duration period)
         : BaseTrajectory(configPath, period) {
         if (!reloadParameters()) {
             throw std::invalid_argument("Could not load Config YAML!");
@@ -18,8 +19,8 @@ namespace Dog8Dof {
             std::cout << "YAML Error" << e.what() << std::endl;
             return false;
         }
-        xFilter_.set_Alpha(parameters_.filterAlpha);
-        zFilter_.set_Alpha(parameters_.filterAlpha);
+        // xFilter_.set_Alpha(parameters_.filterAlpha);
+        // zFilter_.set_Alpha(parameters_.filterAlpha);
 
         return true;
     }
@@ -34,10 +35,14 @@ namespace Dog8Dof {
         finished_ = false;
         trajectory_.progress = 0;
         target_ = TrajectoryPoint();
-        trajectory_ = Trajectory(Const::RESOLUTION);
+        const size_t totalSteps =
+            stepsFromDurationNs(static_cast<size_t>(parameters_.transitionTime * 1e9));
+
+        trajectory_ = Trajectory(totalSteps);
 
         const Eigen::Vector2<float> startPos(currentTip.pos[0], currentTip.pos[2]);
-        const Eigen::Vector2<float> startVel(currentTip.linerVel[0], currentTip.linerVel[2]);
+        const Eigen::Vector2<float> startVel(currentTip.linerVel[0],
+                                             currentTip.linerVel[2]);
 
         const Eigen::Vector2<float> finishPos(standTipPos_[0], standTipPos_[1]);
         const Eigen::Vector2<float> finishVel(0, 0);
@@ -60,43 +65,37 @@ namespace Dog8Dof {
             return true;
         } // 判断无需进行路径规划直接保持位置
 
-        const Eigen::Vector2<float> normVec0(-tangentVec[1], tangentVec[0]);
-        const Eigen::Vector2<float> normVec1(tangentVec[1], -tangentVec[0]);
-        // 计算起始向量的两个法向量
+        const Eigen::Vector2<float> directionVec = getHeightVec(tangentVec);
 
-        Eigen::Vector2<float> directionVec;
-        if (normVec0[1] <= 0) {
-            directionVec = normVec0.normalized();
-        } else {
-            directionVec = normVec1.normalized();
-        }
-        // 朝向Z负方向（朝向天空的向量作为运动方向）
-
-        Eigen::Vector2<float> midPos = (finishPos + startPos) / 2 + directionVec * stepHeight;
+        Eigen::Vector2<float> midPos =
+            (finishPos + startPos) / 2 + directionVec * stepHeight;
         if (midPos[1] <= Const::BODY_HEIGHT_MIN) {
             midPos[1] = Const::BODY_HEIGHT_MIN;
         } // 防止足尖穿过机体
 
-        const float T1 = static_cast<float>(durationNanoSec_) / 1000 * 0.5;
+        const float durationSec = durationNanoSec_ * 1e-9;
+        const float T1 = durationSec * 0.5 * totalSteps;
         const float T2 = T1;
+        const Eigen::Vector2<float> zeroAcc(0.0f, 0.0f);
 
-        const Eigen::Vector2f d1 = midPos - startPos;
-        const Eigen::Vector2f d2 = finishPos - midPos;
-
-        Eigen::Vector2f midVel =
-            (6.0f * (d1 / (T1 * T1) + d2 / (T2 * T2)) - 2.0f * (startVel / T1 + finishVel / T2)) /
-            (4.0f * (1.0f / T1 + 1.0f / T2));
+        Eigen::Vector2f midVel = QuinticPolynomial::solveMidVel2D(
+            startPos, midPos, finishPos, startVel, finishVel, T1, T2);
+        Eigen::Vector2f midAcc = QuinticPolynomial::solveMidAcc2D(startPos,
+                                                                  startVel,
+                                                                  zeroAcc,
+                                                                  midPos,
+                                                                  midVel,
+                                                                  finishPos,
+                                                                  finishVel,
+                                                                  zeroAcc,
+                                                                  T1,
+                                                                  T2);
         // 计算中点速度 BY GPT-5.3-Codex
 
-        const float n = midVel.norm();
-        if (n > parameters_.transitionVelMax && n > 1e-6f) {
-            midVel *= (parameters_.transitionVelMax / n);
-        }
-
-        Trajectory first =
-            CubicBezier::generate(startPos, midPos, startVel, midVel, T1, Const::RESOLUTION / 2);
-        Trajectory second =
-            CubicBezier::generate(midPos, finishPos, midVel, finishVel, T2, Const::RESOLUTION / 2);
+        Trajectory first = QuinticPolynomial::generate(
+            startPos, midPos, startVel, midVel, zeroAcc, midAcc, T1, totalSteps / 2);
+        Trajectory second = QuinticPolynomial::generate(
+            midPos, finishPos, midVel, finishVel, midAcc, zeroAcc, T2, totalSteps / 2);
 
         trajectory_ = first + second;
 
@@ -191,24 +190,25 @@ namespace YAML {
             node["transitionKd"] = rhs.transitionKd;
             node["transitionVelMax"] = rhs.transitionVelMax;
 
-            node["filterAlpha"] = rhs.filterAlpha;
             node["reachThreshold"] = sqrt(rhs.reachThresholdSQ);
             node["stepHeightFactor"] = rhs.stepHeightFactor;
+            node["transitionTime"] = rhs.transitionTime;
             return node;
         }
 
-        static bool decode(const Node &node, Dog8Dof::StandTrajectory::parameters_t &rhs) {
-            rhs.standKp = node["standKp"].as<float>(0.0);
-            rhs.standKd = node["standKd"].as<float>(0.0);
+        static bool decode(const Node &node,
+                           Dog8Dof::StandTrajectory::parameters_t &rhs) {
+            rhs.standKp = node["standKp"].as<float>(0.001);
+            rhs.standKd = node["standKd"].as<float>(0.001);
 
-            rhs.transitionKp = node["transitionKp"].as<float>(0.0);
-            rhs.transitionKd = node["transitionKd"].as<float>(0.0);
-            rhs.transitionVelMax = node["transitionVelMax"].as<float>(0.0);
+            rhs.transitionKp = node["transitionKp"].as<float>(0.001);
+            rhs.transitionKd = node["transitionKd"].as<float>(0.001);
+            rhs.transitionVelMax = node["transitionVelMax"].as<float>(100.0);
 
-            rhs.filterAlpha = node["filterAlpha"].as<float>(0.0);
-            rhs.reachThresholdSQ =
-                node["reachThreshold"].as<float>(0.0) * node["reachThreshold"].as<float>(0.0);
-            rhs.stepHeightFactor = node["stepHeightFactor"].as<float>(0.0);
+            rhs.reachThresholdSQ = node["reachThreshold"].as<float>(1.0) *
+                                   node["reachThreshold"].as<float>(1.0);
+            rhs.stepHeightFactor = node["stepHeightFactor"].as<float>(0.1);
+            rhs.transitionTime = node["transitionTime"].as<float>(0.5);
             return true;
         }
     };

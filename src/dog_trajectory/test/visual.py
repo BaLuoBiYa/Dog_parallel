@@ -16,6 +16,7 @@ ax1.set_ylabel('Z Position')
 ax1.set_title('Position Trajectory')
 ax1.legend()
 ax1.invert_yaxis()
+ax1.invert_xaxis()
 ax1.grid(True)
 
 # 绘制速度 (vx, vz)

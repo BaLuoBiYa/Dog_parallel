@@ -50,6 +50,7 @@ namespace Dog8Dof {
                 result.points[i].vel[0] = vel[0] / time;
                 result.points[i].vel[1] = 0.0;
                 result.points[i].vel[2] = vel[1] / time;
+                result.points[i].tau.setZero();
             }
             return result;
         }

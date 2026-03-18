@@ -2,17 +2,18 @@ BasedOnStyle: LLVM
 IndentWidth: 4
 TabWidth: 4
 UseTab: Never
-ColumnLimit: 110
+ColumnLimit: 90
 BinPackParameters: false
 BinPackArguments: false
+PenaltyBreakBeforeFirstCallParameter: 1
 
 AlwaysBreakAfterReturnType: None
 AlwaysBreakAfterDefinitionReturnType: None
-AllowShortFunctionsOnASingleLine: Inline
-
-BreakBeforeBraces: Attach
+AllowShortFunctionsOnASingleLine: None
 AllowShortIfStatementsOnASingleLine: Never
 AllowShortLoopsOnASingleLine: false
+
+BreakBeforeBraces: Attach
 
 NamespaceIndentation: All
 PointerAlignment: Right

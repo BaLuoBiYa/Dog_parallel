@@ -1,62 +1,72 @@
 #pragma once
-#include "dog_tools/filters/lowpass_filter.hpp"
-#include "dog_tools/filters/smoother.hpp"
+#include "dog_tools/cubicBezier.hpp"
 #include "dog_trajectory/base.hpp"
 
 namespace Dog8Dof {
     class WalkTrajectory : public BaseTrajectory {
       public:
-        enum Phase { STANCE, SWING };
+        explicit WalkTrajectory(const std::string &configPath, rclcpp::Duration period);
+        enum sequence { swingFirst, stanceFirst };
+
+        /**
+         * @brief 设置步行步态的目标
+         * @param stepLength 步长
+         * @param stepHeight 步高
+         * @param order 从支撑还是摆动相开始
+         */
+        bool setTarget(float stepLength, float stepHeight, sequence order);
+        bool generate(const Body &currentTip) override;
+        bool start(const rclcpp::Time &startTime) override;
+        TrajectoryPoint get(const rclcpp::Time &currentTime) override;
+
+        bool reloadParameters() override;
+
         struct parameters_t {
             float walkKp;
             float walkKd;
-            float filterAlpha;
+
+            float reachThresholdSQ;
+            float transitionVelMax;
+
             float horizontalPushGain;
             float verticalPushGain;
-            float accelerationGainX;
-            float accelerationGainZ;
 
-            bool useSmootherTrajectory_ = false;
-            float smootherW = 30.0;
-            float smootherD = 0.8;
-
-            float swingContactThreshold;
-
-            rclcpp::Duration duration = rclcpp::Duration::from_seconds(0.0);
+            float totalTime;
+            float swingDutyCycle;
         };
-
-        explicit WalkTrajectory(const std::string &configPath, const Body &initTipPos, const rclcpp::Time &initTime);
-
-        TrajectoryPoint generate(const rclcpp::Time currentTime, const Body &currentTip) override;
-
-        bool start(const rclcpp::Time currentTime, const Body &currentTip) override;
-        bool reloadParameters() override;
-
-        /**
-         * @brief 设置轨迹规划目标
-         * @param phase 支撑还是摆动
-         * @param stepLength 步长
-         * @param stepHeight 步高
-         */
-        bool setTarget(Phase phase, float stepLength, float stepHeight);
 
       private:
         parameters_t parameters_;
-        Smoother xSmoother_;
-        Smoother zSmoother_;
+        float stepLength_, stepHeight_;
+        sequence order_;
 
-        LowPassFilter xFilter_, zFilter_;
-        LowPassFilter vxFilter_, vzFilter_;
+        /**
+         * @brief 生成移动到摆动相位初始位置的轨迹
+         * @param transitionTime 整个步态用时
+         * @param initTip 初始足尖位置
+         */
+        Trajectory startFromSwing(const float transitionTime, const Body &initTip);
 
-        bool landingMode_;
-        Eigen::Vector3<float> landingStartPos_;
-        float landingProgress_;
-        Eigen::Vector3<float> lastPos_;
+        /**
+         * @brief 生成移动到支撑相位初始位置的轨迹
+         * @param transitionTime 整个步态用时
+         * @param initTip 初始足尖位置
+         */
+        Trajectory startFromStance(const float transitionTime, const Body &initTip);
 
-        float stepLength_;
-        float stepHeight_;
+        /**
+         * @brief 生成支撑相的轨迹
+         * @param transitionTime 整个步态用时
+         * @param steps 该相位占用的分辨率步数
+         */
+        Trajectory generateStance(const float transitionTime, const size_t steps);
 
-        Phase phase_;
+        /**
+         * @brief 生成摆动相的轨迹
+         * @param ransitionTime 整个步态用时
+         * @param steps 该相位占用的分辨率步数
+         */
+        Trajectory generateSwing(const float transitionTime, const size_t steps);
     };
 
 } // namespace Dog8Dof

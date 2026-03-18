@@ -15,6 +15,7 @@ find_package(yaml-cpp REQUIRED)
 include_directories(include)
 
 add_library(${PROJECT_NAME}
+  src/base.cpp
   src/standTrajectory.cpp
   src/trajectoryInterface.cpp
 )

@@ -8,8 +8,11 @@ namespace Dog8Dof {
                 |
                 ↓
                 Z
--------------------------地面
-*/
+        -------------------------地面
+        */
+        /**
+            未有特殊说明，长度单位为毫米，时间单位为秒，力单位为牛，力矩为牛米，质量为千克
+         */
       public:
         // 步长值映射
         static constexpr float STEP_LENGTH_MAX = 220.0f;
@@ -53,12 +56,13 @@ namespace Dog8Dof {
 
         // 机身尺寸
         static constexpr float BODY_LENGTH_LONGITUDINAL = 408.55f; // 前后关节距离 (mm)
-        static constexpr float BODY_WIDTH_LATERAL = 370.9f;        // 左右关节水平距离 (mm)
+        static constexpr float BODY_WIDTH_LATERAL = 370.9f; // 左右关节水平距离 (mm)
 
         static constexpr float BODY_MASS = 0.0f;
         static constexpr float G = 9.8;
 
-        static constexpr unsigned long RESOLUTION = 1000; // 轨迹生成分辨率
+        static constexpr unsigned long MAX_RESOLUTION = 1000; // 轨迹生成分辨率
+        static constexpr unsigned long MIN_RESOLUTION = 10;   // 轨迹生成分辨率
     };
 
 } // namespace Dog8Dof

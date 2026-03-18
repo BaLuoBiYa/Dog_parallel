@@ -1,7 +1,7 @@
 #pragma once
 
-#include "dog_tools/cubicBezier.hpp"
-#include "dog_tools/filters/lowpass_filter.hpp"
+#include "dog_tools/quinticPolynomial.hpp"
+// #include "dog_tools/filters/lowpass_filter.hpp"
 #include "dog_trajectory/base.hpp"
 #include <Eigen/src/Core/Matrix.h>
 
@@ -29,15 +29,15 @@ namespace Dog8Dof {
             float transitionKp;
             float transitionKd;
             float transitionVelMax;
+            float transitionTime;
             float stepHeightFactor;
 
-            float filterAlpha;
             float reachThresholdSQ;
         };
 
       private:
-        LowPassFilter xFilter_;
-        LowPassFilter zFilter_;
+        // LowPassFilter xFilter_;
+        // LowPassFilter zFilter_;
 
         Eigen::Vector2<float> standTipPos_;
         parameters_t parameters_;
