@@ -100,7 +100,7 @@ namespace Dog8Dof {
 
         trajectory_ = first + second;
 
-        return true;
+        return !trajectory_.points.empty();
     }
 
     bool StandTrajectory::start(const rclcpp::Time &startTime) {
@@ -175,6 +175,9 @@ namespace Dog8Dof {
 
         interpolate(currentNanoSec);
         assignTransitionGains();
+        if (trajectory_.progress == trajectory_.points.size()) {
+            finished_ = true;
+        }
         return target_;
     }
 
@@ -206,8 +209,8 @@ namespace YAML {
             rhs.transitionKd = node["transitionKd"].as<float>(0.001);
             rhs.transitionVelMax = node["transitionVelMax"].as<float>(100.0);
 
-            rhs.reachThresholdSQ = node["reachThreshold"].as<float>(1.0) *
-                                   node["reachThreshold"].as<float>(1.0);
+            rhs.reachThresholdSQ = node["reachThreshold"].as<float>(100.0) *
+                                   node["reachThreshold"].as<float>(100.0);
             rhs.stepHeightFactor = node["stepHeightFactor"].as<float>(0.1);
             rhs.transitionTime = node["transitionTime"].as<float>(0.5);
             return true;

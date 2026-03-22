@@ -20,10 +20,23 @@ namespace Dog8Dof {
             return false;
         }
 
+        if (parameters_.swingDutyCycle >= 1.0f) {
+            std::cout << "Swing duty cycle can't larger than 1!" << std::endl;
+            return false;
+        }
+
+        if (parameters_.transitionVelMax <= 0.0f) {
+            std::cout << "Transition velocity limit must greater than 0!" << std::endl;
+            return false;
+        }
         return true;
     }
 
     bool WalkTrajectory::setTarget(float stepLength, float stepHeight, sequence order) {
+        if (stepHeight <= 0.0f) {
+            std::cout << "Step height must greater than 0!" << std::endl;
+            return false;
+        }
         order_ = order;
         stepHeight_ = stepHeight;
         stepLength_ = stepLength;
@@ -117,6 +130,9 @@ namespace Dog8Dof {
         }
 
         interpolate(currentNanoSec);
+        if (trajectory_.progress == trajectory_.points.size()) {
+            finished_ = true;
+        }
         assignTransitionGains();
         return target_;
     }
@@ -255,7 +271,7 @@ namespace Dog8Dof {
 
         const float pushForce = parameters_.horizontalPushGain * stepLength_;
         const float pressForce = Const::BODY_MASS * Const::G * 0.5 +
-                                 parameters_.verticalPushGain * abs(pushForce);
+                                 parameters_.verticalPushGain * std::abs(pushForce);
         for (size_t i = 0; i < steps; i++) {
             res.points[i].tau[0] = pushForce;
             res.points[i].tau[1] = 0.0f;
@@ -280,7 +296,7 @@ namespace Dog8Dof {
         const float T2 = T1;
 
         const size_t steps1 = static_cast<size_t>(steps * 0.5f);
-        const size_t steps2 = steps1;
+        const size_t steps2 = steps - steps1;
         // 计算摆动相两段的时间和分辨率占比
 
         const Eigen::Vector2<float> swingFinishVel(
@@ -355,8 +371,8 @@ namespace YAML {
             rhs.walkKp = node["walkKp"].as<float>(0.001);
             rhs.walkKd = node["walkKd"].as<float>(0.001);
 
-            rhs.reachThresholdSQ = node["reachThreshold"].as<float>(1.0) *
-                                   node["reachThreshold"].as<float>(1.0);
+            rhs.reachThresholdSQ = node["reachThreshold"].as<float>(100.0) *
+                                   node["reachThreshold"].as<float>(100.0);
             rhs.transitionVelMax = node["transitionVelMax"].as<float>(100.0);
 
             rhs.horizontalPushGain = node["pushGain"]["horizontal"].as<float>(0.01);
