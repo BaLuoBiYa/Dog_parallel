@@ -13,9 +13,11 @@
     <depend>pinocchio</depend>
 
     <depend>dog_tools</depend>
+    <depend>dog_trajectory</depend>
 
     <test_depend>ament_lint_auto</test_depend>
     <test_depend>ament_lint_common</test_depend>
+    <depend>ament_index_cpp</depend>
 
     <export>
         <build_type>ament_cmake</build_type>

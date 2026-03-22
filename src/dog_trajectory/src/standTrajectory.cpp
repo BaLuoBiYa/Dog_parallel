@@ -61,7 +61,7 @@ namespace Dog8Dof {
             target_.vel.setZero();
             target_.tau[0] = 0;
             target_.tau[1] = 0;
-            target_.tau[3] = (Const::BODY_MASS * Const::G) / 4;
+            target_.tau[2] = (Const::BODY_MASS * Const::G) / 4;
             finished_ = true;
             return true;
         } // 判断无需进行路径规划直接保持位置
@@ -151,7 +151,7 @@ namespace Dog8Dof {
             target_.vel.setZero();
             target_.tau[0] = 0;
             target_.tau[1] = 0;
-            target_.tau[3] = (Const::BODY_MASS * Const::G) / 4;
+            target_.tau[2] = (Const::BODY_MASS * Const::G) / 4;
             target_.kp[0] = parameters_.standKp;
             target_.kp[1] = parameters_.standKp;
             target_.kd[0] = parameters_.standKd;

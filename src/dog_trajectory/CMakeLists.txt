@@ -18,15 +18,15 @@ add_library(${PROJECT_NAME}
   src/base.cpp
   src/standTrajectory.cpp
   src/walkTrajectory.cpp
-  src/trajectoryInterface.cpp
 )
 target_link_libraries(${PROJECT_NAME}
     Eigen3::Eigen
+    yaml-cpp
 )
-
-ament_target_dependencies(${PROJECT_NAME} 
+ament_target_dependencies(${PROJECT_NAME}
     rclcpp
-    dog_tools)
+    dog_tools
+)
 
     
 add_executable(bezierTest
@@ -41,9 +41,22 @@ target_link_libraries(bezierTest
 )
 
 install(
+  DIRECTORY include/
+  DESTINATION include/
+)
+install(
   TARGETS ${PROJECT_NAME}
     bezierTest
   DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
+
+ament_export_libraries(${PROJECT_NAME})
+ament_export_include_directories(include)
+ament_export_dependencies(
+    rclcpp
+    dog_tools
+    yaml-cpp
+)
+
 ament_package()
