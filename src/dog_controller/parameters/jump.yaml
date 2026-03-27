@@ -1,0 +1,21 @@
+transitionKp: 1.0
+transitionKd: 0.05
+transitionTime: 0.4
+
+crouchHeight: 180.0
+crouchTime: 0.3
+
+takeoffHeight: 100.0
+pushTimeMin: 0.08
+pushTimeMax: 0.30
+pushTimeScale: 0.5
+
+flyHeightRatio: 0.3
+
+slipMass: 6.0
+slipRestLength: 230.0
+slipStiffness: 180.0
+slipDamping: 2.8
+slipTouchdownAngleDeg: 18.0
+slipStanceMaxTime: 0.30
+slipStopSpeed: 120.0

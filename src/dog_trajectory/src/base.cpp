@@ -30,6 +30,10 @@ namespace Dog8Dof {
 
     Eigen::Vector2<float>
     BaseTrajectory::getHeightVec(const Eigen::Vector2<float> &tangentVec) {
+        if (tangentVec.squaredNorm() <= 1e-10) {
+            return Eigen::Vector2f(0.0f, -0.1f);
+        }
+
         const Eigen::Vector2<float> normVec0(-tangentVec[1], tangentVec[0]);
         const Eigen::Vector2<float> normVec1(tangentVec[1], -tangentVec[0]);
         // 计算起始向量的两个法向量

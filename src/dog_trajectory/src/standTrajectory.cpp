@@ -41,14 +41,13 @@ namespace Dog8Dof {
 
         trajectory_ = Trajectory(totalSteps);
 
-        const Eigen::Vector2<float> startPos(currentTip.pos[0], currentTip.pos[2]);
-        const Eigen::Vector2<float> startVel(currentTip.linerVel[0],
-                                             currentTip.linerVel[2]);
+        const Eigen::Vector2f startPos(currentTip.pos[0], currentTip.pos[2]);
+        const Eigen::Vector2f startVel(currentTip.linerVel[0], currentTip.linerVel[2]);
 
-        const Eigen::Vector2<float> finishPos(standTipPos_[0], standTipPos_[1]);
-        const Eigen::Vector2<float> finishVel(0, 0);
+        const Eigen::Vector2f finishPos(standTipPos_[0], standTipPos_[1]);
+        const Eigen::Vector2f finishVel(0, 0);
 
-        const Eigen::Vector2<float> tangentVec = finishPos - startPos;
+        const Eigen::Vector2f tangentVec = finishPos - startPos;
         const float stepHeight = abs(tangentVec[0] * parameters_.stepHeightFactor);
         // 根据步长计算步高
 
@@ -66,10 +65,9 @@ namespace Dog8Dof {
             return true;
         } // 判断无需进行路径规划直接保持位置
 
-        const Eigen::Vector2<float> directionVec = getHeightVec(tangentVec);
+        const Eigen::Vector2f directionVec = getHeightVec(tangentVec);
 
-        Eigen::Vector2<float> midPos =
-            (finishPos + startPos) / 2 + directionVec * stepHeight;
+        Eigen::Vector2f midPos = (finishPos + startPos) / 2 + directionVec * stepHeight;
         if (midPos[1] <= Const::BODY_HEIGHT_MIN) {
             midPos[1] = Const::BODY_HEIGHT_MIN;
         } // 防止足尖穿过机体
@@ -77,7 +75,7 @@ namespace Dog8Dof {
         const float durationSec = durationNanoSec_ * 1e-9;
         const float T1 = durationSec * 0.5 * totalSteps;
         const float T2 = T1;
-        const Eigen::Vector2<float> zeroAcc(0.0f, 0.0f);
+        const Eigen::Vector2f zeroAcc(0.0f, 0.0f);
 
         Eigen::Vector2f midVel = QuinticPolynomial::solveMidVel2D(
             startPos, midPos, finishPos, startVel, finishVel, T1, T2);

@@ -29,17 +29,33 @@ namespace Dog8Dof {
             std::cout << "Transition velocity limit must greater than 0!" << std::endl;
             return false;
         }
+        if (parameters_.deltaSpeed[0] < 0.0f) {
+            std::cout << "Delta speed x must greater than 0!" << std::endl;
+            return false;
+        }
+        if (parameters_.deltaSpeed[1] < 0.0f) {
+            std::cout << "Delta speed z must greater than 0!" << std::endl;
+            return false;
+        }
         return true;
     }
 
-    bool WalkTrajectory::setTarget(float stepLength, float stepHeight, sequence order) {
+    bool WalkTrajectory::setTarget(float stepLength,
+                                   float stepHeight,
+                                   float baseHeight,
+                                   sequence order) {
         if (stepHeight <= 0.0f) {
             std::cout << "Step height must greater than 0!" << std::endl;
             return false;
         }
+        if (baseHeight > Const::BODY_HEIGHT_MAX || baseHeight < Const::BODY_HEIGHT_MIN) {
+            std::cout << "Base height must between " << Const::BODY_HEIGHT_MAX << " and "
+                      << Const::BODY_HEIGHT_MIN << std::endl;
+        }
         order_ = order;
         stepHeight_ = stepHeight;
         stepLength_ = stepLength;
+        baseHeight_ = baseHeight;
         return true;
     }
 
@@ -60,6 +76,12 @@ namespace Dog8Dof {
         Trajectory pre = (order_ == swingFirst) ? startFromSwing(TCycle, currentTip)
                                                 : startFromStance(TCycle, currentTip);
 
+        if (std::abs(stepLength_) < 1e-3) {
+            Trajectory zeroLength = generateZeroLength();
+            trajectory_ = pre + zeroLength;
+            return !trajectory_.points.empty();
+        } // 零步长特殊处理
+
         Trajectory cycleA;
         Trajectory cycleB;
         if (order_ == swingFirst) {
@@ -70,7 +92,10 @@ namespace Dog8Dof {
             cycleB = generateSwing(TCycle, swingSteps);
         }
 
-        trajectory_ = pre + cycleA + cycleB;
+        const Trajectory blendAB = generateBlend(pre, cycleA);
+        const Trajectory blendBC = generateBlend(cycleA, cycleB);
+
+        trajectory_ = pre + blendAB + cycleA + blendBC + cycleB;
         return !trajectory_.points.empty();
     }
 
@@ -139,17 +164,14 @@ namespace Dog8Dof {
 
     Trajectory WalkTrajectory::startFromSwing(const float transitionTime,
                                               const Body &initTip) {
+        (void)transitionTime;
         const Eigen::Vector2f p0(initTip.pos[0], initTip.pos[2]);
         const Eigen::Vector2f v0(initTip.linerVel[0], initTip.linerVel[2]);
 
-        const Eigen::Vector2f pTarget(-stepLength_ * 0.5f, 0.0f);
+        const Eigen::Vector2f pTarget(-stepLength_ * 0.5f, baseHeight_);
 
         const float dt = static_cast<float>(durationNanoSec_) * 1e-9f; // 单采样时间
-        const float TCycle = transitionTime;
-        const float TStance = TCycle * (1.0f - parameters_.swingDutyCycle);
-
-        const Eigen::Vector2f vTarget((TStance > 1e-6f) ? (stepLength_ / TStance) : 0.0f,
-                                      0.0f);
+        const Eigen::Vector2f vTarget(0.0f, 0.0f);
 
         const Eigen::Vector2f dp = pTarget - p0;
         if (dp.squaredNorm() <= parameters_.reachThresholdSQ) {
@@ -194,18 +216,14 @@ namespace Dog8Dof {
 
     Trajectory WalkTrajectory::startFromStance(const float transitionTime,
                                                const Body &initTip) {
+        (void)transitionTime;
         const Eigen::Vector2f p0(initTip.pos[0], initTip.pos[2]);
         const Eigen::Vector2f v0(initTip.linerVel[0], initTip.linerVel[2]);
 
-        const Eigen::Vector2f pTarget(stepLength_ * 0.5f, 0.0f);
+        const Eigen::Vector2f pTarget(stepLength_ * 0.5f, baseHeight_);
 
         const float dt = static_cast<float>(durationNanoSec_) * 1e-9f; // 单采样时间
-        const float TCycle = transitionTime;
-        const float TStance = TCycle * (1.0f - parameters_.swingDutyCycle);
-
-        // 支撑相起点应向后运动
-        const Eigen::Vector2f vTarget((TStance > 1e-6f) ? (-stepLength_ / TStance) : 0.0f,
-                                      0.0f);
+        const Eigen::Vector2f vTarget(0.0f, 0.0f);
 
         const Eigen::Vector2f dp = pTarget - p0;
         if (dp.squaredNorm() <= parameters_.reachThresholdSQ) {
@@ -250,20 +268,20 @@ namespace Dog8Dof {
 
     Trajectory WalkTrajectory::generateStance(const float transitionTime,
                                               const size_t steps) {
-        const Eigen::Vector2<float> stanceStartPos(stepLength_ * 0.5f, 0.0f);
-        const Eigen::Vector2<float> stanceFinishPos(-stepLength_ * 0.5f, 0.0f);
+        const Eigen::Vector2f stanceStartPos(stepLength_ * 0.5f, baseHeight_);
+        const Eigen::Vector2f stanceFinishPos(-stepLength_ * 0.5f, baseHeight_);
         // 支撑相起始位置
 
         const float phaseTime = transitionTime * (1.0f - parameters_.swingDutyCycle);
-        const Eigen::Vector2<float> stanceVel =
-            (stanceFinishPos - stanceStartPos) / phaseTime;
-        const Eigen::Vector2<float> stanceAcc(0.0f, 0.0f);
-        // 支撑相恒速，始末加速度置零
+        const Eigen::Vector2f stanceAcc(0.0f, 0.0f);
+        const Eigen::Vector2f stanceStartVel(0.0f, parameters_.deltaSpeed[1]);
+        const Eigen::Vector2f stanceFinishVel(0.0f, -parameters_.deltaSpeed[1]);
+        // 支撑相边界速度设为 x=0，避免与摆动相切换时 x 速度跳变
 
         Trajectory res = QuinticPolynomial::generate(stanceStartPos,
                                                      stanceFinishPos,
-                                                     stanceVel,
-                                                     stanceVel,
+                                                     stanceStartVel,
+                                                     stanceFinishVel,
                                                      stanceAcc,
                                                      stanceAcc,
                                                      phaseTime,
@@ -272,10 +290,28 @@ namespace Dog8Dof {
         const float pushForce = parameters_.horizontalPushGain * stepLength_;
         const float pressForce = Const::BODY_MASS * Const::G * 0.5 +
                                  parameters_.verticalPushGain * std::abs(pushForce);
+        const size_t rampSteps = std::max<size_t>(1, static_cast<size_t>(steps * 0.1f));
+
+        auto smoothstep01 = [](float x) {
+            x = std::clamp(x, 0.0f, 1.0f);
+            return x * x * (3.0f - 2.0f * x);
+        };
+
         for (size_t i = 0; i < steps; i++) {
-            res.points[i].tau[0] = pushForce;
+            float scale = 1.0f;
+            if (i < rampSteps) {
+                const float s = static_cast<float>(i + 1) / static_cast<float>(rampSteps);
+                scale = smoothstep01(s);
+            } else if (i + rampSteps >= steps) {
+                const size_t tailIndex = steps - i;
+                const float s =
+                    static_cast<float>(tailIndex) / static_cast<float>(rampSteps);
+                scale = smoothstep01(s);
+            }
+
+            res.points[i].tau[0] = pushForce * scale;
             res.points[i].tau[1] = 0.0f;
-            res.points[i].tau[2] = pressForce;
+            res.points[i].tau[2] = pressForce * scale;
         }
         // 添加前馈支撑力矩
         return res;
@@ -283,13 +319,13 @@ namespace Dog8Dof {
 
     Trajectory WalkTrajectory::generateSwing(const float transitionTime,
                                              const size_t steps) {
-        const Eigen::Vector2<float> zeroAcc(0.0f, 0.0f);
+        const Eigen::Vector2f zeroAcc(0.0f, 0.0f);
 
-        const Eigen::Vector2<float> swingStartPos(-stepLength_ * 0.5f, 0.0f);
-        const Eigen::Vector2<float> swingFinishPos(stepLength_ * 0.5f, 0.0f);
+        const Eigen::Vector2f swingStartPos(-stepLength_ * 0.5f, baseHeight_);
+        const Eigen::Vector2f swingFinishPos(stepLength_ * 0.5f, baseHeight_);
 
-        const Eigen::Vector2<float> tangentVec = swingFinishPos - swingStartPos;
-        const Eigen::Vector2<float> directionVec = getHeightVec(tangentVec);
+        const Eigen::Vector2f tangentVec = swingFinishPos - swingStartPos;
+        const Eigen::Vector2f directionVec = getHeightVec(tangentVec);
 
         const float phaseTime = transitionTime * parameters_.swingDutyCycle;
         const float T1 = phaseTime * 0.5;
@@ -299,15 +335,13 @@ namespace Dog8Dof {
         const size_t steps2 = steps - steps1;
         // 计算摆动相两段的时间和分辨率占比
 
-        const Eigen::Vector2<float> swingFinishVel(
-            stepLength_ / (transitionTime - phaseTime), 0.0f);
-        // 设置摆动结束速度为支撑速度
-        const Eigen::Vector2<float> swingStartVel = swingFinishVel;
-        // 为了形成摆动-支撑循环，摆动起始和支撑起始应该完全重合
+        const Eigen::Vector2f swingStartVel(0.0f, -parameters_.deltaSpeed[1]);
+        const Eigen::Vector2f swingFinishVel(0.0f, parameters_.deltaSpeed[1]);
+        // 起始加入微小的向上速度，结束添加微小向下速度，避免曲线退化为直线
 
-        const Eigen::Vector2<float> swingMidPos =
+        const Eigen::Vector2f swingMidPos =
             (swingFinishPos + swingStartPos) * 0.5 + directionVec * stepHeight_;
-        const Eigen::Vector2<float> swingMidVel =
+        const Eigen::Vector2f swingMidVel =
             QuinticPolynomial::solveMidVel2D(swingStartPos,
                                              swingMidPos,
                                              swingFinishPos,
@@ -347,6 +381,138 @@ namespace Dog8Dof {
         return first + second;
     }
 
+    Trajectory WalkTrajectory::generateBlend(const Trajectory &lhs,
+                                             const Trajectory &rhs) {
+        const size_t blendSteps =
+            std::clamp(stepsFromDurationNs(parameters_.blendTimeNs, 3, 20),
+                       static_cast<size_t>(3),
+                       static_cast<size_t>(20));
+        const float blendTime = static_cast<float>(parameters_.blendTimeNs) / 1e9;
+        if (lhs.points.empty() || rhs.points.empty()) {
+            return Trajectory(0);
+        }
+
+        const TrajectoryPoint &p0 = lhs.points.back();
+        const TrajectoryPoint &p1 = rhs.points.front();
+
+        const Eigen::Vector2f blendStartPos(p0.pos[0], p0.pos[2]);
+        const Eigen::Vector2f blendFinishPos(p1.pos[0], p1.pos[2]);
+        const Eigen::Vector2f blendStartVel(p0.vel[0], p0.vel[2]);
+        const Eigen::Vector2f blendFinishVel(p1.vel[0], p1.vel[2]);
+        const Eigen::Vector2f zeroAcc = Eigen::Vector2f::Zero();
+
+        Trajectory blend = QuinticPolynomial::generate(blendStartPos,
+                                                       blendFinishPos,
+                                                       blendStartVel,
+                                                       blendFinishVel,
+                                                       zeroAcc,
+                                                       zeroAcc,
+                                                       blendTime,
+                                                       blendSteps);
+
+        for (size_t i = 0; i < blend.points.size(); ++i) {
+            const float s =
+                (blend.points.size() <= 1)
+                    ? 1.0f
+                    : static_cast<float>(i) / static_cast<float>(blend.points.size() - 1);
+            blend.points[i].tau = p0.tau + (p1.tau - p0.tau) * s;
+        }
+
+        if (blend.points.size() > 2) {
+            blend.points.erase(blend.points.begin());
+            blend.points.pop_back();
+            blend.time.resize(blend.points.size());
+        }
+
+        return blend;
+    };
+
+    Trajectory WalkTrajectory::generateZeroLength() {
+        const size_t totalSteps =
+            stepsFromDurationNs(static_cast<size_t>(parameters_.totalTime * 1e9));
+        if (totalSteps < 4) {
+            return Trajectory(0);
+        }
+
+        const float dt = static_cast<float>(durationNanoSec_) * 1e-9f;
+        const float cycleTime = dt * static_cast<float>(totalSteps);
+
+        size_t swingSteps = static_cast<size_t>(
+            std::lround(static_cast<float>(totalSteps) * parameters_.swingDutyCycle));
+        swingSteps = std::clamp(swingSteps, static_cast<size_t>(2), totalSteps - 2);
+        const size_t stanceSteps = totalSteps - swingSteps;
+
+        const float x0 = 0.0f;
+        const float z0 = baseHeight_;
+        const float zLift = std::max(Const::BODY_HEIGHT_MIN, baseHeight_ - stepHeight_);
+
+        const Eigen::Vector2f pStart(x0, z0);
+        const Eigen::Vector2f pMid(x0, zLift);
+        const Eigen::Vector2f pEnd(x0, z0);
+
+        const Eigen::Vector2f zeroVel(0.0f, 0.0f);
+        const Eigen::Vector2f zeroAcc(0.0f, 0.0f);
+
+        const float swingTime = cycleTime * parameters_.swingDutyCycle;
+        const float T1 = swingTime * 0.5f;
+        const float T2 = swingTime - T1;
+
+        size_t steps1 = swingSteps / 2;
+        if (steps1 == 0) {
+            steps1 = 1;
+        }
+        const size_t steps2 = swingSteps - steps1;
+
+        Trajectory swingUp = QuinticPolynomial::generate(
+            pStart, pMid, zeroVel, zeroVel, zeroAcc, zeroAcc, T1, steps1);
+        Trajectory swingDown = QuinticPolynomial::generate(
+            pMid, pEnd, zeroVel, zeroVel, zeroAcc, zeroAcc, T2, steps2);
+        Trajectory swing = swingUp + swingDown;
+
+        const float stanceTime = cycleTime - swingTime;
+        Trajectory stance = QuinticPolynomial::generate(
+            pEnd, pEnd, zeroVel, zeroVel, zeroAcc, zeroAcc, stanceTime, stanceSteps);
+
+        const float pressForce = Const::BODY_MASS * Const::G * 0.5f;
+        const size_t rampSteps =
+            std::max<size_t>(1, static_cast<size_t>(stance.points.size() * 0.1f));
+
+        auto smoothstep01 = [](float x) {
+            x = std::clamp(x, 0.0f, 1.0f);
+            return x * x * (3.0f - 2.0f * x);
+        };
+
+        for (size_t i = 0; i < stance.points.size(); ++i) {
+            float scale = 1.0f;
+            if (i < rampSteps) {
+                const float s = static_cast<float>(i + 1) / static_cast<float>(rampSteps);
+                scale = smoothstep01(s);
+            } else if (i + rampSteps >= stance.points.size()) {
+                const size_t tailIndex = stance.points.size() - i;
+                const float s =
+                    static_cast<float>(tailIndex) / static_cast<float>(rampSteps);
+                scale = smoothstep01(s);
+            }
+
+            stance.points[i].tau[0] = 0.0f;
+            stance.points[i].tau[1] = 0.0f;
+            stance.points[i].tau[2] = pressForce * scale;
+        }
+
+        Trajectory cycleA;
+        Trajectory cycleB;
+        if (order_ == swingFirst) {
+            cycleA = swing;
+            cycleB = stance;
+        } else {
+            cycleA = stance;
+            cycleB = swing;
+        }
+
+        const Trajectory blendAB = generateBlend(cycleA, cycleB);
+        return cycleA + blendAB + cycleB;
+    }
+
 } // namespace Dog8Dof
 
 namespace YAML {
@@ -364,6 +530,11 @@ namespace YAML {
 
             node["pushGain"]["horizontal"] = rhs.horizontalPushGain;
             node["pushGain"]["vertical"] = rhs.verticalPushGain;
+
+            node["deltaSpeed"]["x"] = rhs.deltaSpeed[0];
+            node["deltaSpeed"]["z"] = rhs.deltaSpeed[1];
+
+            node["blendTime"] = rhs.blendTimeNs / 1e9;
             return node;
         }
 
@@ -380,6 +551,11 @@ namespace YAML {
 
             rhs.swingDutyCycle = node["swingDutyCycle"].as<float>(0.5);
             rhs.totalTime = node["totalTime"].as<float>(2.0);
+
+            rhs.deltaSpeed = Eigen::Vector2f(node["deltaSpeed"]["x"].as<float>(1.0),
+                                             node["deltaSpeed"]["z"].as<float>(1.0));
+
+            rhs.blendTimeNs = node["blendTime"].as<float>(0.03f) * 1e9;
 
             return true;
         }

@@ -9,7 +9,70 @@ namespace Dog8Dof {
     namespace {
         constexpr float kEps = 1e-6f;
         constexpr float kMinPhaseTime = 0.05f;
-        constexpr float kPi = 3.14159265358979323846f;
+
+        struct SlipState {
+            float x = 0.0f;
+            float z = 0.0f;
+            float vx = 0.0f;
+            float vz = 0.0f;
+        };
+
+        float deg2rad(float deg) {
+            return deg * static_cast<float>(M_PI / 180.0);
+        }
+
+        TrajectoryPoint makeTipPoint(float footX, float footZ, const SlipState &com) {
+            TrajectoryPoint p;
+            p.pos[0] = footX - com.x;
+            p.pos[1] = 0.0f;
+            p.pos[2] = footZ - com.z;
+
+            p.vel[0] = -com.vx;
+            p.vel[1] = 0.0f;
+            p.vel[2] = -com.vz;
+            p.tau.setZero();
+            return p;
+        }
+
+        void stepSlip(SlipState &state,
+                      float dt,
+                      float footX,
+                      float footZ,
+                      float mass,
+                      float restLength,
+                      float stiffness,
+                      float damping,
+                      float targetVx,
+                      float targetVz,
+                      float vxTrackGain,
+                      float vzTrackGain) {
+            const float rx = state.x - footX;
+            const float rz = state.z - footZ;
+            const float legLenSq = rx * rx + rz * rz;
+            const float legLen = std::sqrt(std::max(legLenSq, kEps));
+            const float legDot = (rx * state.vx + rz * state.vz) / legLen;
+
+            float springForce = stiffness * (restLength - legLen) - damping * legDot;
+            if (springForce < 0.0f) {
+                springForce = 0.0f;
+            }
+
+            const float invLegLen = 1.0f / legLen;
+            const float accSpringX = (springForce / mass) * (rx * invLegLen);
+            const float accSpringZ = (springForce / mass) * (rz * invLegLen);
+
+            const float ax = accSpringX + vxTrackGain * (targetVx - state.vx);
+            const float az = accSpringZ + Const::G + vzTrackGain * (targetVz - state.vz);
+
+            state.vx += ax * dt;
+            state.vz += az * dt;
+            state.x += state.vx * dt;
+            state.z += state.vz * dt;
+        }
+
+        float speedNorm(const SlipState &state) {
+            return std::sqrt(state.vx * state.vx + state.vz * state.vz);
+        }
     } // namespace
 
     JumpTrajectory::JumpTrajectory(const std::string &configPath, rclcpp::Duration period)
@@ -50,27 +113,41 @@ namespace Dog8Dof {
             std::cout << "Push time scale must be positive!" << std::endl;
             return false;
         }
+        if (parameters_.takeoffHeight >= parameters_.crouchHeight) {
+            std::cout << "takeoff height can't greater than crouch height" << std::endl;
+            return false;
+        }
+        if (parameters_.slipMass <= 0.0f || parameters_.slipRestLength <= 0.0f ||
+            parameters_.slipStiffness <= 0.0f || parameters_.slipDamping < 0.0f ||
+            parameters_.slipStanceMaxTime <= 0.0f || parameters_.slipStopSpeed <= 0.0f) {
+            std::cout << "SLIP parameters invalid" << std::endl;
+            return false;
+        }
+        if (parameters_.slipTouchdownAngleDeg <= 0.0f ||
+            parameters_.slipTouchdownAngleDeg >= 80.0f) {
+            std::cout << "SLIP touchdown angle should be in (0, 80) deg" << std::endl;
+            return false;
+        }
 
         return true;
     }
 
-    bool JumpTrajectory::setTarget(float jumpLength, float jumpHeight) {
-        if (jumpHeight <= 0.0f) {
-            std::cout << "Jump height must be positive" << std::endl;
+    bool JumpTrajectory::setTarget(float launchSpeed, float flyTime) {
+        if (std::fabs(launchSpeed) <= kEps) {
+            std::cout << "Launch speed magnitude must be postive" << std::endl;
             return false;
         }
-        if (std::fabs(jumpLength) <= kEps) {
-            std::cout << "Jump length magnitude must be > 0" << std::endl;
+        if (flyTime <= 0.0f) {
+            std::cout << "Fly time must be positive" << std::endl;
             return false;
         }
-
-        jumpHight_ = jumpHeight;
-        jumpLength_ = jumpLength;
+        targetLaunchSpeed_ = launchSpeed;
+        targetFlyTime_ = flyTime;
         return true;
     }
 
     bool JumpTrajectory::generate(const Body &currentTip) {
-        if (std::fabs(jumpLength_) <= kEps || jumpHight_ <= kEps) {
+        if (std::fabs(targetLaunchSpeed_) <= kEps || targetFlyTime_ <= kEps) {
             return false;
         }
 
@@ -79,22 +156,31 @@ namespace Dog8Dof {
         target_ = TrajectoryPoint();
         trajectory_ = Trajectory(0);
 
-        const float dir = (jumpLength_ >= 0.0f) ? 1.0f : -1.0f;
-        const float L = std::fabs(jumpLength_);
+        const float T = targetFlyTime_;
+        const float speedAbs = std::fabs(targetLaunchSpeed_);
+        const float dir = (targetLaunchSpeed_ >= 0.0f) ? 1.0f : -1.0f;
 
-        const float theta = std::atan2(4.0f * jumpHight_, L);
-        const float V0 = std::sqrt(
-            (Const::G * (L * L + 16.0f * jumpHight_ * jumpHight_)) / (8.0f * jumpHight_));
-        const float T0 = (2.0f * V0 * std::sin(theta)) / Const::G;
+        // 同高度起落时，竖直分量由飞行时间唯一确定
+        const float vz0 = -0.5f * Const::G * T; // +Z向下，向上起跳为负
+        const float vzNeed = std::fabs(vz0);
+        if (speedAbs < vzNeed) {
+            std::cout << "Launch speed too small for requested fly time" << std::endl;
+            return false;
+        }
 
-        const float launchAngle = (dir > 0.0f) ? theta : (kPi - theta);
+        const float vx0 =
+            dir * std::sqrt(std::max(0.0f, speedAbs * speedAbs - vz0 * vz0));
+
+        takeoffVx_ = vx0;
+        takeoffVz_ = vz0;
+        jumpLength_ = vx0 * T;
 
         const Trajectory crouch = generateCrouching(currentTip);
-        const Trajectory push = generatePushing(V0, launchAngle);
-        const Trajectory flying = generateFlying(T0);
-        const Trajectory landing = generateLanding();
+        const Trajectory takeoff = generateSlipTakeoff(vx0, vz0);
+        const Trajectory flying = generateSlipFlight(T);
+        const Trajectory landing = generateSlipLanding();
 
-        trajectory_ = crouch + push + flying + landing;
+        trajectory_ = crouch + takeoff + flying + landing;
         return !trajectory_.points.empty();
     }
 
@@ -117,114 +203,187 @@ namespace Dog8Dof {
                                            steps);
     }
 
-    Trajectory JumpTrajectory::generatePushing(const float launchVel,
-                                               const float launchAngle) {
-        const Eigen::Vector2f startPos(0.0f, parameters_.crouchHeight);
-        const Eigen::Vector2f startVel(0.0f, 0.0f);
+    Trajectory JumpTrajectory::generateSlipTakeoff(float targetVx, float targetVz) {
+        const float dt = static_cast<float>(durationNanoSec_) * 1e-9f;
+        const float simTime =
+            std::clamp(parameters_.slipStanceMaxTime,
+                       parameters_.pushTimeMin,
+                       std::max(parameters_.pushTimeMax, parameters_.slipStanceMaxTime));
 
-        const float vx = launchVel * std::cos(launchAngle);
-        const float vz = -launchVel * std::sin(launchAngle);
-        const Eigen::Vector2f finishVel(vx, vz);
+        const size_t maxSteps = stepsFromDurationNs(static_cast<size_t>(simTime * 1e9f));
+        const size_t minSteps =
+            stepsFromDurationNs(static_cast<size_t>(parameters_.pushTimeMin * 1e9f));
 
-        const float deltaZ = parameters_.takeoffHeight - parameters_.crouchHeight;
-        const float pushTimeFromKinematics = 2.0f * deltaZ / vz;
-        const float pushTimeFallback =
-            parameters_.transitionTime * parameters_.pushTimeScale;
+        Trajectory phase(0);
+        phase.points.reserve(maxSteps);
+        phase.time.reserve(maxSteps);
 
-        float pushTime = pushTimeFromKinematics;
-        if (!std::isfinite(pushTime) || pushTime <= 0.0f) {
-            pushTime = pushTimeFallback;
+        takeoffFootX_ = 0.0f;
+        takeoffFootZ_ = 0.0f;
+
+        SlipState com;
+        com.x = 0.0f;
+        com.z = -parameters_.crouchHeight;
+        com.vx = 0.0f;
+        com.vz = 0.0f;
+
+        const float vxGain = 8.0f;
+        const float vzGain = 5.0f;
+
+        for (size_t i = 0; i < maxSteps; ++i) {
+            phase.points.push_back(makeTipPoint(takeoffFootX_, takeoffFootZ_, com));
+            phase.time.push_back(0);
+
+            stepSlip(com,
+                     dt,
+                     takeoffFootX_,
+                     takeoffFootZ_,
+                     parameters_.slipMass,
+                     parameters_.slipRestLength,
+                     parameters_.slipStiffness,
+                     parameters_.slipDamping,
+                     targetVx,
+                     targetVz,
+                     vxGain,
+                     vzGain);
+
+            const float rx = com.x - takeoffFootX_;
+            const float rz = com.z - takeoffFootZ_;
+            const float legLen = std::sqrt(std::max(rx * rx + rz * rz, kEps));
+            const float legDot = (rx * com.vx + rz * com.vz) / legLen;
+
+            if (i + 1 >= std::max<size_t>(2, minSteps) &&
+                legLen >= parameters_.slipRestLength && legDot > 0.0f && com.vz < -kEps) {
+                break;
+            }
         }
-        pushTime = std::clamp(pushTime, parameters_.pushTimeMin, parameters_.pushTimeMax);
 
-        const float takeoffX = 0.5f * vx * pushTime;
-        const float takeoffZ = parameters_.takeoffHeight;
+        if (phase.points.empty()) {
+            return Trajectory(0);
+        }
 
-        pushTime_ = pushTime;
-        takeoffX_ = takeoffX;
-        takeoffZ_ = takeoffZ;
-        launchVx_ = vx;
-        launchVz_ = vz;
-
-        const Eigen::Vector2f finishPos(takeoffX_, takeoffZ_);
-
-        const size_t steps = stepsFromDurationNs(static_cast<size_t>(pushTime * 1e9f));
-        const Eigen::Vector2f zero(0.0f, 0.0f);
-
-        return QuinticPolynomial::generate(
-            startPos, finishPos, startVel, finishVel, zero, zero, pushTime, steps);
+        const TrajectoryPoint &last = phase.points.back();
+        takeoffX_ = last.pos[0];
+        takeoffZ_ = last.pos[2];
+        takeoffVx_ = last.vel[0];
+        takeoffVz_ = last.vel[2];
+        pushTime_ = static_cast<float>(phase.points.size()) * dt;
+        return phase;
     }
 
-    Trajectory JumpTrajectory::generateFlying(const float flyTime) {
+    Trajectory JumpTrajectory::generateSlipFlight(float flyTime) {
         if (flyTime <= kEps) {
             return Trajectory(0);
         }
 
-        const float T1 = flyTime * 0.5f;
-        const float T2 = flyTime - T1;
+        const size_t steps = stepsFromDurationNs(static_cast<size_t>(flyTime * 1e9f));
+        Trajectory phase(0);
+        phase.points.reserve(steps);
+        phase.time.reserve(steps);
 
-        const size_t totalSteps =
-            stepsFromDurationNs(static_cast<size_t>(flyTime * 1e9f));
-        size_t steps1 =
-            static_cast<size_t>(std::lround(static_cast<float>(totalSteps) * 0.5f));
-        steps1 = std::max<size_t>(1, steps1);
-        size_t steps2 = std::max<size_t>(1, totalSteps - steps1);
+        SlipState com0;
+        com0.x = takeoffFootX_ - takeoffX_;
+        com0.z = takeoffFootZ_ - takeoffZ_;
+        com0.vx = -takeoffVx_;
+        com0.vz = -takeoffVz_;
 
-        const Eigen::Vector2f zero(0.0f, 0.0f);
+        const SlipState comEnd = {
+            com0.x + com0.vx * flyTime,
+            com0.z + com0.vz * flyTime + 0.5f * Const::G * flyTime * flyTime,
+            com0.vx,
+            com0.vz + Const::G * flyTime};
 
-        const Eigen::Vector2f p0(takeoffX_, takeoffZ_);
-        const Eigen::Vector2f p2(-takeoffX_, takeoffZ_);
+        const float dir = (targetLaunchSpeed_ >= 0.0f) ? 1.0f : -1.0f;
+        const float theta = deg2rad(parameters_.slipTouchdownAngleDeg);
+        landingFootX_ = comEnd.x - dir * parameters_.slipRestLength * std::sin(theta);
+        landingFootZ_ = comEnd.z + parameters_.slipRestLength * std::cos(theta);
 
-        const float midX = 0.5f * (p0[0] + p2[0]);
-        const float midZ =
-            takeoffZ_ + std::fabs(jumpLength_) * parameters_.flyHeightRatio;
-        const Eigen::Vector2f p1(midX, midZ);
+        for (size_t i = 0; i < steps; ++i) {
+            const float s = (steps == 1)
+                                ? 0.0f
+                                : static_cast<float>(i) / static_cast<float>(steps - 1);
+            const float t = s * flyTime;
 
-        const Eigen::Vector2f v0(launchVx_, launchVz_);
-        const Eigen::Vector2f v2(launchVx_, -launchVz_);
+            SlipState com;
+            com.x = com0.x + com0.vx * t;
+            com.z = com0.z + com0.vz * t + 0.5f * Const::G * t * t;
+            com.vx = com0.vx;
+            com.vz = com0.vz + Const::G * t;
 
-        const Eigen::Vector2f vm =
-            QuinticPolynomial::solveMidVel2D(p0, p1, p2, v0, v2, T1, T2);
+            const float footX = takeoffFootX_ + (landingFootX_ - takeoffFootX_) * s;
+            const float footZ = takeoffFootZ_ + (landingFootZ_ - takeoffFootZ_) * s;
 
-        const Eigen::Vector2f am =
-            QuinticPolynomial::solveMidAcc2D(p0, v0, zero, p1, vm, p2, v2, zero, T1, T2);
+            phase.points.push_back(makeTipPoint(footX, footZ, com));
+            phase.time.push_back(0);
+        }
 
-        Trajectory seg1 =
-            QuinticPolynomial::generate(p0, p1, v0, vm, zero, am, T1, steps1);
-        Trajectory seg2 =
-            QuinticPolynomial::generate(p1, p2, vm, v2, am, zero, T2, steps2);
+        touchdownX_ = landingFootX_ - comEnd.x;
+        touchdownZ_ = landingFootZ_ - comEnd.z;
+        touchdownVx_ = -comEnd.vx;
+        touchdownVz_ = -comEnd.vz;
+        jumpLength_ = comEnd.x - com0.x;
 
-        return seg1 + seg2;
+        return phase;
     }
 
-    Trajectory JumpTrajectory::generateLanding() {
+    Trajectory JumpTrajectory::generateSlipLanding() {
+        const float dt = static_cast<float>(durationNanoSec_) * 1e-9f;
+        const size_t maxSteps = stepsFromDurationNs(
+            static_cast<size_t>(parameters_.slipStanceMaxTime * 1e9f));
+
+        Trajectory absorb(0);
+        absorb.points.reserve(maxSteps);
+        absorb.time.reserve(maxSteps);
+
+        SlipState com;
+        com.x = landingFootX_ - touchdownX_;
+        com.z = landingFootZ_ - touchdownZ_;
+        com.vx = -touchdownVx_;
+        com.vz = -touchdownVz_;
+
+        const size_t minSteps =
+            stepsFromDurationNs(static_cast<size_t>(kMinPhaseTime * 1e9f));
+        const float vxGain = 6.0f;
+        const float vzGain = 4.0f;
+
+        for (size_t i = 0; i < maxSteps; ++i) {
+            absorb.points.push_back(makeTipPoint(landingFootX_, landingFootZ_, com));
+            absorb.time.push_back(0);
+
+            stepSlip(com,
+                     dt,
+                     landingFootX_,
+                     landingFootZ_,
+                     parameters_.slipMass,
+                     parameters_.slipRestLength,
+                     parameters_.slipStiffness,
+                     parameters_.slipDamping,
+                     0.0f,
+                     0.0f,
+                     vxGain,
+                     vzGain);
+
+            if (i + 1 >= std::max<size_t>(2, minSteps) &&
+                speedNorm(com) <= parameters_.slipStopSpeed) {
+                break;
+            }
+        }
+
+        if (absorb.points.empty()) {
+            return Trajectory(0);
+        }
+
+        const TrajectoryPoint &tail = absorb.points.back();
+        const Eigen::Vector2f startPos(tail.pos[0], tail.pos[2]);
+        const Eigen::Vector2f startVel(tail.vel[0], tail.vel[2]);
+        const Eigen::Vector2f finishPos(0.0f, parameters_.crouchHeight);
         const Eigen::Vector2f zero(0.0f, 0.0f);
 
-        const Eigen::Vector2f pTouch(-takeoffX_, takeoffZ_);
-        const Eigen::Vector2f vTouch(launchVx_, -launchVz_);
-
-        const float totalTime = std::max(kMinPhaseTime, parameters_.transitionTime);
-        const float T1 = totalTime * 0.6f;
-        const float T2 = std::max(kMinPhaseTime, totalTime - T1);
-
-        const size_t totalSteps =
-            stepsFromDurationNs(static_cast<size_t>(totalTime * 1e9f));
-        size_t steps1 =
-            static_cast<size_t>(std::lround(static_cast<float>(totalSteps) * 0.6f));
-        steps1 = std::max<size_t>(1, steps1);
-        size_t steps2 = std::max<size_t>(1, totalSteps - steps1);
-
-        const float zCompress = Const::BODY_HEIGHT_MIN;
-        const Eigen::Vector2f pCompress(pTouch[0], zCompress);
-        const Eigen::Vector2f vCompress(0.0f, 0.0f);
-
-        const Eigen::Vector2f pRecover(0.0f, parameters_.crouchHeight);
-        const Eigen::Vector2f vRecover(0.0f, 0.0f);
-
-        Trajectory absorb = QuinticPolynomial::generate(
-            pTouch, pCompress, vTouch, vCompress, zero, zero, T1, steps1);
+        const float recoverTime = std::max(kMinPhaseTime, parameters_.transitionTime);
+        const size_t recoverSteps =
+            stepsFromDurationNs(static_cast<size_t>(recoverTime * 1e9f));
         Trajectory recover = QuinticPolynomial::generate(
-            pCompress, pRecover, vCompress, vRecover, zero, zero, T2, steps2);
+            startPos, finishPos, startVel, zero, zero, zero, recoverTime, recoverSteps);
 
         return absorb + recover;
     }
@@ -304,6 +463,13 @@ namespace YAML {
             node["pushTimeMax"] = rhs.pushTimeMax;
             node["pushTimeScale"] = rhs.pushTimeScale;
             node["flyHeightRatio"] = rhs.flyHeightRatio;
+            node["slipMass"] = rhs.slipMass;
+            node["slipRestLength"] = rhs.slipRestLength;
+            node["slipStiffness"] = rhs.slipStiffness;
+            node["slipDamping"] = rhs.slipDamping;
+            node["slipTouchdownAngleDeg"] = rhs.slipTouchdownAngleDeg;
+            node["slipStanceMaxTime"] = rhs.slipStanceMaxTime;
+            node["slipStopSpeed"] = rhs.slipStopSpeed;
             return node;
         }
 
@@ -311,7 +477,10 @@ namespace YAML {
             if (!node["transitionKp"] || !node["transitionKd"] ||
                 !node["transitionTime"] || !node["crouchHeight"] || !node["crouchTime"] ||
                 !node["takeoffHeight"] || !node["pushTimeMin"] || !node["pushTimeMax"] ||
-                !node["pushTimeScale"] || !node["flyHeightRatio"]) {
+                !node["pushTimeScale"] || !node["flyHeightRatio"] || !node["slipMass"] ||
+                !node["slipRestLength"] || !node["slipStiffness"] ||
+                !node["slipDamping"] || !node["slipTouchdownAngleDeg"] ||
+                !node["slipStanceMaxTime"] || !node["slipStopSpeed"]) {
                 return false;
             }
 
@@ -325,6 +494,13 @@ namespace YAML {
             rhs.pushTimeMax = node["pushTimeMax"].as<float>();
             rhs.pushTimeScale = node["pushTimeScale"].as<float>();
             rhs.flyHeightRatio = node["flyHeightRatio"].as<float>();
+            rhs.slipMass = node["slipMass"].as<float>();
+            rhs.slipRestLength = node["slipRestLength"].as<float>();
+            rhs.slipStiffness = node["slipStiffness"].as<float>();
+            rhs.slipDamping = node["slipDamping"].as<float>();
+            rhs.slipTouchdownAngleDeg = node["slipTouchdownAngleDeg"].as<float>();
+            rhs.slipStanceMaxTime = node["slipStanceMaxTime"].as<float>();
+            rhs.slipStopSpeed = node["slipStopSpeed"].as<float>();
             return true;
         }
     };

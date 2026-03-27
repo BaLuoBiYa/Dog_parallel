@@ -59,7 +59,7 @@ namespace Dog8Dof {
         static constexpr float BODY_WIDTH_LATERAL = 370.9f; // 左右关节水平距离 (mm)
 
         static constexpr float BODY_MASS = 0.0f;
-        static constexpr float G = 9.8;
+        static constexpr float G = 9800.0f;
 
         static constexpr unsigned long MAX_RESOLUTION = 1000; // 轨迹生成分辨率
         static constexpr unsigned long MIN_RESOLUTION = 10;   // 轨迹生成分辨率

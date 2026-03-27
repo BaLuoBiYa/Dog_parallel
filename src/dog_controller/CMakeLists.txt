@@ -59,10 +59,42 @@ target_link_libraries(standTest
     yaml-cpp
 )
 
+add_executable(walkTest
+    src/test/walkTest.cpp
+)
+ament_target_dependencies(walkTest
+    rclcpp
+    dog_tools
+    dog_trajectory
+    Eigen3
+    ament_index_cpp
+)
+target_link_libraries(walkTest
+    Eigen3::Eigen
+    yaml-cpp
+)
+
+add_executable(jumpTest
+    src/test/jumpTest.cpp
+)
+ament_target_dependencies(jumpTest
+    rclcpp
+    dog_tools
+    dog_trajectory
+    Eigen3
+    ament_index_cpp
+)
+target_link_libraries(jumpTest
+    Eigen3::Eigen
+    yaml-cpp
+)
+
 install(
   TARGETS ${PROJECT_NAME}
         PinocchionTest
         standTest
+        walkTest
+        jumpTest
   DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )

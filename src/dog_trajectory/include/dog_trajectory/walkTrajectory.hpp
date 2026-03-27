@@ -13,7 +13,8 @@ namespace Dog8Dof {
          * @param stepHeight 步高
          * @param order 从支撑还是摆动相开始
          */
-        bool setTarget(float stepLength, float stepHeight, sequence order);
+        bool
+        setTarget(float stepLength, float stepHeight, float baseHeight, sequence order);
         bool generate(const Body &currentTip) override;
         bool start(const rclcpp::Time &startTime) override;
         TrajectoryPoint get(const rclcpp::Time &currentTime) override;
@@ -32,11 +33,16 @@ namespace Dog8Dof {
 
             float totalTime;
             float swingDutyCycle;
+
+            float blendTimeNs;
+
+            Eigen::Vector2f deltaSpeed;
         };
 
       private:
         parameters_t parameters_;
         float stepLength_, stepHeight_;
+        float baseHeight_;
         sequence order_;
 
         /**
@@ -66,6 +72,18 @@ namespace Dog8Dof {
          * @param steps 该相位占用的分辨率步数
          */
         Trajectory generateSwing(const float transitionTime, const size_t steps);
+
+        /**
+         * @brief 生成过渡的轨迹
+         * @param lhs 第一段轨迹
+         * @param rhs 第二段轨迹
+         */
+        Trajectory generateBlend(const Trajectory &lhs, const Trajectory &rhs);
+
+        /**
+         * @brief 生成原地踏步的轨迹
+         */
+        Trajectory generateZeroLength();
     };
 
 } // namespace Dog8Dof

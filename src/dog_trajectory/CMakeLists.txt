@@ -18,6 +18,8 @@ add_library(${PROJECT_NAME}
   src/base.cpp
   src/standTrajectory.cpp
   src/walkTrajectory.cpp
+  src/jumpTrajectory.cpp
+  src/jumpTrajectoryLegacy.cpp
 )
 target_link_libraries(${PROJECT_NAME}
     Eigen3::Eigen

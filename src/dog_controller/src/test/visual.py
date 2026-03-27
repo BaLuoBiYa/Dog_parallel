@@ -54,7 +54,7 @@ def main():
         raise ValueError("Not enough points to animate")
 
     fig, (ax_path, ax_time) = plt.subplots(1, 2, figsize=(12, 5))
-    fig.suptitle("Trajectory Animation")
+    fig.suptitle(stem +" Animation")
 
     # 左图：X-Z 平面轨迹
     ax_path.set_title("Path in X-Z Plane")
@@ -118,8 +118,10 @@ def main():
         blit=True,
     )
 
+    progress_callback = lambda i, n: print(f'Saving frame {i}/{n}')
+
     writer = PillowWriter(fps=args.fps)
-    ani.save(args.out, writer=writer)
+    ani.save(args.out, writer=writer,progress_callback=progress_callback)
     print(f"Saved animation: {args.out}")
 
 

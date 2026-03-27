@@ -10,21 +10,6 @@ using Dog8Dof::Body;
 using Dog8Dof::StandTrajectory;
 using Dog8Dof::TrajectoryPoint;
 
-// static std::string write_test_yaml() {
-//     const std::string path = "/tmp/stand_test.yaml";
-//     std::ofstream yaml(path, std::ios::out | std::ios::trunc);
-//     yaml << "standKp: 25.0\n";
-//     yaml << "standKd: 1.0\n";
-//     yaml << "transitionKp: 20.0\n";
-//     yaml << "transitionKd: 0.8\n";
-//     yaml << "transitionVelMax: 200.0\n";
-//     yaml << "transitionTime: 1.2\n";
-//     yaml << "stepHeightFactor: 0.2\n";
-//     yaml << "reachThreshold: 1.0\n";
-//     yaml.close();
-//     return path;
-// }
-
 static void write_header(std::ofstream &csv) {
     csv << "t_s," << "pos_x,pos_y,pos_z," << "vel_x,vel_y,vel_z," << "tau_x,tau_y,tau_z,"
         << "kp_front,kp_rear," << "kd_front,kd_rear," << "finished\n";
