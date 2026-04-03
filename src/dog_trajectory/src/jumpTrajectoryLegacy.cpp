@@ -8,41 +8,44 @@
 namespace Dog8Dof {
     constexpr float kEps = 1e-6f;
 
-    JumpTrajectory::JumpTrajectory(const std::string &configPath, rclcpp::Duration period)
+    JumpTrajectoryLegacy::JumpTrajectoryLegacy(const std::string &configPath,
+                                               rclcpp::Duration period)
         : BaseTrajectory(configPath, period) {
         if (!reloadParameters()) {
             throw std::invalid_argument("Could not load jump config YAML");
         }
     }
 
-    float JumpTrajectory::clamp01(float x) {
+    float JumpTrajectoryLegacy::clamp01(float x) {
         return std::clamp(x, 0.0f, 1.0f);
     }
 
-    float JumpTrajectory::smoothInterp(float s) {
+    float JumpTrajectoryLegacy::smoothInterp(float s) {
         return 0.5f * (1.0f - std::cos(M_PI * s));
     }
 
-    float JumpTrajectory::smoothInterpDeriv(float s, float duration) {
+    float JumpTrajectoryLegacy::smoothInterpDeriv(float s, float duration) {
         return 0.5f * std::sin(M_PI * s) * (M_PI / duration);
     }
 
-    float JumpTrajectory::smoothInterpDeriv2(float s, float duration) {
+    float JumpTrajectoryLegacy::smoothInterpDeriv2(float s, float duration) {
         return 0.5f * std::cos(M_PI * s) * (M_PI / duration) * (M_PI / duration);
     }
 
-    float JumpTrajectory::explosiveInterp(float s, float exponent) {
+    float JumpTrajectoryLegacy::explosiveInterp(float s, float exponent) {
         return std::pow(s, exponent);
     }
 
-    float JumpTrajectory::explosiveInterpDeriv(float s, float exponent, float duration) {
+    float
+    JumpTrajectoryLegacy::explosiveInterpDeriv(float s, float exponent, float duration) {
         if (s <= 0.0f) {
             return 0.0f;
         }
         return exponent * std::pow(s, exponent - 1.0f) / duration;
     }
 
-    float JumpTrajectory::explosiveInterpDeriv2(float s, float exponent, float duration) {
+    float
+    JumpTrajectoryLegacy::explosiveInterpDeriv2(float s, float exponent, float duration) {
         if (s <= 0.0f || exponent < 2.0f) {
             return 0.0f;
         }
@@ -50,7 +53,7 @@ namespace Dog8Dof {
                (duration * duration);
     }
 
-    void JumpTrajectory::fillPoint(
+    void JumpTrajectoryLegacy::fillPoint(
         TrajectoryPoint &pt, float x, float z, float vx, float vz, float kp, float kd) {
         pt.pos[0] = x;
         pt.pos[1] = 0.0f;
@@ -67,66 +70,87 @@ namespace Dog8Dof {
         pt.kd[1] = kd;
     }
 
-    bool JumpTrajectory::reloadParameters() {
+    bool JumpTrajectoryLegacy::reloadParameters() {
         configFile_ = YAML::LoadFile(configPath_);
         try {
-            parameters_ = configFile_.as<parameters_t>();
+            for (YAML::const_iterator it = configFile_.begin(); it != configFile_.end();
+                 ++it) {
+                std::string subTreeName = it->first.as<std::string>();
+                YAML::Node subTree = it->second;
+                parameters_t parameter = subTree.as<parameters_t>();
+                configMapping_[subTreeName] = parameter;
+            }
+            // 加载多树的配置文件
         } catch (const YAML::Exception &e) {
             std::cout << "YAML Error: " << e.what() << std::endl;
             return false;
         }
 
-        if (parameters_.baseHeight < Const::LEG_LENGTH_MIN ||
-            parameters_.baseHeight > Const::LEG_LENGTH_MAX) {
-            std::cout << "baseHeight out of range" << std::endl;
-            return false;
-        }
+        for (std::map<std::string, parameters_t>::iterator it = configMapping_.begin();
+             it != configMapping_.end();
+             ++it) {
+            std::string currentConfigName = it->first;
+            parameters_t currentParameter = it->second;
 
-        if (parameters_.crouchDepth < 0.0f || parameters_.pushStroke < 0.0f) {
-            std::cout << "crouchDepth/pushStroke must be non-negative" << std::endl;
-            return false;
-        }
+            if (currentParameter.baseHeight < Const::LEG_LENGTH_MIN ||
+                currentParameter.baseHeight > Const::LEG_LENGTH_MAX) {
+                std::cout << "In config " << currentConfigName
+                          << " baseHeight out of range" << std::endl;
+                return false;
+            }
 
-        if (parameters_.crouchDuration <= 0.0f || parameters_.pushDuration <= 0.0f ||
-            parameters_.flightDuration <= 0.0f || parameters_.landDuration <= 0.0f) {
-            std::cout << "phase duration must be positive" << std::endl;
-            return false;
-        }
+            if (currentParameter.crouchDepth < 0.0f ||
+                currentParameter.pushStroke < 0.0f) {
+                std::cout << "In config " << currentConfigName
+                          << " crouchDepth/pushStroke must be non-negative" << std::endl;
+                return false;
+            }
 
-        if (parameters_.pushVelocityGain <= 0.0f) {
-            std::cout << "pushVelocityGain must be positive" << std::endl;
-            return false;
-        }
+            if (currentParameter.crouchDuration <= 0.0f ||
+                currentParameter.pushDuration <= 0.0f ||
+                currentParameter.flightDuration <= 0.0f ||
+                currentParameter.landDuration <= 0.0f) {
+                std::cout << "In config " << currentConfigName
+                          << " phase duration must be positive" << std::endl;
+                return false;
+            }
 
-        if (parameters_.pushXMode != "smooth" && parameters_.pushXMode != "explosive") {
-            std::cout << "pushXMode must be smooth or explosive" << std::endl;
-            return false;
+            if (currentParameter.pushVelocityGain <= 0.0f) {
+                std::cout << "In config " << currentConfigName
+                          << " pushVelocityGain must be positive" << std::endl;
+                return false;
+            }
+
+            if (currentParameter.pushXMode != "smooth" &&
+                currentParameter.pushXMode != "explosive") {
+                std::cout << "In config " << currentConfigName
+                          << "pushXMode must be smooth or explosive" << std::endl;
+                return false;
+            }
+
+            std::cout << "Successfully loaded jump config of " << currentConfigName
+                      << std::endl;
         }
 
         return true;
     }
 
-    bool JumpTrajectory::setTarget(float launchSpeed, float flyTime) {
-        if (std::fabs(launchSpeed) <= kEps) {
-            std::cout << "launchSpeed magnitude must be positive" << std::endl;
+    bool JumpTrajectoryLegacy::setTarget(std::string configName) {
+        try {
+            parameters_ = configMapping_.at(configName);
+        } catch (const std::out_of_range &e) {
+            std::cout << e.what() << std::endl;
             return false;
         }
-        if (flyTime <= 0.0f) {
-            std::cout << "flyTime must be positive" << std::endl;
-            return false;
-        }
-
-        targetLaunchSpeed_ = launchSpeed;
-        targetFlyTime_ = flyTime;
         return true;
     }
 
-    void JumpTrajectory::samplePhase(Phase phase,
-                                     float timeInPhase,
-                                     float &targetX,
-                                     float &targetZ,
-                                     float &targetVx,
-                                     float &targetVz) const {
+    void JumpTrajectoryLegacy::samplePhase(Phase phase,
+                                           float timeInPhase,
+                                           float &targetX,
+                                           float &targetZ,
+                                           float &targetVx,
+                                           float &targetVz) const {
         const float crouchZ = parameters_.baseHeight - parameters_.crouchDepth;
         const float takeoffZ = crouchZ + parameters_.pushStroke;
         const float takeoffX = -parameters_.pushBackwardDist;
@@ -216,8 +240,9 @@ namespace Dog8Dof {
         targetZ = std::clamp(targetZ, Const::LEG_LENGTH_MIN, Const::LEG_LENGTH_MAX);
     }
 
-    void
-    JumpTrajectory::appendPhase(Phase phase, float duration, Trajectory &traj) const {
+    void JumpTrajectoryLegacy::appendPhase(Phase phase,
+                                           float duration,
+                                           Trajectory &traj) const {
         const size_t steps = stepsFromDurationNs(static_cast<size_t>(duration * 1e9f));
         if (steps == 0) {
             return;
@@ -263,10 +288,10 @@ namespace Dog8Dof {
         }
     }
 
-    bool JumpTrajectory::generate(const Body &currentTip) {
-        if (std::fabs(targetLaunchSpeed_) <= kEps && targetFlyTime_ <= kEps) {
-            return false;
-        }
+    bool JumpTrajectoryLegacy::generate(const Body &currentTip) {
+        // if (std::fabs(targetLaunchSpeed_) <= kEps && targetFlyTime_ <= kEps) {
+        //     return false;
+        // }
 
         finished_ = false;
         trajectory_.progress = 0;
@@ -276,14 +301,14 @@ namespace Dog8Dof {
         initialFootZ_ =
             std::clamp(currentTip.pos[2], Const::LEG_LENGTH_MIN, Const::LEG_LENGTH_MAX);
 
-        parameters_.flightDuration =
-            (targetFlyTime_ > kEps) ? targetFlyTime_ : parameters_.flightDuration;
+        // parameters_.flightDuration =
+        //     (targetFlyTime_ > kEps) ? targetFlyTime_ : parameters_.flightDuration;
 
-        const float speedScale =
-            std::clamp(std::fabs(targetLaunchSpeed_) / 5000.0f, 0.5f, 2.0f);
-        const float oldPushGain = parameters_.pushVelocityGain;
-        const_cast<parameters_t &>(parameters_).pushVelocityGain =
-            oldPushGain * speedScale;
+        // const float speedScale =
+        //     std::clamp(std::fabs(targetLaunchSpeed_) / 5000.0f, 0.5f, 2.0f);
+        // const float oldPushGain = parameters_.pushVelocityGain;
+        // const_cast<parameters_t &>(parameters_).pushVelocityGain =
+        //     oldPushGain * speedScale;
 
         Trajectory traj(0);
         appendPhase(Phase::Crouching, parameters_.crouchDuration, traj);
@@ -291,13 +316,13 @@ namespace Dog8Dof {
         appendPhase(Phase::InFlight, parameters_.flightDuration, traj);
         appendPhase(Phase::Landing, parameters_.landDuration, traj);
 
-        const_cast<parameters_t &>(parameters_).pushVelocityGain = oldPushGain;
+        // const_cast<parameters_t &>(parameters_).pushVelocityGain = oldPushGain;
 
         trajectory_ = std::move(traj);
         return !trajectory_.points.empty();
     }
 
-    bool JumpTrajectory::start(const rclcpp::Time &startTime) {
+    bool JumpTrajectoryLegacy::start(const rclcpp::Time &startTime) {
         startTimeNanoSec_ = static_cast<size_t>(startTime.nanoseconds());
         trajectory_.progress = 0;
 
@@ -313,7 +338,7 @@ namespace Dog8Dof {
         return true;
     }
 
-    TrajectoryPoint JumpTrajectory::get(const rclcpp::Time &currentTime) {
+    TrajectoryPoint JumpTrajectoryLegacy::get(const rclcpp::Time &currentTime) {
         if (finished_) {
             return target_;
         }
@@ -349,8 +374,8 @@ namespace Dog8Dof {
 } // namespace Dog8Dof
 
 namespace YAML {
-    template <> struct convert<Dog8Dof::JumpTrajectory::parameters_t> {
-        static Node encode(const Dog8Dof::JumpTrajectory::parameters_t &rhs) {
+    template <> struct convert<Dog8Dof::JumpTrajectoryLegacy::parameters_t> {
+        static Node encode(const Dog8Dof::JumpTrajectoryLegacy::parameters_t &rhs) {
             Node node;
             node["transitionKp"] = rhs.transitionKp;
             node["transitionKd"] = rhs.transitionKd;
@@ -387,7 +412,8 @@ namespace YAML {
             return node;
         }
 
-        static bool decode(const Node &node, Dog8Dof::JumpTrajectory::parameters_t &rhs) {
+        static bool decode(const Node &node,
+                           Dog8Dof::JumpTrajectoryLegacy::parameters_t &rhs) {
             auto getFloat = [&](std::initializer_list<const char *> keys,
                                 float fallback) {
                 for (const char *k : keys) {

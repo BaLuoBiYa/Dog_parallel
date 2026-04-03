@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
     current_tip.pos[0] = 0.0f;
     current_tip.pos[2] = 180.0f;
 
-    const float launch_speed = 5000.0f;
+    const float launch_speed = 500.0f;
     const float fly_time = 0.5f;
 
     if (!traj.setTarget(launch_speed, fly_time)) {

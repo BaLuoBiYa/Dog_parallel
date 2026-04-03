@@ -363,8 +363,24 @@ namespace Dog8Dof {
                      vxGain,
                      vzGain);
 
+            const float rx = com.x - landingFootX_;
+            const float rz = com.z - landingFootZ_;
+            const float legLen = std::sqrt(std::max(rx * rx + rz * rz, kEps));
+            const float legDot = (rx * com.vx + rz * com.vz) / legLen;
+
+            // 原有速度停止条件
+            const bool slowEnough = (speedNorm(com) <= parameters_.slipStopSpeed);
+
+            // 新增：腿已回到/超过静长且在继续伸长，说明已失去有效压缩接触
+            const bool lostCompression =
+                (legLen >= parameters_.slipRestLength && legDot > 0.0f);
+
+            // 新增：数值保护，防止继续深度下探
+            const bool overDrop =
+                (com.z > landingFootZ_ + parameters_.slipRestLength * 1.2f);
+
             if (i + 1 >= std::max<size_t>(2, minSteps) &&
-                speedNorm(com) <= parameters_.slipStopSpeed) {
+                (slowEnough || lostCompression || overDrop)) {
                 break;
             }
         }

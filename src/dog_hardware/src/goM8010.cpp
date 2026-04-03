@@ -24,7 +24,8 @@ namespace Dog8Dof {
         }
     }
 
-    bool goM8010Interface::setHybrid(float torque, float pos, float vel, float kp, float kd) {
+    bool
+    goM8010Interface::setHybrid(float torque, float pos, float vel, float kp, float kd) {
         command_.tau = torque / queryGearRatio(MotorType::GO_M8010_6);
         command_.q = pos * queryGearRatio(MotorType::GO_M8010_6);
         command_.dq = vel * queryGearRatio(MotorType::GO_M8010_6);

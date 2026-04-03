@@ -12,10 +12,10 @@ pushTimeScale: 0.5
 
 flyHeightRatio: 0.3
 
-slipMass: 6.0
+slipMass: 16.0
 slipRestLength: 230.0
 slipStiffness: 180.0
-slipDamping: 2.8
+slipDamping: 20.0
 slipTouchdownAngleDeg: 18.0
 slipStanceMaxTime: 0.30
 slipStopSpeed: 120.0
