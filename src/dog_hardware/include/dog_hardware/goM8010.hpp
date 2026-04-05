@@ -52,9 +52,9 @@ namespace Dog8Dof {
 
         /**
          * @brief 设定零位偏移
-         * @note 设定当前位置为电机零位
+         * @param offset 零位偏移
          */
-        void setZero();
+        void setZero(float offset);
 
         /**
          * @brief 设置电机为无摩擦模式

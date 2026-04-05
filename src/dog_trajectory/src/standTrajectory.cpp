@@ -26,9 +26,9 @@ namespace Dog8Dof {
         return true;
     }
 
-    bool StandTrajectory::setTarget(Body &standTip) {
-        standTipPos_[0] = standTip.pos[0];
-        standTipPos_[1] = standTip.pos[2];
+    bool StandTrajectory::setTarget(float tipX, float tipZ) {
+        standTipPos_[0] = tipX;
+        standTipPos_[1] = tipZ;
         return true;
     }
 

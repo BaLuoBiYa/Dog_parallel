@@ -20,7 +20,8 @@ namespace Dog8Dof {
         std::vector<size_t> time;
         size_t progress;
 
-        Trajectory() {}
+        Trajectory() {
+        }
         Trajectory(size_t steps) {
             points.resize(steps);
             time.resize(steps);
@@ -29,7 +30,8 @@ namespace Dog8Dof {
 
         Trajectory operator+(const Trajectory &other) const {
             Trajectory result = *this;
-            result.points.insert(result.points.end(), other.points.begin(), other.points.end());
+            result.points.insert(
+                result.points.end(), other.points.begin(), other.points.end());
             result.time.insert(result.time.end(), other.time.begin(), other.time.end());
             result.progress = 0;
             return result;
@@ -45,12 +47,31 @@ namespace Dog8Dof {
     };
 
     struct Body {
-        std::string parent;               // 父坐标系
-        Eigen::Vector3<float> pos;        // xyz格式机体位置
-        Eigen::Matrix3<float> rot;        // 旋转矩阵
-        Eigen::Vector3<float> linerVel;   // 线速度
-        Eigen::Vector3<float> angularVel; // 角速度
-        Eigen::Vector3<float> tau;        // 力
+        std::string parent;         // 父坐标系
+        Eigen::Vector3f pos;        // xyz格式机体位置
+        Eigen::Matrix3f rot;        // 旋转矩阵
+        Eigen::Vector3f linerVel;   // 线速度
+        Eigen::Vector3f angularVel; // 角速度
+        Eigen::Vector3f tau;        // 力
+
+        Body(std::string parent = "base")
+            : parent(parent), pos(Eigen::Vector3f::Zero()), rot(Eigen::Matrix3f::Zero()),
+              linerVel(Eigen::Vector3f::Zero()), angularVel(Eigen::Vector3f::Zero()),
+              tau(Eigen::Vector3f::Zero()) {
+        }
+    };
+
+    enum Gait {
+        Stand,
+        Walk,
+        Jump,
+    };
+
+    struct TrajectoryCommand {
+        std::string legName;
+        Gait gait;
+        float par1;
+        float par2;
     };
 
     // 统一状态枚举定义

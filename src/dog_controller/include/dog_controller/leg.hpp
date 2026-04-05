@@ -41,9 +41,9 @@ namespace Dog8Dof {
          * @param tau 前后电机力矩。
          * @return 是否成功更新模型状态
          */
-        bool updateMotor(const Eigen::Vector2<float> &pos,
-                         const Eigen::Vector2<float> &vel,
-                         const Eigen::Vector2<float> &tau);
+        bool updateMotor(const Eigen::Vector2f &pos,
+                         const Eigen::Vector2f &vel,
+                         const Eigen::Vector2f &tau);
 
         /**
          * @brief 获得电机的期望状态
@@ -62,13 +62,13 @@ namespace Dog8Dof {
          * @brief 设置电机kp
          * @param target 目标电机
          */
-        void updateKp(MotorPlacement target, float kp);
+        bool updateKp(MotorPlacement target, float kp);
 
         /**
          * @brief 设置电机kd
          * @param target 目标电机
          */
-        void updateKd(MotorPlacement target, float kd);
+        bool updateKd(MotorPlacement target, float kd);
 
       private:
         const float upperLength_, lowerLength_, tipLength_;

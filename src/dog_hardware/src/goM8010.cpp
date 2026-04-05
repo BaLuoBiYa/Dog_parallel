@@ -27,7 +27,7 @@ namespace Dog8Dof {
     bool
     goM8010Interface::setHybrid(float torque, float pos, float vel, float kp, float kd) {
         command_.tau = torque / queryGearRatio(MotorType::GO_M8010_6);
-        command_.q = pos * queryGearRatio(MotorType::GO_M8010_6);
+        command_.q = (pos + posOffset_) * queryGearRatio(MotorType::GO_M8010_6);
         command_.dq = vel * queryGearRatio(MotorType::GO_M8010_6);
         command_.kp = kp;
         command_.kd = kd;
@@ -36,7 +36,7 @@ namespace Dog8Dof {
 
     bool goM8010Interface::setPos(float target, float kp, float kd) {
         command_.tau = 0.0;
-        command_.q = target * queryGearRatio(MotorType::GO_M8010_6);
+        command_.q = (target + posOffset_) * queryGearRatio(MotorType::GO_M8010_6);
         command_.dq = 0.0;
         command_.kp = kp;
         command_.kd = kd;
@@ -61,15 +61,8 @@ namespace Dog8Dof {
         return port_->sendRecv(&command_, &state_);
     }
 
-    void goM8010Interface::setZero() {
-        float buffer = 0;
-
-        for (size_t i = 0; i < 100; i++) {
-            buffer = buffer + state_.q;
-            port_->sendRecv(&command_, &state_);
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        }
-        posOffset_ = buffer / 100.0;
+    void goM8010Interface::setZero(float offset) {
+        posOffset_ = offset;
     }
 
     bool goM8010Interface::zeroTor() {
@@ -96,7 +89,7 @@ namespace Dog8Dof {
     }
 
     float goM8010Interface::getPos() {
-        return (state_.q - posOffset_) / queryGearRatio(MotorType::GO_M8010_6);
+        return state_.q / queryGearRatio(MotorType::GO_M8010_6) - posOffset_;
     }
 
     float goM8010Interface::getVel() {

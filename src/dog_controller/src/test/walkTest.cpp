@@ -41,12 +41,11 @@ int main(int argc, char **argv) {
     current_tip.pos[0] = -180.0f;
     current_tip.pos[2] = 20.0f;
 
-    const float step_length = 0.0f;
+    const float step_length = 200.0f;
     const float step_height = 40.0f;
     const float base_height = 160.0f;
-    const auto order = WalkTrajectory::swingFirst;
 
-    if (!traj.setTarget(step_length, step_height, base_height, order)) {
+    if (!traj.setTarget(step_length, step_height, base_height)) {
         std::cerr << "setTarget failed\n";
         return 1;
     }

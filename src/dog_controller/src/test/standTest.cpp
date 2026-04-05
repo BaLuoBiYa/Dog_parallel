@@ -49,7 +49,7 @@ int main(int argc, char **argv) {
     stand_target.pos[0] = 0.0f;
     stand_target.pos[2] = 180.0f;
 
-    if (!traj.setTarget(stand_target)) {
+    if (!traj.setTarget(0.0f, 180.0f)) {
         std::cerr << "setTarget failed\n";
         return 1;
     }

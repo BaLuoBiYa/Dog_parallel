@@ -2,8 +2,11 @@
 #include <cmath>
 
 namespace Dog8Dof {
-    Leg2Dof::Leg2Dof(
-        float upperLength, float lowerLength, float tipLength, float frontInitPos, float rearInitPos)
+    Leg2Dof::Leg2Dof(float upperLength,
+                     float lowerLength,
+                     float tipLength,
+                     float frontInitPos,
+                     float rearInitPos)
         : upperLength_(upperLength), lowerLength_(lowerLength), tipLength_(tipLength),
           upperSQ_(upperLength * upperLength), lowerSQ_(lowerLength * lowerLength) {
         currentMotors_[FRONT] = Motor{frontInitPos, 0.0, 0.0, 0.0, 0.0};
@@ -12,18 +15,8 @@ namespace Dog8Dof {
         targetMotors_[FRONT] = Motor{frontInitPos, 0.0, 0.0, 0.0, 0.0};
         targetMotors_[REAR] = Motor{rearInitPos, 0.0, 0.0, 0.0, 0.0};
 
-        currentTip_ = Body{"Mount",
-                           Eigen::Vector3<float>::Zero(),
-                           Eigen::Matrix3<float>::Zero(),
-                           Eigen::Vector3<float>::Zero(),
-                           Eigen::Vector3<float>::Zero(),
-                           Eigen::Vector3<float>::Zero()};
-        targetTip_ = Body{"Mount",
-                          Eigen::Vector3<float>::Zero(),
-                          Eigen::Matrix3<float>::Zero(),
-                          Eigen::Vector3<float>::Zero(),
-                          Eigen::Vector3<float>::Zero(),
-                          Eigen::Vector3<float>::Zero()};
+        currentTip_ = Body("Mount");
+        targetTip_ = Body("Mount");
 
         // updateMotor(frontInitPos, rearInitPos);
     }
@@ -47,9 +40,9 @@ namespace Dog8Dof {
         return true;
     }
 
-    bool Leg2Dof::updateMotor(const Eigen::Vector2<float> &pos,
-                              const Eigen::Vector2<float> &vel,
-                              const Eigen::Vector2<float> &tau) {
+    bool Leg2Dof::updateMotor(const Eigen::Vector2f &pos,
+                              const Eigen::Vector2f &vel,
+                              const Eigen::Vector2f &tau) {
         currentMotors_[FRONT].pos = pos[0];
         currentMotors_[REAR].pos = pos[1];
 
@@ -72,12 +65,20 @@ namespace Dog8Dof {
         return true;
     }
 
-    void Leg2Dof::updateKp(MotorPlacement target, float kp) {
+    bool Leg2Dof::updateKp(MotorPlacement target, float kp) {
+        if (kp > 100.0f || kp < 0.0f) {
+            return false;
+        }
         targetMotors_[target].kp = kp;
+        return true;
     }
 
-    void Leg2Dof::updateKd(MotorPlacement target, float kd) {
+    bool Leg2Dof::updateKd(MotorPlacement target, float kd) {
+        if (kd > 100.0f || kd < 0.0f) {
+            return false;
+        }
         targetMotors_[target].kd = kd;
+        return true;
     }
 
     Motor Leg2Dof::getMotorTarget(MotorPlacement target) const {
@@ -112,7 +113,7 @@ namespace Dog8Dof {
         const float ratio = numerator / denominator;
 
         const float angle_gamma = std::atan2(posX, posZ); // 足端位置向量与Z轴的夹角
-        const float same_part = std::acos(ratio);         // 余弦定理计算出的角度
+        const float same_part = std::acos(ratio); // 余弦定理计算出的角度
 
         targetMotors_[FRONT].pos = same_part + angle_gamma;
         targetMotors_[REAR].pos = same_part - angle_gamma;
@@ -121,9 +122,9 @@ namespace Dog8Dof {
     }
 
     bool Leg2Dof::tipVelToMotor(float velX, float velZ) {
-        // This function calculates the joint velocities required to produce a given linear
-        // velocity at the foot. It uses the inverse of the Jacobian matrix: q_dot = J^-1 * V
-        // where q_dot = [vel_front, vel_rear]^T, V = [vx, vz]^T.
+        // This function calculates the joint velocities required to produce a given
+        // linear velocity at the foot. It uses the inverse of the Jacobian matrix: q_dot
+        // = J^-1 * V where q_dot = [vel_front, vel_rear]^T, V = [vx, vz]^T.
 
         // 1. Convert joint angles to intermediate coordinates (theta, gamma)
         const float q_f = M_PI_2 - currentMotors_[FRONT].pos;
@@ -188,11 +189,12 @@ namespace Dog8Dof {
     }
 
     bool Leg2Dof::tipForceToMotor(float fX, float fZ) {
-        // This function calculates the motor torques required to produce a given force vector
-        // (Fx, Fz) at the foot. It uses the transpose of the Jacobian matrix: τ = J^T * F where
-        // τ = [tau_front, tau_rear]^T, F = [leg_tau_x, leg_tau_z]^T. The formula is: tau_front
-        // = (∂x/∂front_angle) * leg_tau_x + (∂z/∂front_angle) * leg_tau_z tau_rear  =
-        // (∂x/∂rear_angle) * leg_tau_x + (∂z/∂rear_angle) * leg_tau_z
+        // This function calculates the motor torques required to produce a given force
+        // vector (Fx, Fz) at the foot. It uses the transpose of the Jacobian matrix: τ =
+        // J^T * F where τ = [tau_front, tau_rear]^T, F = [leg_tau_x, leg_tau_z]^T. The
+        // formula is: tau_front = (∂x/∂front_angle) * leg_tau_x + (∂z/∂front_angle) *
+        // leg_tau_z tau_rear  = (∂x/∂rear_angle) * leg_tau_x + (∂z/∂rear_angle) *
+        // leg_tau_z
 
         // Convert lengths from mm to m for correct unit conversion (N -> Nm)
         const float L1 = upperLength_ / 1000.0f;
@@ -265,14 +267,17 @@ namespace Dog8Dof {
         const float adjusted_front_angle = M_PI_2 - posFront;
         const float adjusted_rear_angle = M_PI_2 - posRear;
 
-        const float angle_diff = (adjusted_front_angle - adjusted_rear_angle) * 0.5f; // 角度差的一半 (γ)
-        const float angle_sum = (adjusted_front_angle + adjusted_rear_angle) * 0.5f; // 角度和的一半 (θ)
+        const float angle_diff =
+            (adjusted_front_angle - adjusted_rear_angle) * 0.5f; // 角度差的一半 (γ)
+        const float angle_sum =
+            (adjusted_front_angle + adjusted_rear_angle) * 0.5f; // 角度和的一半 (θ)
 
         const float sin_theta = std::sin(angle_sum);
         const float cos_theta = std::cos(angle_sum);
 
         const float l1_sin = upperLength_ * sin_theta;
-        const float l2_proj_sq = lowerSQ_ - l1_sin * l1_sin; // 计算L2在某个方向上的投影平方
+        const float l2_proj_sq =
+            lowerSQ_ - l1_sin * l1_sin; // 计算L2在某个方向上的投影平方
 
         // 防止负数开方
         if (l2_proj_sq < 0) {
@@ -288,9 +293,9 @@ namespace Dog8Dof {
     }
 
     bool Leg2Dof::motorVelToTip(float velFront, float velRear) {
-        // This function calculates the linear velocity of the foot given the joint velocities.
-        // It uses the Jacobian matrix: V = J * q_dot
-        // where V = [vx, vz]^T, q_dot = [vel_front, vel_rear]^T.
+        // This function calculates the linear velocity of the foot given the joint
+        // velocities. It uses the Jacobian matrix: V = J * q_dot where V = [vx, vz]^T,
+        // q_dot = [vel_front, vel_rear]^T.
 
         // 1. Convert joint angles to intermediate coordinates (theta, gamma)
         const float q_f = M_PI_2 - currentMotors_[FRONT].pos;
@@ -337,16 +342,19 @@ namespace Dog8Dof {
         const float theta_dot = (q_f_dot + q_r_dot) / 2.0f;
         const float gamma_dot = (q_f_dot - q_r_dot) / 2.0f;
 
-        // 5. Calculate the final linear velocities using V = J_theta_gamma * [theta_dot, gamma_dot]^T
-        currentTip_.linerVel[0] = J11_theta_gamma * theta_dot + J12_theta_gamma * gamma_dot;
-        currentTip_.linerVel[2] = J21_theta_gamma * theta_dot + J22_theta_gamma * gamma_dot;
+        // 5. Calculate the final linear velocities using V = J_theta_gamma * [theta_dot,
+        // gamma_dot]^T
+        currentTip_.linerVel[0] =
+            J11_theta_gamma * theta_dot + J12_theta_gamma * gamma_dot;
+        currentTip_.linerVel[2] =
+            J21_theta_gamma * theta_dot + J22_theta_gamma * gamma_dot;
         return true;
     }
 
     bool Leg2Dof::motorTauToTip(float tau_front, float tau_rear) {
-        // This function calculates the foot force vector (Fx, Fz) produced by given motor torques.
-        // It uses the relationship F = (J^T)^-1 * τ, where τ = J^T * F.
-        // τ = [tau_front, tau_rear]^T, F = [leg_tau_x, leg_tau_z]^T.
+        // This function calculates the foot force vector (Fx, Fz) produced by given motor
+        // torques. It uses the relationship F = (J^T)^-1 * τ, where τ = J^T * F. τ =
+        // [tau_front, tau_rear]^T, F = [leg_tau_x, leg_tau_z]^T.
 
         // Convert lengths from mm to m for correct unit conversion (Nm -> N)
         const float L1 = upperLength_ / 1000.0f;
@@ -391,8 +399,8 @@ namespace Dog8Dof {
         const float dz_dtheta = dR_dtheta * cos_gamma;
         const float dz_dgamma = -R * sin_gamma;
 
-        // 5. Calculate partial derivatives with respect to joint angles (components of Jacobian J)
-        // Note: ∂/∂front_angle = -∂/∂q_f, ∂/∂rear_angle = -∂/∂q_r
+        // 5. Calculate partial derivatives with respect to joint angles (components of
+        // Jacobian J) Note: ∂/∂front_angle = -∂/∂q_f, ∂/∂rear_angle = -∂/∂q_r
         const float d_dfront = -1.0f;
         const float d_drear = -1.0f;
 

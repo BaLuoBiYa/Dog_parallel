@@ -11,9 +11,10 @@ namespace Dog8Dof {
 
         /**
          * @brief 设置站立步态的目标
-         * @param tandTipPos 站立足尖位置
+         * @param tipX 站立足尖X坐标
+         * @param tipZ 站立足尖Z坐标
          */
-        bool setTarget(Body &standTip);
+        bool setTarget(float tipX, float tipZ);
         bool generate(const Body &currentTip) override;
         bool start(const rclcpp::Time &startTime) override;
         TrajectoryPoint get(const rclcpp::Time &currentTime) override;

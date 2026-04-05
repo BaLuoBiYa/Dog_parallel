@@ -5,97 +5,185 @@
 #include <hardware_interface/types/hardware_interface_return_values.hpp>
 #include <memory>
 #include <rclcpp/logging.hpp>
+#include <yaml-cpp/yaml.h>
 
 namespace Dog8Dof {
-    hardware_interface::CallbackReturn
-    BaseInterface::on_init(const hardware_interface::HardwareComponentInterfaceParams &params) {
-        if (hardware_interface::SystemInterface::on_init(params) != hardware_interface::CallbackReturn::SUCCESS) {
+
+    hardware_interface::CallbackReturn BaseInterface::on_init(
+        const hardware_interface::HardwareComponentInterfaceParams &params) {
+        if (hardware_interface::SystemInterface::on_init(params) !=
+            hardware_interface::CallbackReturn::SUCCESS) {
             return hardware_interface::CallbackReturn::ERROR;
         }
 
-        uint8_t jointID;
-        for (size_t i = 0; i < 8; i++) {
-            jointID = std::stoi(info_.hardware_parameters[jointNames_[i] + "_ID"]);
-            jointMapping_.insert(std::make_pair(jointNames_[i], jointID));
-        }
-        // 建立关节名称-电机ID映射
+        try {
+            const YAML::Node root = YAML::LoadFile(configPath_);
 
-        portName_ = info_.hardware_parameters["RS485_Port"];
+            portName_ = root["RS485_Port"].as<std::string>();
+
+            for (size_t i = 0; i < 8; ++i) {
+                const YAML::Node joint_node = root[jointNames_[i]];
+                if (!joint_node) {
+                    RCLCPP_ERROR(this->get_logger(),
+                                 "Missing joint node: %s",
+                                 jointNames_[i].c_str());
+                    return hardware_interface::CallbackReturn::ERROR;
+                }
+
+                const int id = joint_node["id"].as<int>();
+                const float offset = joint_node["offset"].as<float>();
+
+                jointMapping_[jointNames_[i]] = static_cast<uint8_t>(id);
+                zeroOffsetByIndex_[i] = offset;
+            }
+            // 从YAML文件读取参数
+
+        } catch (const std::exception &e) {
+            RCLCPP_ERROR(this->get_logger(), "on_init exception: %s", e.what());
+            return hardware_interface::CallbackReturn::ERROR;
+        }
 
         return hardware_interface::CallbackReturn::SUCCESS;
     }
 
-    hardware_interface::CallbackReturn BaseInterface::on_configure(const rclcpp_lifecycle::State &pre) {
+    hardware_interface::CallbackReturn
+    BaseInterface::on_configure(const rclcpp_lifecycle::State &pre) {
         (void)pre;
+
+        port_.reset();
+        for (auto &m : motor_) {
+            m.reset();
+        }
+        // 清空智能指针
+
         try {
             port_ = std::make_shared<SerialPort>(portName_);
         } catch (const std::exception &e) {
-            RCLCPP_ERROR(this->get_logger(), "RS485 Connection Failed: %s", e.what());
+            RCLCPP_ERROR(this->get_logger(), "RS485 connection failed: %s", e.what());
             return hardware_interface::CallbackReturn::ERROR;
         }
-        // 注册串口
+        // 创建串口通信指针
 
-        for (size_t i = 0; i < 8; i++) {
+        for (size_t i = 0; i < 8; ++i) {
             try {
-                motor_[i] = std::make_unique<goM8010Interface>(jointMapping_[jointNames_[i]], port_);
+                motor_[i] = std::make_unique<goM8010Interface>(
+                    jointMapping_[jointNames_[i]], port_);
+                motor_[i]->setZero(zeroOffsetByIndex_[i]);
             } catch (const std::exception &e) {
-                RCLCPP_ERROR(this->get_logger(), "Motor Connection Failed: %s", e.what());
+                RCLCPP_ERROR(this->get_logger(),
+                             "Motor %s connection failed: %s",
+                             jointNames_[i].c_str(),
+                             e.what());
                 return hardware_interface::CallbackReturn::ERROR;
             }
         }
-        // 注册电机
+        // 创建电机指针
 
         return hardware_interface::CallbackReturn::SUCCESS;
     }
 
-    hardware_interface::CallbackReturn BaseInterface::on_activate(const rclcpp_lifecycle::State &pre) {
+    hardware_interface::CallbackReturn
+    BaseInterface::on_activate(const rclcpp_lifecycle::State &pre) {
         (void)pre;
-        for (size_t i = 0; i < 8; i++) {
-            motor_[i]->zeroTor();
-            motor_[i]->setZero();
-            // 设置当前位置为零位
+
+        if (!cacheInterfaceHandles()) {
+            return hardware_interface::CallbackReturn::ERROR;
+        }
+        // 缓存命令/状态接口
+
+        return hardware_interface::CallbackReturn::SUCCESS;
+    }
+
+    hardware_interface::CallbackReturn
+    BaseInterface::on_deactivate(const rclcpp_lifecycle::State &pre) {
+        (void)pre;
+        for (size_t i = 0; i < 8; ++i) {
+            if (motor_[i]) {
+                motor_[i]->zeroTor();
+            }
         }
         return hardware_interface::CallbackReturn::SUCCESS;
     }
 
-    hardware_interface::CallbackReturn BaseInterface::on_error(const rclcpp_lifecycle::State &previous_state) {
+    hardware_interface::CallbackReturn
+    BaseInterface::on_error(const rclcpp_lifecycle::State &previous_state) {
         (void)previous_state;
-        motor_[0]->emergencyStop();
+        for (size_t i = 0; i < 8; ++i) {
+            if (motor_[i]) {
+                motor_[i]->emergencyStop();
+            }
+        }
         return hardware_interface::CallbackReturn::SUCCESS;
     }
 
-    hardware_interface::return_type BaseInterface::read(const rclcpp::Time &time, const rclcpp::Duration &period) {
+    hardware_interface::return_type BaseInterface::read(const rclcpp::Time &time,
+                                                        const rclcpp::Duration &period) {
         (void)time;
         (void)period;
-        for (size_t i = 0; i < 8; i++) {
-            set_state<float>(jointNames_[i] + "/position", motor_[i]->getPos());
-            set_state<float>(jointNames_[i] + "/velocity", motor_[i]->getVel());
-            set_state<float>(jointNames_[i] + "/effort", motor_[i]->getTor());
+
+        for (size_t i = 0; i < 8; ++i) {
+            if (!set_state<float>(stPos_[i], motor_[i]->getPos(), false) ||
+                !set_state<float>(stVel_[i], motor_[i]->getVel(), false) ||
+                !set_state<float>(stTau_[i], motor_[i]->getTor(), false)) {
+                RCLCPP_ERROR_STREAM(get_logger(),
+                                    "Set state failed on " << jointNames_[i]);
+                return hardware_interface::return_type::ERROR;
+            }
+
             if (motor_[i]->getError() != "OK") {
-                RCLCPP_ERROR_STREAM(get_logger(), "Motor" << jointNames_[i] << motor_[i]->getError());
+                RCLCPP_ERROR_STREAM(
+                    get_logger(),
+                    "Motor " << jointNames_[i] << " " << motor_[i]->getError());
                 return hardware_interface::return_type::ERROR;
             }
         }
         return hardware_interface::return_type::OK;
     }
 
-    hardware_interface::return_type BaseInterface::write(const rclcpp::Time &time, const rclcpp::Duration &period) {
+    hardware_interface::return_type BaseInterface::write(const rclcpp::Time &time,
+                                                         const rclcpp::Duration &period) {
         (void)time;
         (void)period;
 
-        float pos, vel, tor, kp, kd;
-        for (size_t i = 0; i < 8; i++) {
-            pos = get_command<float>(jointNames_[i] + "/position");
-            vel = get_command<float>(jointNames_[i] + "/velocity");
-            tor = get_command<float>(jointNames_[i] + "/effort");
-            kp = get_command<float>(jointNames_[i] + "/kp");
-            kd = get_command<float>(jointNames_[i] + "/kd");
+        float pos = 0.0f, vel = 0.0f, tor = 0.0f, kp = 0.0f, kd = 0.0f;
+        for (size_t i = 0; i < 8; ++i) {
+            if (!get_command<float>(cmdPos_[i], pos, false) ||
+                !get_command<float>(cmdVel_[i], vel, false) ||
+                !get_command<float>(cmdTau_[i], tor, false) ||
+                !get_command<float>(cmdKp_[i], kp, false) ||
+                !get_command<float>(cmdKd_[i], kd, false)) {
+                RCLCPP_ERROR_STREAM(get_logger(),
+                                    "Get command failed on " << jointNames_[i]);
+                return hardware_interface::return_type::ERROR;
+            }
+
             if (!motor_[i]->setHybrid(tor, pos, vel, kp, kd)) {
                 RCLCPP_ERROR_STREAM(get_logger(), "Time out on " << jointNames_[i]);
                 return hardware_interface::return_type::ERROR;
             }
         }
         return hardware_interface::return_type::OK;
+    }
+
+    bool BaseInterface::cacheInterfaceHandles() {
+        try {
+            for (size_t i = 0; i < 8; ++i) {
+                stPos_[i] = get_state_interface_handle(jointNames_[i] + "/position");
+                stVel_[i] = get_state_interface_handle(jointNames_[i] + "/velocity");
+                stTau_[i] = get_state_interface_handle(jointNames_[i] + "/effort");
+
+                cmdPos_[i] = get_command_interface_handle(jointNames_[i] + "/position");
+                cmdVel_[i] = get_command_interface_handle(jointNames_[i] + "/velocity");
+                cmdTau_[i] = get_command_interface_handle(jointNames_[i] + "/effort");
+                cmdKp_[i] = get_command_interface_handle(jointNames_[i] + "/kp");
+                cmdKd_[i] = get_command_interface_handle(jointNames_[i] + "/kd");
+            }
+        } catch (const std::exception &e) {
+            RCLCPP_ERROR(
+                this->get_logger(), "Cache interface handles failed: %s", e.what());
+            return false;
+        }
+        return true;
     }
 
 } // namespace Dog8Dof

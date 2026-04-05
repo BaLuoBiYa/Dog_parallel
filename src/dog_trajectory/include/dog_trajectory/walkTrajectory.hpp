@@ -5,16 +5,14 @@ namespace Dog8Dof {
     class WalkTrajectory : public BaseTrajectory {
       public:
         explicit WalkTrajectory(const std::string &configPath, rclcpp::Duration period);
-        enum sequence { swingFirst, stanceFirst };
 
         /**
          * @brief 设置步行步态的目标
          * @param stepLength 步长
          * @param stepHeight 步高
-         * @param order 从支撑还是摆动相开始
+         * @param baseHeight 基座高度
          */
-        bool
-        setTarget(float stepLength, float stepHeight, float baseHeight, sequence order);
+        bool setTarget(float stepLength, float stepHeight, float baseHeight);
         bool generate(const Body &currentTip) override;
         bool start(const rclcpp::Time &startTime) override;
         TrajectoryPoint get(const rclcpp::Time &currentTime) override;
@@ -43,21 +41,26 @@ namespace Dog8Dof {
         parameters_t parameters_;
         float stepLength_, stepHeight_;
         float baseHeight_;
-        sequence order_;
 
         /**
-         * @brief 生成移动到摆动相位初始位置的轨迹
-         * @param transitionTime 整个步态用时
-         * @param initTip 初始足尖位置
+         * @brief 生成一个完整闭合步态周期
+         * @param cycleTime 一个步态周期总时长
+         * @param totalSteps 一个步态周期总离散点数
          */
-        Trajectory startFromSwing(const float transitionTime, const Body &initTip);
+        Trajectory generateClosedCycle(const float cycleTime, const size_t totalSteps);
 
         /**
-         * @brief 生成移动到支撑相位初始位置的轨迹
-         * @param transitionTime 整个步态用时
-         * @param initTip 初始足尖位置
+         * @brief 在闭合轨迹中找到与当前足端最近的点索引
+         * @param cycle 闭合步态轨迹
+         * @param currentTip 当前足端状态
          */
-        Trajectory startFromStance(const float transitionTime, const Body &initTip);
+        size_t findNearestPointIndex(const Trajectory &cycle,
+                                     const Body &currentTip) const;
+
+        /**
+         * @brief 将闭合轨迹重排，使 startIndex 对应点成为起点
+         */
+        Trajectory rotateCycleToStart(const Trajectory &cycle, size_t startIndex) const;
 
         /**
          * @brief 生成支撑相的轨迹

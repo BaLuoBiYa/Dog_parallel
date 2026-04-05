@@ -15,6 +15,7 @@ find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 
 find_package(dog_tools REQUIRED)
 find_package(dog_trajectory REQUIRED)
+find_package(dog_msg REQUIRED)
 find_package(yaml-cpp REQUIRED)
 
 include_directories(include)
@@ -29,7 +30,8 @@ ament_target_dependencies(${PROJECT_NAME}
     pinocchio 
     Eigen3
     dog_tools
-    dog_trajectory)
+    dog_trajectory
+    dog_msg)
 target_link_libraries(${PROJECT_NAME}
     pinocchio::pinocchio
     Eigen3::Eigen
@@ -130,5 +132,6 @@ ament_export_dependencies(
     Eigen3
     dog_tools
     dog_trajectory
+    dog_msg
 )
 ament_package()

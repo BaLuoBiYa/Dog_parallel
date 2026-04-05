@@ -11,23 +11,50 @@
 namespace Dog8Dof {
     class BaseInterface : public hardware_interface::SystemInterface {
       public:
+        hardware_interface::CallbackReturn on_init(
+            const hardware_interface::HardwareComponentInterfaceParams &params) override;
+
         hardware_interface::CallbackReturn
-        on_init(const hardware_interface::HardwareComponentInterfaceParams &params) override;
+        on_configure(const rclcpp_lifecycle::State &pre) override;
+        hardware_interface::CallbackReturn
+        on_activate(const rclcpp_lifecycle::State &pre) override;
+        hardware_interface::CallbackReturn
+        on_deactivate(const rclcpp_lifecycle::State &pre) override;
+        hardware_interface::CallbackReturn
+        on_error(const rclcpp_lifecycle::State &previous_state) override;
 
-        hardware_interface::CallbackReturn on_configure(const rclcpp_lifecycle::State &pre) override;
-        hardware_interface::CallbackReturn on_activate(const rclcpp_lifecycle::State &pre) override;
-        hardware_interface::CallbackReturn on_deactivate(const rclcpp_lifecycle::State &pre) override;
-        hardware_interface::CallbackReturn on_error(const rclcpp_lifecycle::State &previous_state) override;
-
-        hardware_interface::return_type read(const rclcpp::Time &time, const rclcpp::Duration &period) override;
-        hardware_interface::return_type write(const rclcpp::Time &time, const rclcpp::Duration &period) override;
+        hardware_interface::return_type read(const rclcpp::Time &time,
+                                             const rclcpp::Duration &period) override;
+        hardware_interface::return_type write(const rclcpp::Time &time,
+                                              const rclcpp::Duration &period) override;
 
       private:
+        bool cacheInterfaceHandles();
+
         std::map<std::string, uint8_t> jointMapping_;
-        std::string jointNames_[8] = {"LF_HFE", "LF_KFE", "LH_HFE", "LH_KFE", "RF_HFE", "RF_KFE", "RH_HFE", "RH_KFE"};
+        std::string jointNames_[8] = {"LF_Front",
+                                      "LF_Rear",
+                                      "RF_Front",
+                                      "RF_Rear",
+                                      "LR_Front",
+                                      "LR_Rear",
+                                      "RR_Front",
+                                      "RR_Rear"};
         std::string portName_;
         std::shared_ptr<SerialPort> port_;
 
         std::unique_ptr<goM8010Interface> motor_[8];
+        std::string configPath_;
+        std::array<float, 8> zeroOffsetByIndex_{};
+
+        std::array<hardware_interface::StateInterface::SharedPtr, 8> stPos_{};
+        std::array<hardware_interface::StateInterface::SharedPtr, 8> stVel_{};
+        std::array<hardware_interface::StateInterface::SharedPtr, 8> stTau_{};
+
+        std::array<hardware_interface::CommandInterface::SharedPtr, 8> cmdPos_{};
+        std::array<hardware_interface::CommandInterface::SharedPtr, 8> cmdVel_{};
+        std::array<hardware_interface::CommandInterface::SharedPtr, 8> cmdTau_{};
+        std::array<hardware_interface::CommandInterface::SharedPtr, 8> cmdKp_{};
+        std::array<hardware_interface::CommandInterface::SharedPtr, 8> cmdKd_{};
     };
 } // namespace Dog8Dof

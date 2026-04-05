@@ -1,0 +1,33 @@
+RS485_Port: /dev/ttyUSB0
+
+LF_Front:
+  id: 0
+  offset: 0.0
+
+LF_Rear:
+  id: 1
+  offset: 0.0
+
+RF_Front:
+  id: 2
+  offset: 0.0
+
+RF_Rear:
+  id: 3
+  offset: 0.0
+
+LR_Front:
+  id: 4
+  offset: 0.0
+
+LR_Rear:
+  id: 5
+  offset: 0.0
+
+RR_Front:
+  id: 6
+  offset: 0.0
+
+RR_Rear:
+  id: 7
+  offset: 0.0
