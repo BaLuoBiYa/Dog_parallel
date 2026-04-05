@@ -123,6 +123,7 @@ install(
   DIRECTORY parameters/
   DESTINATION share/${PROJECT_NAME}/parameters
 )
+pluginlib_export_plugin_description_file(controller_interface dog_controllerInterface.xml)
 
 ament_export_include_directories(include)
 ament_export_dependencies(

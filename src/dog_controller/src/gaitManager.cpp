@@ -15,10 +15,11 @@ namespace Dog8Dof {
           jumpTrajectory_(jumpConfig, period) {
     }
 
-    bool GaitManager::setGait(const std::string &jumpConfigName) {
-        if (!jumpTrajectory_.setTarget(jumpConfigName)) {
+    bool GaitManager::setJumpGait(const JumpTrajectoryLegacy::jumpIndex &jumpIndex) {
+        if (!jumpTrajectory_.setTarget(jumpIndex)) {
             throw std::invalid_argument(
-                "JumpTrajectoryLegacy::setTarget failed for config: " + jumpConfigName);
+                "JumpTrajectoryLegacy::setTarget failed for config: " +
+                jumpTrajectory_.jumpMapping.at(jumpIndex));
         }
         currentTrajectory_ = std::make_unique<JumpTrajectoryLegacy>(jumpTrajectory_);
         if (!currentTrajectory_->generate(currentTip_)) {
@@ -32,7 +33,7 @@ namespace Dog8Dof {
         return true;
     }
 
-    bool GaitManager::setGait(float stepLength, float stepHeight, float baseHeight) {
+    bool GaitManager::setWalkGait(float stepLength, float stepHeight, float baseHeight) {
         if (!walkTrajectory_.setTarget(stepLength, stepHeight, baseHeight)) {
             throw std::invalid_argument(
                 "WalkTrajectory::setTarget failed (invalid walk parameters)");
@@ -49,7 +50,7 @@ namespace Dog8Dof {
         return true;
     }
 
-    bool GaitManager::setGait(float tipX, float tipZ) {
+    bool GaitManager::setStandGait(float tipX, float tipZ) {
         if (!standTrajecory_.setTarget(tipX, tipZ)) {
             throw std::invalid_argument(
                 "StandTrajectory::setTarget failed (invalid tip coordinates)");

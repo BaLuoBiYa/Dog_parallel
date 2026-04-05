@@ -135,9 +135,9 @@ namespace Dog8Dof {
         return true;
     }
 
-    bool JumpTrajectoryLegacy::setTarget(std::string configName) {
+    bool JumpTrajectoryLegacy::setTarget(jumpIndex configIndex) {
         try {
-            parameters_ = configMapping_.at(configName);
+            parameters_ = configMapping_.at(jumpMapping.at(configIndex));
         } catch (const std::out_of_range &e) {
             std::cout << e.what() << std::endl;
             return false;

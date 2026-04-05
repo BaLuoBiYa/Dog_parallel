@@ -1,0 +1,8 @@
+<library path="dog_controller">
+    <class name="dog8Dof/baseController" type="Dog8Dof::TrajectoryTracker"
+        base_class_type="controller_interface::ControllerInterface">
+        <description>
+            trajectory tracker for the base of 8 DOF parallel dog
+        </description>
+    </class>
+</library>

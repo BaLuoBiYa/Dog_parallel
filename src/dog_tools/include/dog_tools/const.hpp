@@ -26,14 +26,6 @@ namespace Dog8Dof {
         static constexpr float BODY_HEIGHT_MAX = 300.0f;
         static constexpr float BODY_HEIGHT_MIN = 80.0f;
 
-        // // 平移值映射（待测试）
-        //  static constexpr float TRANSLATION_HEIGHT_MAX = 70.0f;
-        //  static constexpr float TRANSLATION_HEIGHT_MIN = -70.0f;
-
-        // // 前后倾值映射（待测试）
-        //  static constexpr float TILT_HEIGHT_MAX = 70.0f;
-        //  static constexpr float TILT_HEIGHT_MIN = -70.0f;
-
         // 步高映射
         static constexpr float STEP_HEIGHT_MAX = 150.0f;
         static constexpr float STEP_HEIGHT_MIN = 0.0f;
@@ -58,12 +50,15 @@ namespace Dog8Dof {
         static constexpr float BODY_LENGTH_LONGITUDINAL = 408.55f; // 前后关节距离 (mm)
         static constexpr float BODY_WIDTH_LATERAL = 370.9f; // 左右关节水平距离 (mm)
 
+        // 机身质量
         static constexpr float BODY_MASS = 0.0f;
         static constexpr float G = 9800.0f;
 
+        // 轨迹生成参数
         static constexpr unsigned long MAX_RESOLUTION = 1000; // 轨迹生成分辨率
         static constexpr unsigned long MIN_RESOLUTION = 10;   // 轨迹生成分辨率
 
+        // 机械腿参数
         static constexpr float UPPER_LENGTH = 135.83f; // 机械腿大腿长度 (mm)
         static constexpr float LOWER_LENGTH = 185.33f; // 机械腿小腿长度 (mm)
         static constexpr float TIP_LENGTH = 25.64f;    // 机械腿足端长度 (mm)

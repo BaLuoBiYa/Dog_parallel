@@ -20,9 +20,9 @@ namespace Dog8Dof {
          * @brief 设置目标步态参数
          * @return 是否成功更新模型状态
          */
-        bool setGait(const std::string &jumpConfigName);
-        bool setGait(float stepLength, float stepHeight, float baseHeight);
-        bool setGait(float tipX, float tipZ);
+        bool setJumpGait(const JumpTrajectoryLegacy::jumpIndex &jumpIndex);
+        bool setWalkGait(float stepLength, float stepHeight, float baseHeight);
+        bool setStandGait(float tipX, float tipZ);
 
         /**
          * @brief 检测步态周期是否结束

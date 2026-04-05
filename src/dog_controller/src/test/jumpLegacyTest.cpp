@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
     current_tip.pos[0] = 0.0f;
     current_tip.pos[2] = 180.0f;
 
-    std::string jumpConfig = "high_wall";
+    JumpTrajectoryLegacy::jumpIndex jumpConfig = 0;
 
     if (!traj.setTarget(jumpConfig)) {
         std::cerr << "setTarget failed\n";

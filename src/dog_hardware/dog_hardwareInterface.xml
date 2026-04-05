@@ -1,5 +1,5 @@
 <library path="dog_hardware">
-    <class name="dog8Dof/base" type="Dog8Dof::BaseInterface"
+    <class name="dog8Dof/baseHardware" type="Dog8Dof::BaseInterface"
         base_class_type="hardware_interface::SystemInterface">
         <description>motor interface for the base of 8 DOF parallel dog</description>
     </class>

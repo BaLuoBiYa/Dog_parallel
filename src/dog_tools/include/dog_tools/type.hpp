@@ -62,9 +62,9 @@ namespace Dog8Dof {
     };
 
     enum Gait {
-        Stand,
-        Walk,
-        Jump,
+        Stand = 0,
+        Walk = 1,
+        Jump = 2,
     };
 
     struct TrajectoryCommand {

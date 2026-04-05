@@ -7,10 +7,11 @@
 namespace Dog8Dof {
     class JumpTrajectoryLegacy : public BaseTrajectory {
       public:
+        using jumpIndex = float;
         explicit JumpTrajectoryLegacy(const std::string &configPath,
                                       rclcpp::Duration period);
 
-        bool setTarget(std::string configName);
+        bool setTarget(jumpIndex configName);
         bool generate(const Body &currentTip) override;
         bool start(const rclcpp::Time &startTime) override;
         TrajectoryPoint get(const rclcpp::Time &currentTime) override;
@@ -52,13 +53,19 @@ namespace Dog8Dof {
             float phaseKdLand = 0.05f;
         };
 
+        const std::map<jumpIndex, std::string> jumpMapping = {
+            {0.0f, "default"},
+            {1.0f, "high_jump"},
+            {2.0f, "long_jump"},
+            {3.0f, "custom1"},
+            {4.0f, "custom2"},
+        };
+
       private:
         enum class Phase { Crouching, PushingOff, InFlight, Landing };
 
         parameters_t parameters_;
         std::map<std::string, parameters_t> configMapping_;
-        // float targetLaunchSpeed_ = 0.0f;
-        // float targetFlyTime_ = 0.0f;
 
         float initialFootZ_ = 180.0f;
 
