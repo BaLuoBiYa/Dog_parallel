@@ -50,7 +50,7 @@ namespace Dog8Dof {
         currentMotors_[REAR].vel = vel[1];
 
         currentMotors_[FRONT].tau = tau[0];
-        currentMotors_[REAR].pos = tau[1];
+        currentMotors_[REAR].tau = tau[1];
 
         if (!motorPosToTip(pos[0], pos[1])) {
             return false;
@@ -89,34 +89,39 @@ namespace Dog8Dof {
         return currentTip_;
     }
 
+    Body Leg2Dof::getTipTarget() const {
+        return targetTip_;
+    }
+
     /******************************************************************************************/
 
     bool Leg2Dof::tipPosToMotor(float posX, float posZ) {
         const float L_OC_SQ = posX * posX + posZ * posZ;
-        const float L_OC = std::sqrt(L_OC_SQ); // 计算足端到髋关节的距离
+        const float L_OC = std::sqrt(L_OC_SQ);
 
-        // 避免除以零
         if (L_OC < std::numeric_limits<float>::epsilon()) {
             return false;
         }
 
-        // 保证可以形成三角形
         if (L_OC_SQ < (upperLength_ - lowerLength_) * (upperLength_ - lowerLength_) ||
             L_OC > upperLength_ + lowerLength_) {
             return false;
         }
 
-        // 根据余弦定理计算角度
         const float numerator = L_OC_SQ + upperSQ_ - lowerSQ_;
         const float denominator = 2.0f * L_OC * upperLength_;
+        float ratio = numerator / denominator;
+        ratio = std::clamp(ratio, -1.0f, 1.0f);
 
-        const float ratio = numerator / denominator;
+        const float angle_gamma = std::atan2(posX, posZ);
+        const float same_part = std::acos(ratio);
 
-        const float angle_gamma = std::atan2(posX, posZ); // 足端位置向量与Z轴的夹角
-        const float same_part = std::acos(ratio); // 余弦定理计算出的角度
+        // 这里 same_part/angle_gamma 对应 q 空间，需转换成电机角 pos
+        const float q_front = same_part + angle_gamma;
+        const float q_rear = same_part - angle_gamma;
 
-        targetMotors_[FRONT].pos = same_part + angle_gamma;
-        targetMotors_[REAR].pos = same_part - angle_gamma;
+        targetMotors_[FRONT].pos = M_PI_2 - q_front;
+        targetMotors_[REAR].pos = M_PI_2 - q_rear;
 
         return true;
     }
@@ -127,8 +132,8 @@ namespace Dog8Dof {
         // = J^-1 * V where q_dot = [vel_front, vel_rear]^T, V = [vx, vz]^T.
 
         // 1. Convert joint angles to intermediate coordinates (theta, gamma)
-        const float q_f = M_PI_2 - currentMotors_[FRONT].pos;
-        const float q_r = M_PI_2 - currentMotors_[REAR].pos;
+        const float q_f = M_PI_2 - targetMotors_[FRONT].pos;
+        const float q_r = M_PI_2 - targetMotors_[REAR].pos;
 
         const float theta = (q_f + q_r) / 2.0f;
         const float gamma = (q_f - q_r) / 2.0f;
@@ -201,8 +206,8 @@ namespace Dog8Dof {
         const float L2 = lowerLength_ / 1000.0f;
 
         // 1. Convert joint angles to intermediate coordinates (theta, gamma)
-        const float q_f = M_PI_2 - currentMotors_[FRONT].pos;
-        const float q_r = M_PI_2 - currentMotors_[REAR].pos;
+        const float q_f = M_PI_2 - targetMotors_[FRONT].pos;
+        const float q_r = M_PI_2 - targetMotors_[REAR].pos;
 
         const float theta = (q_f + q_r) / 2.0f;
         const float gamma = (q_f - q_r) / 2.0f;
@@ -378,8 +383,8 @@ namespace Dog8Dof {
         const float l2_proj_sq = l2_sq - l1_sin_theta * l1_sin_theta;
 
         if (l2_proj_sq < 0) {
-            targetTip_.tau[0] = 0.0f;
-            targetTip_.tau[2] = 0.0f;
+            currentTip_.tau[0] = 0.0f;
+            currentTip_.tau[2] = 0.0f;
             return false;
         }
         const float l2_proj = std::sqrt(l2_proj_sq);
@@ -421,16 +426,16 @@ namespace Dog8Dof {
         const float detJt = Jt_11 * Jt_22 - Jt_12 * Jt_21;
 
         if (std::abs(detJt) < 1e-6f) {
-            targetTip_.tau[0] = 0.0f;
-            targetTip_.tau[2] = 0.0f;
+            currentTip_.tau[0] = 0.0f;
+            currentTip_.tau[2] = 0.0f;
             return false;
         }
 
         // 8. Calculate F = (J^T)^-1 * τ
         // (J^T)^-1 = (1/detJt) * [[Jt_22, -Jt_12], [-Jt_21, Jt_11]]
         const float inv_detJt = 1.0f / detJt;
-        targetTip_.tau[0] = inv_detJt * (Jt_22 * tau_front - Jt_12 * tau_rear);
-        targetTip_.tau[2] = inv_detJt * (-Jt_21 * tau_front + Jt_11 * tau_rear);
+        currentTip_.tau[0] = inv_detJt * (Jt_22 * tau_front - Jt_12 * tau_rear);
+        currentTip_.tau[2] = inv_detJt * (-Jt_21 * tau_front + Jt_11 * tau_rear);
         return true;
     }
 

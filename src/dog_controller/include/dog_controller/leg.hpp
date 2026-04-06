@@ -59,6 +59,12 @@ namespace Dog8Dof {
         Body getTipCurrent() const;
 
         /**
+         * @brief 获得足尖的期望状态
+         * @return 足尖期望状态
+         */
+        Body getTipTarget() const;
+
+        /**
          * @brief 设置电机kp
          * @param target 目标电机
          */

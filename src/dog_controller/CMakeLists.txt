@@ -5,6 +5,8 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
 # find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(ament_index_cpp REQUIRED)
@@ -24,6 +26,7 @@ add_library(${PROJECT_NAME}
   src/leg.cpp
   src/trajectoryTracker.cpp
 )
+ament_export_libraries(${PROJECT_NAME})
 ament_target_dependencies(${PROJECT_NAME} 
     rclcpp
     controller_interface
@@ -109,6 +112,18 @@ target_link_libraries(jumpLegacyTest
     yaml-cpp
 )
 
+add_executable(legTest 
+    src/test/legTest.cpp)
+ament_target_dependencies(legTest
+    rclcpp
+    dog_tools
+    Eigen3
+)
+target_link_libraries(legTest
+    Eigen3::Eigen
+    ${PROJECT_NAME}
+)
+
 install(
   TARGETS ${PROJECT_NAME}
         PinocchionTest
@@ -116,6 +131,7 @@ install(
         walkTest
         jumpTest
         jumpLegacyTest
+        legTest
   DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
@@ -123,9 +139,16 @@ install(
   DIRECTORY parameters/
   DESTINATION share/${PROJECT_NAME}/parameters
 )
+
+
 pluginlib_export_plugin_description_file(controller_interface dog_controllerInterface.xml)
 
 ament_export_include_directories(include)
+install(
+  DIRECTORY include/
+  DESTINATION include
+)
+
 ament_export_dependencies(
     rclcpp
     controller_interface
