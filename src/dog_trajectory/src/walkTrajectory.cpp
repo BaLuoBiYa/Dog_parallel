@@ -41,7 +41,11 @@ namespace Dog8Dof {
         return true;
     }
 
-    bool WalkTrajectory::setTarget(float stepLength, float stepHeight, float baseHeight) {
+    bool WalkTrajectory::setTarget(float stepLength,
+                                   float stepHeight,
+                                   float baseHeight,
+                                   float phaseOffset,
+                                   bool useNearestStart) {
         if (stepHeight <= 0.0f) {
             std::cout << "Step height must greater than 0!" << std::endl;
             return false;
@@ -49,10 +53,19 @@ namespace Dog8Dof {
         if (baseHeight > Const::BODY_HEIGHT_MAX || baseHeight < Const::BODY_HEIGHT_MIN) {
             std::cout << "Base height must between " << Const::BODY_HEIGHT_MAX << " and "
                       << Const::BODY_HEIGHT_MIN << std::endl;
+            return false;
         }
+
         stepHeight_ = stepHeight;
         stepLength_ = stepLength;
         baseHeight_ = baseHeight;
+        useNearestStart_ = useNearestStart;
+
+        // 归一化到 [0, 1)
+        phaseOffset_ = phaseOffset - std::floor(phaseOffset);
+        if (phaseOffset_ < 0.0f) {
+            phaseOffset_ += 1.0f;
+        }
         return true;
     }
 
@@ -63,7 +76,7 @@ namespace Dog8Dof {
         trajectory_ = Trajectory(0);
 
         const size_t totalSteps = stepsFromDurationNs(parameters_.totalTime * 1e9);
-        const float dt = static_cast<float>(durationNanoSec_) * 1e-9f; // 单采样时间
+        const float dt = static_cast<float>(durationNanoSec_) * 1e-9f;
         const float TCycle = dt * static_cast<float>(totalSteps);
 
         Trajectory closedCycle;
@@ -77,8 +90,157 @@ namespace Dog8Dof {
             return false;
         }
 
-        const size_t startIndex = findNearestPointIndex(closedCycle, currentTip);
-        trajectory_ = rotateCycleToStart(closedCycle, startIndex);
+        const size_t n = closedCycle.points.size();
+        const size_t startIndex =
+            useNearestStart_
+                ? findNearestPointIndex(closedCycle, currentTip)
+                : static_cast<size_t>(std::lround(phaseOffset_ * static_cast<float>(n))) %
+                      n;
+
+        Trajectory phaseCycle = rotateCycleToStart(closedCycle, startIndex);
+        if (phaseCycle.points.empty()) {
+            return false;
+        }
+
+        // 运行中重规划：仍按最近点直接续接
+        if (useNearestStart_) {
+            trajectory_ = std::move(phaseCycle);
+            return true;
+        }
+
+        // 相位启动：先从当前位置过渡到相位起点
+        const TrajectoryPoint &phaseStart = phaseCycle.points.front();
+
+        const Eigen::Vector2f currentPos(currentTip.pos[0], currentTip.pos[2]);
+        const Eigen::Vector2f currentVel(currentTip.linerVel[0], currentTip.linerVel[2]);
+        const Eigen::Vector2f phaseStartPos(phaseStart.pos[0], phaseStart.pos[2]);
+        const Eigen::Vector2f phaseStartVel(phaseStart.vel[0], phaseStart.vel[2]);
+        const Eigen::Vector2f zeroAcc = Eigen::Vector2f::Zero();
+
+        // 步向符号：>0 前进，<0 后退
+        const float stepDir = (stepLength_ >= 0.0f) ? 1.0f : -1.0f;
+        const bool startInForwardDir = (phaseStartPos[0] * stepDir) >= 0.0f;
+
+        // 过渡时长与步数
+        const size_t transitionSteps =
+            std::clamp(stepsFromDurationNs(parameters_.startblendTimeNs, 4, 40),
+                       static_cast<size_t>(4),
+                       static_cast<size_t>(40));
+        const float transitionTime =
+            std::max(0.08f, static_cast<float>(transitionSteps) * dt);
+
+        Trajectory transition(0);
+
+        if (startInForwardDir) {
+            // 前向相位起点：抬腿移动到起点
+            const Eigen::Vector2f skyDir = getHeightVec(Eigen::Vector2f(stepDir, 0.0f));
+            const float liftMag = std::max(5.0f, std::abs(stepHeight_) * 0.6f);
+
+            const size_t steps1 = std::max<size_t>(2, transitionSteps / 2);
+            const size_t steps2 = std::max<size_t>(2, transitionSteps - steps1);
+            const float t1 = transitionTime * 0.5f;
+            const float t2 = transitionTime - t1;
+
+            const Eigen::Vector2f midPos =
+                0.5f * (currentPos + phaseStartPos) + skyDir * liftMag;
+
+            const Eigen::Vector2f midVel = QuinticPolynomial::solveMidVel2D(
+                currentPos, midPos, phaseStartPos, currentVel, phaseStartVel, t1, t2);
+
+            const Eigen::Vector2f midAcc = QuinticPolynomial::solveMidAcc2D(currentPos,
+                                                                            currentVel,
+                                                                            zeroAcc,
+                                                                            midPos,
+                                                                            midVel,
+                                                                            phaseStartPos,
+                                                                            phaseStartVel,
+                                                                            zeroAcc,
+                                                                            t1,
+                                                                            t2);
+
+            Trajectory first = QuinticPolynomial::generate(
+                currentPos, midPos, currentVel, midVel, zeroAcc, midAcc, t1, steps1);
+
+            Trajectory second = QuinticPolynomial::generate(midPos,
+                                                            phaseStartPos,
+                                                            midVel,
+                                                            phaseStartVel,
+                                                            midAcc,
+                                                            zeroAcc,
+                                                            t2,
+                                                            steps2);
+
+            if (!first.points.empty() && !second.points.empty()) {
+                if (first.points.back().pos.isApprox(second.points.front().pos)) {
+                    second.points.erase(second.points.begin());
+                    if (!second.time.empty()) {
+                        second.time.erase(second.time.begin());
+                    }
+                }
+            }
+
+            transition = first + second;
+        } else {
+            // 后向相位起点：从地面移动到起点
+            const float groundZ =
+                std::max({baseHeight_, currentPos[1], phaseStartPos[1]});
+            const Eigen::Vector2f groundStart(currentPos[0], groundZ);
+            const Eigen::Vector2f groundEnd(phaseStartPos[0], groundZ);
+
+            const size_t steps1 = std::max<size_t>(2, transitionSteps / 2);
+            const size_t steps2 = std::max<size_t>(2, transitionSteps - steps1);
+            const float t1 = transitionTime * 0.5f;
+            const float t2 = transitionTime - t1;
+
+            const Eigen::Vector2f midPos = 0.5f * (groundStart + groundEnd);
+
+            const Eigen::Vector2f groundStartVel(currentVel[0], 0.0f);
+            const Eigen::Vector2f groundEndVel(phaseStartVel[0], 0.0f);
+
+            const Eigen::Vector2f midVel = QuinticPolynomial::solveMidVel2D(
+                groundStart, midPos, groundEnd, groundStartVel, groundEndVel, t1, t2);
+
+            const Eigen::Vector2f midAcc =
+                QuinticPolynomial::solveMidAcc2D(groundStart,
+                                                 groundStartVel,
+                                                 zeroAcc,
+                                                 midPos,
+                                                 midVel,
+                                                 groundEnd,
+                                                 groundEndVel,
+                                                 zeroAcc,
+                                                 t1,
+                                                 t2);
+
+            Trajectory first = QuinticPolynomial::generate(
+                groundStart, midPos, groundStartVel, midVel, zeroAcc, midAcc, t1, steps1);
+
+            Trajectory second = QuinticPolynomial::generate(
+                midPos, groundEnd, midVel, groundEndVel, midAcc, zeroAcc, t2, steps2);
+
+            if (!first.points.empty() && !second.points.empty()) {
+                if (first.points.back().pos.isApprox(second.points.front().pos)) {
+                    second.points.erase(second.points.begin());
+                    if (!second.time.empty()) {
+                        second.time.erase(second.time.begin());
+                    }
+                }
+            }
+
+            transition = first + second;
+        }
+
+        // 去掉过渡段末点与相位段首点重复
+        if (!transition.points.empty() && !phaseCycle.points.empty()) {
+            if (transition.points.back().pos.isApprox(phaseCycle.points.front().pos)) {
+                phaseCycle.points.erase(phaseCycle.points.begin());
+                if (!phaseCycle.time.empty()) {
+                    phaseCycle.time.erase(phaseCycle.time.begin());
+                }
+            }
+        }
+
+        trajectory_ = transition + phaseCycle;
         return !trajectory_.points.empty();
     }
 
@@ -465,6 +627,7 @@ namespace YAML {
             node["deltaSpeed"]["z"] = rhs.deltaSpeed[1];
 
             node["blendTime"] = rhs.blendTimeNs / 1e9;
+            node["startblendTime"] = rhs.startblendTimeNs / 1e9;
             return node;
         }
 
@@ -486,7 +649,7 @@ namespace YAML {
                                              node["deltaSpeed"]["z"].as<float>(1.0));
 
             rhs.blendTimeNs = node["blendTime"].as<float>(0.03f) * 1e9;
-
+            rhs.startblendTimeNs = node["startblendTime"].as<float>(1.0f) * 1e9;
             return true;
         }
     };

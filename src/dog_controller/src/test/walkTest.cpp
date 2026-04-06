@@ -38,14 +38,15 @@ int main(int argc, char **argv) {
     Body current_tip{};
     current_tip.pos.setZero();
     current_tip.linerVel.setZero();
-    current_tip.pos[0] = -180.0f;
-    current_tip.pos[2] = 20.0f;
+    current_tip.pos[0] = 0.0f;
+    current_tip.pos[2] = 160.0f;
 
     const float step_length = 200.0f;
     const float step_height = 40.0f;
     const float base_height = 160.0f;
+    const float phase_offset = 0.0f;
 
-    if (!traj.setTarget(step_length, step_height, base_height)) {
+    if (!traj.setTarget(step_length, step_height, base_height, phase_offset, false)) {
         std::cerr << "setTarget failed\n";
         return 1;
     }

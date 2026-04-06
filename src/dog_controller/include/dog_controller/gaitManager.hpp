@@ -21,8 +21,17 @@ namespace Dog8Dof {
          * @return 是否成功更新模型状态
          */
         bool setJumpGait(const JumpTrajectoryLegacy::jumpIndex &jumpIndex);
-        bool setWalkGait(float stepLength, float stepHeight, float baseHeight);
+        bool setWalkGait(float stepLength,
+                         float stepHeight,
+                         float baseHeight,
+                         float phaseOffset = 0.0f,
+                         bool useNearestStart = false);
         bool setStandGait(float tipX, float tipZ);
+
+        /**
+         * @brief 启动步态
+         */
+        bool start(const rclcpp::Time &startTime);
 
         /**
          * @brief 检测步态周期是否结束

@@ -11,8 +11,13 @@ namespace Dog8Dof {
          * @param stepLength 步长
          * @param stepHeight 步高
          * @param baseHeight 基座高度
+         * @param phaseOffset 步态相位偏移，范围 [0, 1)，默认为 0
          */
-        bool setTarget(float stepLength, float stepHeight, float baseHeight);
+        bool setTarget(float stepLength,
+                       float stepHeight,
+                       float baseHeight,
+                       float phaseOffset = 0.0f,
+                       bool useNearestStart = false);
         bool generate(const Body &currentTip) override;
         bool start(const rclcpp::Time &startTime) override;
         TrajectoryPoint get(const rclcpp::Time &currentTime) override;
@@ -33,6 +38,7 @@ namespace Dog8Dof {
             float swingDutyCycle;
 
             float blendTimeNs;
+            float startblendTimeNs;
 
             Eigen::Vector2f deltaSpeed;
         };
@@ -41,6 +47,8 @@ namespace Dog8Dof {
         parameters_t parameters_;
         float stepLength_, stepHeight_;
         float baseHeight_;
+        float phaseOffset_ = 0.0f;
+        bool useNearestStart_ = false;
 
         /**
          * @brief 生成一个完整闭合步态周期

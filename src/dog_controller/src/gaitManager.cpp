@@ -26,15 +26,16 @@ namespace Dog8Dof {
             currentTrajectory_.reset();
             throw std::runtime_error("JumpTrajectoryLegacy::generate failed");
         }
-        if (!currentTrajectory_->start(clock_->now())) {
-            currentTrajectory_.reset();
-            throw std::runtime_error("JumpTrajectoryLegacy::start failed");
-        }
         return true;
     }
 
-    bool GaitManager::setWalkGait(float stepLength, float stepHeight, float baseHeight) {
-        if (!walkTrajectory_.setTarget(stepLength, stepHeight, baseHeight)) {
+    bool GaitManager::setWalkGait(float stepLength,
+                                  float stepHeight,
+                                  float baseHeight,
+                                  float phaseOffset,
+                                  bool useNearestStart) {
+        if (!walkTrajectory_.setTarget(
+                stepLength, stepHeight, baseHeight, phaseOffset, useNearestStart)) {
             throw std::invalid_argument(
                 "WalkTrajectory::setTarget failed (invalid walk parameters)");
         }
@@ -42,10 +43,6 @@ namespace Dog8Dof {
         if (!currentTrajectory_->generate(currentTip_)) {
             currentTrajectory_.reset();
             throw std::runtime_error("WalkTrajectory::generate failed");
-        }
-        if (!currentTrajectory_->start(clock_->now())) {
-            currentTrajectory_.reset();
-            throw std::runtime_error("WalkTrajectory::start failed");
         }
         return true;
     }
@@ -60,9 +57,13 @@ namespace Dog8Dof {
             currentTrajectory_.reset();
             throw std::runtime_error("StandTrajectory::generate failed");
         }
-        if (!currentTrajectory_->start(clock_->now())) {
+        return true;
+    }
+
+    bool GaitManager::start(const rclcpp::Time &startTime) {
+        if (!currentTrajectory_->start(startTime)) {
             currentTrajectory_.reset();
-            throw std::runtime_error("StandTrajectory::start failed");
+            throw std::runtime_error("start failed");
         }
         return true;
     }
