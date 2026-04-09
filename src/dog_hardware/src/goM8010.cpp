@@ -18,7 +18,7 @@ namespace Dog8Dof {
         port_ = port;
 
         if (!this->zeroTor()) {
-            throw std::ios_base::failure("Motor" + std::to_string(ID) + "time out");
+            throw std::ios_base::failure("Motor " + std::to_string(ID) + " time out");
         }
     }
 
@@ -81,9 +81,14 @@ namespace Dog8Dof {
         return port_->sendRecv(&command_, &state_);
     }
 
-    bool goM8010Interface::stop() {
+    bool goM8010Interface::lock() {
         command_.mode = queryMotorMode(MotorType::GO_M8010_6, MotorMode::BRAKE);
         return port_->sendRecv(&command_, &state_);
+    }
+
+    bool goM8010Interface::release() {
+        command_.mode = queryMotorMode(MotorType::GO_M8010_6, MotorMode::FOC);
+        return this->zeroTor();
     }
 
     float goM8010Interface::getPos() {

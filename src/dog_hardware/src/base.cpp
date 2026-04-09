@@ -105,6 +105,15 @@ namespace Dog8Dof {
         }
         // 缓存命令/状态接口
 
+        for (size_t i = 0; i < 8; ++i) {
+            bool res;
+            res = motor_[i].release();
+            if (!res) {
+                return hardware_interface::CallbackReturn::ERROR;
+            }
+        }
+        // 解除电机锁定
+
         return hardware_interface::CallbackReturn::SUCCESS;
     }
 

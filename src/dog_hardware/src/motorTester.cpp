@@ -150,7 +150,7 @@ int main(int argc, char **argv) {
             ss >> cmd;
             if (cmd.empty())
                 continue;
-            if (cmd == "exit" || cmd == "quit")
+            if (cmd == "exit" || cmd == "quit" || cmd == "q")
                 break;
             if (cmd == "help") {
                 std::cout << "pos <id|all> <target> <kp> <kd>\n"
@@ -160,7 +160,8 @@ int main(int argc, char **argv) {
                           << "zero <id|all>\n"
                           << "setzero <id|all> <offset>\n"
                           << "damp <id|all> <kd>\n"
-                          << "stop <id|all>\n"
+                          << "lock <id|all>\n"
+                          << "release <id|all>\n"
                           << "estop <id|all>\n"
                           << "exit\n";
                 continue;
@@ -217,8 +218,8 @@ int main(int argc, char **argv) {
                 float kd;
                 ss >> kd;
                 applyTo(tgt, [&](auto m) { return m->damp(kd); }, "damp");
-            } else if (cmd == "stop") {
-                applyTo(tgt, [&](auto m) { return m->stop(); }, "stop");
+            } else if (cmd == "lock") {
+                applyTo(tgt, [&](auto m) { return m->lock(); }, "stop");
             } else if (cmd == "estop") {
                 if (tgt == "all") {
                     std::lock_guard<std::mutex> lk(motors_mtx);
@@ -237,6 +238,9 @@ int main(int argc, char **argv) {
                     } else
                         std::cout << "找不到 ID:" << vid << std::endl;
                 }
+            } else if (cmd == "release") {
+                applyTo(tgt, [&](auto m) { return m->release(); }, "stop");
+
             } else {
                 std::cout << "未知命令，输入 help 查看" << std::endl;
             }

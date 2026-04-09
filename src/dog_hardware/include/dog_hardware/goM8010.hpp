@@ -69,7 +69,12 @@ namespace Dog8Dof {
         /**
          * @brief 锁定电机
          */
-        bool stop();
+        bool lock();
+
+        /**
+         * @brief 释放电机
+         */
+        bool release();
 
         /**
          * @brief 获得当前电机位置

@@ -94,10 +94,9 @@ namespace Dog8Dof {
                     jointMapping_[jointNames_[i]], port_);
                 motor_[i]->setZero(0.0f);
             } catch (const std::exception &e) {
-                RCLCPP_ERROR(logger_,
-                             "Motor %s connection failed: %s",
-                             jointNames_[i].c_str(),
-                             e.what());
+                RCLCPP_ERROR_STREAM(logger_,
+                                    "Motor" << jointNames_[i].c_str()
+                                            << " connection failed: " << e.what());
                 throw std::runtime_error("Can't establish connection to Motor");
             }
         }
@@ -241,19 +240,22 @@ namespace Dog8Dof {
 } // namespace Dog8Dof
 
 int main(int argc, char **argv) {
+
+    std::string configPath;
     if (argc < 2) {
-        std::cerr << "Usage: " << argv[0] << " <config_path>\n";
-        return 1;
+        std::cout << "Using default config path" << std::endl;
+        configPath = "/home/luo/Project/Horse/Dog_parallel/src/dog_bringup/"
+                     "parameters/motors.yaml";
+    } else {
+        configPath = argv[1];
+        std::cout << "Using config path" << configPath << std::endl;
     }
-
-    const char *config_path = argv[1];
-
     rclcpp::init(argc, argv);
 
     bool interactive = isatty(fileno(stdin));
 
     try {
-        auto zs = std::make_unique<Dog8Dof::ZeroSetter>(config_path);
+        auto zs = std::make_unique<Dog8Dof::ZeroSetter>(configPath);
 
         if (interactive) {
             RCLCPP_INFO(
