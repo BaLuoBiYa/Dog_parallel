@@ -1,3 +1,4 @@
+#pragma once
 #include <controller_interface/controller_interface.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <realtime_tools/realtime_thread_safe_box.hpp>
@@ -36,7 +37,7 @@ namespace Dog8Dof {
                                                  const rclcpp::Duration &period) override;
 
       private:
-                enum class ControlMode { STAND, WALK, JUMP };
+        enum class ControlMode { STAND, WALK, JUMP };
 
         std::string robotName_;
         std::string standProfile_, walkProfile_, jumpProfile_;

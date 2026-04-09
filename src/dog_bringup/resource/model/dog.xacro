@@ -1,0 +1,47 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="dog_single_leg">
+    <xacro:property name="body_length" value="0.40855" />
+    <xacro:property name="body_width" value="0.3709" />
+    <xacro:include filename="leg.xacro" />
+
+    <!-- 简单基座 -->
+    <link name="base_link" />
+
+    <!-- 调用宏创建一条前左腿（prefix LF）-->
+    <xacro:parallel_leg_4bar_min
+        prefix="LF"
+        parent="base_link"
+        base_xyz="0 0 0"
+        base_rpy="0 0 0"
+        upper_len="0.13583"
+        lower_len="0.18533" />
+
+    <xacro:macro name="motor" params="joint_name">
+        <joint name="${joint_name}">
+            <command_interface name="position" />
+            <command_interface name="velocity" />
+            <command_interface name="effort" />
+            <command_interface name="kp" />
+            <command_interface name="kd" />
+
+            <state_interface name="position" />
+            <state_interface name="velocity" />
+            <state_interface name="effort" />
+        </joint>
+    </xacro:macro>
+    <!-- 关节电机简化宏 -->
+
+
+    <!-- ros2_control 最小声明 -->
+    <ros2_control name="go8010" type="system">
+        <hardware>
+            <param name="configPath">
+                /home/luo/Project/Horse/Dog_parallel/src/dog_bringup/parameters/motors.yaml</param>
+            <plugin>dog8Dof/singleBaseHardware</plugin>
+        </hardware>
+
+        <xacro:motor joint_name="LF_Front" />
+        <xacro:motor joint_name="LF_Rear" />
+    </ros2_control>
+
+</robot>

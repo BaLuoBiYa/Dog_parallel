@@ -23,11 +23,15 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(hardware_interface REQUIRED)
 find_package(pluginlib REQUIRED)
+find_package(yaml-cpp REQUIRED)
+find_package(std_msgs REQUIRED)
 
 include_directories(include)
 
 add_library(${PROJECT_NAME} SHARED
-    src/Base.cpp
+    src/base.cpp
+    src/baseSingle.cpp
+    src/goM8010.cpp
 )
 ament_target_dependencies(${PROJECT_NAME}
   "rclcpp"
@@ -36,6 +40,7 @@ ament_target_dependencies(${PROJECT_NAME}
 )
 target_link_libraries(${PROJECT_NAME}
   ${ARCH_LIB}
+  yaml-cpp::yaml-cpp
 )
 
 add_executable(example_goM8010_6_motor
@@ -45,17 +50,35 @@ target_link_libraries(example_goM8010_6_motor
     ${ARCH_LIB}
 )
 
+add_executable(zeroSetter 
+    src/zeroSetter.cpp)
+ament_target_dependencies(zeroSetter
+    rclcpp
+    yaml-cpp
+)
+target_link_libraries(zeroSetter
+    yaml-cpp::yaml-cpp
+    ${PROJECT_NAME}
+)
+
+add_executable(motorTester
+    src/motorTester.cpp)
+ament_target_dependencies(zeroSetter
+    rclcpp
+    std_msgs
+)
+target_link_libraries(motorTester
+    ${PROJECT_NAME}
+)
+
 pluginlib_export_plugin_description_file(hardware_interface dog_hardwareInterface.xml)
 
-install(
-    TARGETS ${PROJECT_NAME}
-        example_goM8010_6_motor
-    DESTINATION lib
-)
 
 install(
   TARGETS ${PROJECT_NAME}
         example_goM8010_6_motor
+        zeroSetter
+        motorTester
   DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )

@@ -3,4 +3,9 @@
         base_class_type="hardware_interface::SystemInterface">
         <description>motor interface for the base of 8 DOF parallel dog</description>
     </class>
+
+    <class name="dog8Dof/singleBaseHardware" type="Dog8Dof::SingleLegInterface"
+        base_class_type="hardware_interface::SystemInterface">
+        <description>a signal leg version of motor interface for the base of 8 DOF parallel dog</description>
+    </class>
 </library>

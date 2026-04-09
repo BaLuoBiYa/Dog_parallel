@@ -25,6 +25,7 @@ include_directories(include)
 add_library(${PROJECT_NAME}
   src/leg.cpp
   src/trajectoryTracker.cpp
+  src/trajectoryTrackerSingle.cpp
 )
 ament_export_libraries(${PROJECT_NAME})
 ament_target_dependencies(${PROJECT_NAME} 
@@ -135,11 +136,6 @@ install(
   DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
-install(
-  DIRECTORY parameters/
-  DESTINATION share/${PROJECT_NAME}/parameters
-)
-
 
 pluginlib_export_plugin_description_file(controller_interface dog_controllerInterface.xml)
 

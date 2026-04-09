@@ -12,11 +12,13 @@ find_package(geometry_msgs REQUIRED)
 
 find_package(dog_msg REQUIRED)
 find_package(dog_tools REQUIRED)
+find_package(Boost REQUIRED COMPONENTS system)
 
 include_directories(include)
 
 add_library(${PROJECT_NAME} SHARED
     src/twistToGait.cpp
+    src/sbusReader.cpp
 )
 ament_target_dependencies(${PROJECT_NAME}
   "rclcpp"
@@ -24,10 +26,22 @@ ament_target_dependencies(${PROJECT_NAME}
   "dog_msg"
   "dog_tools"
 )
-target_link_libraries(${PROJECT_NAME})
+target_link_libraries(${PROJECT_NAME}
+    Boost::system
+)
+
+add_executable(subsTester
+    src/subsTester.cpp)
+ament_target_dependencies(subsTester
+    rclcpp
+)
+target_link_libraries(subsTester
+    ${PROJECT_NAME}
+)
 
 install(
   TARGETS ${PROJECT_NAME}
+    subsTester
   DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )

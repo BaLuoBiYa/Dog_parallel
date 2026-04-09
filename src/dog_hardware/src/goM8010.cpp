@@ -1,12 +1,10 @@
 #include "dog_hardware/goM8010.hpp"
 #include "unitree_actuator_sdk/serialPort/SerialPort.h"
 #include "unitree_actuator_sdk/unitreeMotor/unitreeMotor.h"
-#include <chrono>
 #include <cstdint>
 #include <ios>
 #include <memory>
 #include <rclcpp/utilities.hpp>
-#include <thread>
 
 namespace Dog8Dof {
 

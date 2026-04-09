@@ -1,0 +1,90 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+    <xacro:property name="body_length" value="0.40855" />
+    <xacro:property name="body_width" value="0.3709" />
+    <!--
+    最简四连杆腿（无 collision，无 inertial）
+    树状结构（保留关节命名）：
+      parent
+        ├─ Front ─ Front_Upper ─ Front_Passive ─ Front_Lower ─ Front_Connect ─ Tip
+        └─ Rear  ─ Rear_Upper  ─ Rear_Passive  ─ Rear_Lower  ─ Rear_Connect
+    说明：
+      - Tip 为足端（仅链接定义）
+      - Front_Connect / Rear_Connect 为闭环切断的虚拟端点（仅链接/固定关节）
+      - 不包含 <collision> 与 <inertial>
+  -->
+
+    <xacro:macro name="parallel_leg_4bar_min"
+        params="prefix parent base_xyz:='0 0 0' base_rpy:='0 0 0' upper_len:=0.12 lower_len:=0.12
+           motor_lower:=-1.57 motor_upper:=1.57 velocity_limit:=10 effort_limit:=10">
+
+        <!-- 固定到父节点 -->
+        <joint name="${prefix}_Mount" type="fixed">
+            <origin xyz="${base_xyz}" rpy="${base_rpy}" />
+            <parent link="${parent}" />
+            <child link="${prefix}_Mount_Link" />
+        </joint>
+        <link name="${prefix}_Mount_Link" />
+
+        <!-- 前侧驱动 -->
+        <joint name="${prefix}_Front" type="revolute">
+            <origin rpy="0 0 0" xyz="0 0 0" />
+            <parent link="${prefix}_Mount_Link" />
+            <child link="${prefix}_Front_Upper" />
+            <axis xyz="1 0 0" />
+            <limit lower="${motor_lower}" upper="${motor_upper}"
+                effort="${effort_limit}" velocity="${velocity_limit}" />
+        </joint>
+        <link name="${prefix}_Front_Upper" />
+
+        <joint name="${prefix}_Front_Passive" type="revolute">
+            <origin rpy="0 0 0" xyz="0 0 -${upper_len}" />
+            <parent link="${prefix}_Front_Upper" />
+            <child link="${prefix}_Front_Lower" />
+            <axis xyz="1 0 0" />
+            <limit lower="-3.14159" upper="3.14159"
+                effort="${effort_limit}" velocity="${velocity_limit}" />
+        </joint>
+        <link name="${prefix}_Front_Lower" />
+
+        <!-- 前端虚拟连接到足端 -->
+        <joint name="${prefix}_Front_Connect" type="fixed">
+            <origin rpy="0 0 0" xyz="0 0 -${lower_len}" />
+            <parent link="${prefix}_Front_Lower" />
+            <child link="${prefix}_Tip" />
+        </joint>
+        <link name="${prefix}_Tip" />
+
+        <!-- 后侧驱动 -->
+        <joint name="${prefix}_Rear" type="revolute">
+            <origin rpy="0 0 0" xyz="0 0 0" />
+            <parent link="${prefix}_Mount_Link" />
+            <child link="${prefix}_Rear_Upper" />
+            <axis xyz="1 0 0" />
+            <limit lower="${motor_lower}" upper="${motor_upper}"
+                effort="${effort_limit}" velocity="${velocity_limit}" />
+        </joint>
+        <link name="${prefix}_Rear_Upper" />
+
+        <joint name="${prefix}_Rear_Passive" type="revolute">
+            <origin rpy="0 0 0" xyz="0 0 -${upper_len}" />
+            <parent link="${prefix}_Rear_Upper" />
+            <child link="${prefix}_Rear_Lower" />
+            <axis xyz="1 0 0" />
+            <limit lower="-3.14159" upper="3.14159"
+                effort="${effort_limit}" velocity="${velocity_limit}" />
+        </joint>
+        <link name="${prefix}_Rear_Lower" />
+
+        <!-- 后端虚拟端点（闭环切断） -->
+        <joint name="${prefix}_Rear_Connect" type="fixed">
+            <origin rpy="0 0 0" xyz="0 0 -${lower_len}" />
+            <parent link="${prefix}_Rear_Lower" />
+            <child link="${prefix}_Rear_Connect_Link" />
+        </joint>
+        <link name="${prefix}_Rear_Connect_Link" />
+
+        <!-- 注意：Front_Connect 与 Rear_Connect 在理想闭环下应重合，由上层运动学/控制保证 -->
+    </xacro:macro>
+
+</robot>

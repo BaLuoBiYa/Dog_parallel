@@ -1,4 +1,4 @@
-#include "dog_hardware/Base.hpp"
+#include "dog_hardware/base.hpp"
 #include "unitree_actuator_sdk/serialPort/SerialPort.h"
 #include <cstddef>
 #include <hardware_interface/hardware_component_interface.hpp>
@@ -15,6 +15,20 @@ namespace Dog8Dof {
             hardware_interface::CallbackReturn::SUCCESS) {
             return hardware_interface::CallbackReturn::ERROR;
         }
+
+        configPath_ = info_.hardware_parameters["configPath"];
+        // trim left
+        configPath_.erase(
+            configPath_.begin(),
+            std::find_if(configPath_.begin(), configPath_.end(), [](unsigned char ch) {
+                return !std::isspace(ch);
+            }));
+        // trim right
+        configPath_.erase(std::find_if(configPath_.rbegin(),
+                                       configPath_.rend(),
+                                       [](unsigned char ch) { return !std::isspace(ch); })
+                              .base(),
+                          configPath_.end());
 
         try {
             const YAML::Node root = YAML::LoadFile(configPath_);

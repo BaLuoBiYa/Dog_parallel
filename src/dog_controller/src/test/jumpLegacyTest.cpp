@@ -28,7 +28,7 @@ int main(int argc, char **argv) {
     rclcpp::init(argc, argv);
 
     const std::string share_dir =
-        ament_index_cpp::get_package_share_directory("dog_controller");
+        ament_index_cpp::get_package_share_directory("dog_bringup");
     const std::string yaml_path =
         (std::filesystem::path(share_dir) / "parameters" / "jumpLegacy.yaml").string();
 

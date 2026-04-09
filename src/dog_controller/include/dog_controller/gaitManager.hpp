@@ -1,3 +1,4 @@
+#pragma once
 #include "dog_controller/leg.hpp"
 #include "dog_trajectory/jumpTrajectoryLegacy.hpp"
 #include "dog_trajectory/standTrajectory.hpp"

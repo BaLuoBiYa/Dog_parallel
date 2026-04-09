@@ -1,4 +1,7 @@
 RS485_Port: /dev/ttyUSB0
+idleAngle:
+  front: 0.0
+  rear: 0.0
 
 LF_Front:
   id: 0
