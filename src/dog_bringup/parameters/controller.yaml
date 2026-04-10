@@ -1,0 +1,13 @@
+expFactor: 0.5
+port: /dev/ttyUSB0
+
+channel:
+  move:
+    x: 1
+    y: 2
+
+  slope:
+    x: 3
+    y: 4
+
+  height: 5

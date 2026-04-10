@@ -1,13 +1,10 @@
 #include "dog_remote/sbusReader.hpp"
+#include "dog_remote/serialConfig.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <stdexcept>
-
-#include <linux/serial.h>
-#include <sys/ioctl.h>
-#include <termios.h>
 
 namespace Dog8Dof {
 
@@ -17,15 +14,7 @@ namespace Dog8Dof {
 
         try {
             serialPort_.open(serialPath_);
-
             setBaudrate();
-            serialPort_.set_option(boost::asio::serial_port_base::character_size(8));
-            serialPort_.set_option(boost::asio::serial_port_base::parity(
-                boost::asio::serial_port_base::parity::even));
-            serialPort_.set_option(boost::asio::serial_port_base::stop_bits(
-                boost::asio::serial_port_base::stop_bits::two));
-            serialPort_.set_option(boost::asio::serial_port_base::flow_control(
-                boost::asio::serial_port_base::flow_control::none));
         } catch (const std::exception &e) {
             throw std::runtime_error(std::string("SBUS serial init failed: ") + e.what());
         }
@@ -88,7 +77,6 @@ namespace Dog8Dof {
 
     void SbusReader::processBuffer() {
 
-        std::cout << dataBuffer_.size() << std::endl;
         while (dataBuffer_.size() >= sbusFrameSize) {
             if (dataBuffer_[0] != sbusFrameHeader) {
                 dataBuffer_.erase(dataBuffer_.begin());
@@ -194,15 +182,18 @@ namespace Dog8Dof {
     }
 
     void SbusReader::setBaudrate() {
-        int fd = serialPort_.native_handle();
-        struct serial_struct ser;
-        ioctl(fd, TIOCGSERIAL, &ser);
-        ser.custom_divisor = ser.baud_base / baudrate_;
-        ser.flags &= ~ASYNC_SPD_MASK;
-        ser.flags |= ASYNC_SPD_CUST;
+        const int fd = serialPort_.native_handle();
+        std::string err;
+        const bool ok = configureSerialFdLinux(
+            fd,
+            baudrate_,
+            false, // false=8N1(对齐 pyserial 默认), true=8E2(标准 SBUS)
+            0,     // VMIN
+            1,     // VTIME, 0.1s
+            &err);
 
-        if (ioctl(fd, TIOCSSERIAL, &ser) < 0) {
-            throw std::runtime_error("Failed to set baudrate");
+        if (!ok) {
+            throw std::runtime_error(err);
         }
     }
 
