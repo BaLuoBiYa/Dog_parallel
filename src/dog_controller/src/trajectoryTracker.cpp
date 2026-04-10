@@ -8,7 +8,7 @@ namespace Dog8Dof {
         walkProfile_ = auto_declare<std::string>("walkProfile", "");
         jumpProfile_ = auto_declare<std::string>("jumpProfile", "");
 
-        generateDuration_ = auto_declare<float>("generateDuration", 0.001f);
+        updateDuration_ = 1.0f / this->get_update_rate();
         idleTipX_ = auto_declare<float>("idleTipX", 0.0f);
         idleTipZ_ = auto_declare<float>("idleTipZ", 180.0f);
         commandTopic_ = auto_declare<std::string>("commandTopic", "/dog/command");
@@ -21,13 +21,13 @@ namespace Dog8Dof {
 
         try {
             if (standProfile_.empty() || walkProfile_.empty() || jumpProfile_.empty()) {
-                RCLCPP_ERROR(rclcpp::get_logger("TrajectoryTracker"),
+                RCLCPP_ERROR(this->get_node()->get_logger(),
                              "standProfile, walkProfile, jumpProfile must not be empty");
                 return controller_interface::CallbackReturn::ERROR;
             }
 
             const auto clock = this->get_node()->get_clock();
-            const auto period = rclcpp::Duration::from_seconds(generateDuration_);
+            const auto period = rclcpp::Duration::from_seconds(updateDuration_);
 
             LF_ = std::make_unique<GaitManager>(
                 clock, period, walkProfile_, standProfile_, jumpProfile_);
@@ -102,19 +102,49 @@ namespace Dog8Dof {
         }
         // 缓存硬件命令/状态接口索引
 
-        if (!updateAllGaitManagers()) {
-            RCLCPP_ERROR(this->get_node()->get_logger(),
-                         "Failed to update gait managers");
+        bool ok;
+        ok = LF_->init(Eigen::Vector2f(getPos(0), getPos(1)),
+                       Eigen::Vector2f(getVel(0), getVel(1)),
+                       Eigen::Vector2f(getTau(0), getTau(1)));
+        if (!ok) {
+            RCLCPP_ERROR(this->get_node()->get_logger(), "Failed to init LF motor");
             return controller_interface::CallbackReturn::ERROR;
         }
-        // 更新步态管理器状态
+        // 初始化LF
+
+        ok = RF_->init(Eigen::Vector2f(getPos(2), getPos(3)),
+                       Eigen::Vector2f(getVel(2), getVel(3)),
+                       Eigen::Vector2f(getTau(2), getTau(3)));
+        if (!ok) {
+            RCLCPP_ERROR(this->get_node()->get_logger(), "Failed to init RF motor");
+            return controller_interface::CallbackReturn::ERROR;
+        }
+        // 初始化RF
+
+        ok = LR_->init(Eigen::Vector2f(getPos(4), getPos(5)),
+                       Eigen::Vector2f(getVel(4), getVel(5)),
+                       Eigen::Vector2f(getTau(4), getTau(5)));
+
+        if (!ok) {
+            RCLCPP_ERROR(this->get_node()->get_logger(), "Failed to init LR motor");
+            return controller_interface::CallbackReturn::ERROR;
+        }
+        // 初始化LR
+
+        ok = RR_->init(Eigen::Vector2f(getPos(6), getPos(7)),
+                       Eigen::Vector2f(getVel(6), getVel(7)),
+                       Eigen::Vector2f(getTau(6), getTau(7)));
+        if (!ok) {
+            RCLCPP_ERROR(this->get_node()->get_logger(), "Failed to init RR motor");
+            return controller_interface::CallbackReturn::ERROR;
+        }
+        // 初始化RR
 
         LF_->setStandGait(idleTipX_, idleTipZ_);
         LR_->setStandGait(idleTipX_, idleTipZ_);
         RF_->setStandGait(idleTipX_, idleTipZ_);
         RR_->setStandGait(idleTipX_, idleTipZ_);
         // 设置初始站立姿态
-
         currentMode_ = ControlMode::STAND;
 
         const auto syncStart = this->get_node()->get_clock()->now();
@@ -122,12 +152,6 @@ namespace Dog8Dof {
         LR_->start(syncStart);
         RF_->start(syncStart);
         RR_->start(syncStart);
-
-        if (!updateAllGaitManagers()) {
-            RCLCPP_ERROR(this->get_node()->get_logger(),
-                         "Failed to update initial gait managers");
-            return controller_interface::CallbackReturn::ERROR;
-        }
 
         return controller_interface::CallbackReturn::SUCCESS;
     }
@@ -199,13 +223,6 @@ namespace Dog8Dof {
         (void)time;
         (void)period;
 
-        if (!updateAllGaitManagers()) {
-            RCLCPP_ERROR(this->get_node()->get_logger(),
-                         "Failed to update gait managers");
-            return controller_interface::return_type::ERROR;
-        }
-        // 更新步态管理器状态
-
         if (newCmd_) {
             auto msg_opt = commandBox_.try_get();
             if (msg_opt == std::nullopt) {
@@ -216,9 +233,13 @@ namespace Dog8Dof {
             }
 
             auto gait = msg_opt.value().gait;
-            auto param1 = msg_opt.value().par1.data();
-            auto param2 = msg_opt.value().par2.data();
-            auto param3 = msg_opt.value().par3.data();
+            float param1[4], param2[4], param3[4];
+
+            for (size_t i = 0; i < 4; i++) {
+                param1[i] = msg_opt.value().par1[i];
+                param2[i] = msg_opt.value().par2[i];
+                param3[i] = msg_opt.value().par3[i];
+            }
 
             try {
                 switch (gait) {
@@ -227,6 +248,10 @@ namespace Dog8Dof {
                     LR_->setStandGait(param1[1], param2[1]);
                     RF_->setStandGait(param1[2], param2[2]);
                     RR_->setStandGait(param1[3], param2[3]);
+                    if (currentMode_ != ControlMode::STAND) {
+                        RCLCPP_INFO_STREAM(this->get_node()->get_logger(),
+                                           "Switched to stand");
+                    }
                     currentMode_ = ControlMode::STAND;
                     break;
                 case dog_msg::msg::TrajectoryCommand::WALK:
@@ -250,6 +275,9 @@ namespace Dog8Dof {
                                      param3[3],
                                      kWalkPhaseOffset[3],
                                      currentMode_ == ControlMode::WALK);
+                    if (currentMode_ != ControlMode::WALK) {
+                        RCLCPP_INFO(this->get_node()->get_logger(), "Switched to walk");
+                    }
                     currentMode_ = ControlMode::WALK;
                     break;
                 case dog_msg::msg::TrajectoryCommand::JUMP:
@@ -257,6 +285,9 @@ namespace Dog8Dof {
                     LR_->setJumpGait(param1[1]);
                     RF_->setJumpGait(param1[2]);
                     RR_->setJumpGait(param1[3]);
+                    if (currentMode_ != ControlMode::JUMP) {
+                        RCLCPP_INFO(this->get_node()->get_logger(), "Switched to jump");
+                    }
                     currentMode_ = ControlMode::JUMP;
                     break;
                 default:
@@ -308,6 +339,13 @@ namespace Dog8Dof {
                          "Failed to set currrent joint commands");
             return controller_interface::return_type::ERROR;
         } // 应用当前目标
+
+        if (!updateAllGaitManagers()) {
+            RCLCPP_ERROR(this->get_node()->get_logger(),
+                         "Failed to update gait managers");
+            return controller_interface::return_type::ERROR;
+        }
+        // 更新步态管理器状态
 
         return controller_interface::return_type::OK;
     }
@@ -410,60 +448,60 @@ namespace Dog8Dof {
     }
 
     bool TrajectoryTracker::updateAllGaitManagers() {
-        auto pos = [this](size_t i) {
-            auto opt = state_interfaces_[stateIdx_[i].pos].get_optional();
-            if (!opt.has_value()) {
-                RCLCPP_ERROR(this->get_node()->get_logger(),
-                             "Position state interface for joint %s is not available",
-                             jointNames_[i].c_str());
-                throw std::runtime_error("Missing position state interface");
-            } else {
-                return static_cast<float>(opt.value());
-            }
-        };
+        const bool lfOk = LF_->update(Eigen::Vector2f(getPos(0), getPos(1)),
+                                      Eigen::Vector2f(getVel(0), getVel(1)),
+                                      Eigen::Vector2f(getTau(0), getTau(1)));
 
-        auto vel = [this](size_t i) {
-            auto opt = state_interfaces_[stateIdx_[i].vel].get_optional();
-            if (!opt.has_value()) {
-                RCLCPP_ERROR(this->get_node()->get_logger(),
-                             "Velocity state interface for joint %s is not available",
-                             jointNames_[i].c_str());
-                throw std::runtime_error("Missing velocity state interface");
-            } else {
-                return static_cast<float>(opt.value());
-            }
-        };
+        const bool rfOk = RF_->update(Eigen::Vector2f(getPos(2), getPos(3)),
+                                      Eigen::Vector2f(getVel(2), getVel(3)),
+                                      Eigen::Vector2f(getTau(2), getTau(3)));
 
-        auto eff = [this](size_t i) {
-            auto opt = state_interfaces_[stateIdx_[i].eff].get_optional();
-            if (!opt.has_value()) {
-                RCLCPP_ERROR(this->get_node()->get_logger(),
-                             "Effort state interface for joint %s is not available",
-                             jointNames_[i].c_str());
-                throw std::runtime_error("Missing effort state interface");
-            } else {
-                return static_cast<float>(opt.value());
-            }
-        };
+        const bool lrOk = LR_->update(Eigen::Vector2f(getPos(4), getPos(5)),
+                                      Eigen::Vector2f(getVel(4), getVel(5)),
+                                      Eigen::Vector2f(getTau(4), getTau(5)));
 
-        const bool lfOk = LF_->update(Eigen::Vector2f(pos(0), pos(1)),
-                                      Eigen::Vector2f(vel(0), vel(1)),
-                                      Eigen::Vector2f(eff(0), eff(1)));
-
-        const bool rfOk = RF_->update(Eigen::Vector2f(pos(2), pos(3)),
-                                      Eigen::Vector2f(vel(2), vel(3)),
-                                      Eigen::Vector2f(eff(2), eff(3)));
-
-        const bool lrOk = LR_->update(Eigen::Vector2f(pos(4), pos(5)),
-                                      Eigen::Vector2f(vel(4), vel(5)),
-                                      Eigen::Vector2f(eff(4), eff(5)));
-
-        const bool rrOk = RR_->update(Eigen::Vector2f(pos(6), pos(7)),
-                                      Eigen::Vector2f(vel(6), vel(7)),
-                                      Eigen::Vector2f(eff(6), eff(7)));
+        const bool rrOk = RR_->update(Eigen::Vector2f(getPos(6), getPos(7)),
+                                      Eigen::Vector2f(getVel(6), getVel(7)),
+                                      Eigen::Vector2f(getTau(6), getTau(7)));
 
         return lfOk && rfOk && lrOk && rrOk;
     }
+
+    float TrajectoryTracker::getPos(size_t i) {
+        auto opt = state_interfaces_[stateIdx_[i].pos].get_optional<float>();
+        if (!opt.has_value()) {
+            RCLCPP_ERROR(this->get_node()->get_logger(),
+                         "Position state interface for joint %s is not available",
+                         jointNames_[i].c_str());
+            throw std::runtime_error("Missing position state interface");
+        } else {
+            return static_cast<float>(opt.value());
+        }
+    }
+
+    float TrajectoryTracker::getVel(size_t i) {
+        auto opt = state_interfaces_[stateIdx_[i].vel].get_optional<float>();
+        if (!opt.has_value()) {
+            RCLCPP_ERROR(this->get_node()->get_logger(),
+                         "Velocity state interface for joint %s is not available",
+                         jointNames_[i].c_str());
+            throw std::runtime_error("Missing velocity state interface");
+        } else {
+            return static_cast<float>(opt.value());
+        }
+    };
+
+    float TrajectoryTracker::getTau(size_t i) {
+        auto opt = state_interfaces_[stateIdx_[i].eff].get_optional<float>();
+        if (!opt.has_value()) {
+            RCLCPP_ERROR(this->get_node()->get_logger(),
+                         "Effort state interface for joint %s is not available",
+                         jointNames_[i].c_str());
+            throw std::runtime_error("Missing effort state interface");
+        } else {
+            return static_cast<float>(opt.value());
+        }
+    };
 
 } // namespace Dog8Dof
 

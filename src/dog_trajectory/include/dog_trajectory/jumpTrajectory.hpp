@@ -65,6 +65,8 @@ namespace Dog8Dof {
         Trajectory generateSlipTakeoff(float targetVx, float targetVz);
         Trajectory generateSlipFlight(float flyTime);
         Trajectory generateSlipLanding();
+
+        rclcpp::Logger logger_ = rclcpp::get_logger("jumpTrajectory");
     };
 
 } // namespace Dog8Dof

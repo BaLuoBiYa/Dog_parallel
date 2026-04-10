@@ -1,5 +1,6 @@
 #include "dog_controller/leg.hpp"
 #include <cmath>
+#include <iostream>
 
 namespace Dog8Dof {
     Leg2Dof::Leg2Dof(float upperLength,
@@ -29,12 +30,15 @@ namespace Dog8Dof {
         targetTip_.tau = tau;
 
         if (!tipPosToMotor(pos[0], pos[2])) {
+            std::cerr << "Failed set  tip pos" << std::endl;
             return false;
         }
         if (!tipVelToMotor(vel[0], vel[2])) {
+            std::cerr << "Failed set  tip vel" << std::endl;
             return false;
         }
         if (!tipForceToMotor(tau[0], tau[2])) {
+            std::cerr << "Failed set  tip tau" << std::endl;
             return false;
         }
         return true;

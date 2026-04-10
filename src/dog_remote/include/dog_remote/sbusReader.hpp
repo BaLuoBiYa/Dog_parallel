@@ -13,11 +13,11 @@
 
 namespace Dog8Dof {
 
-    class SbusDecoder {
+    class SbusReader {
       public:
-        explicit SbusDecoder(const std::string &port = "/dev/ttyUSB0",
-                             uint32_t baudrate = 100000);
-        ~SbusDecoder();
+        explicit SbusReader(const std::string &port = "/dev/ttyACM0",
+                            uint32_t baudrate = 100000);
+        ~SbusReader();
 
         uint16_t getChannelValue(size_t channelIndex) const;
         std::array<uint16_t, 16> getAllChannelValues() const;
@@ -60,6 +60,8 @@ namespace Dog8Dof {
 
         mutable std::mutex dataMutex_;
         std::chrono::steady_clock::time_point lastReceiveTime_;
+
+        void setBaudrate();
     };
 
 } // namespace Dog8Dof

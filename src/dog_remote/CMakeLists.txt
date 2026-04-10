@@ -31,7 +31,7 @@ target_link_libraries(${PROJECT_NAME}
 )
 
 add_executable(subsTester
-    src/subsTester.cpp)
+    src/test/subsTester.cpp)
 ament_target_dependencies(subsTester
     rclcpp
 )
@@ -39,9 +39,19 @@ target_link_libraries(subsTester
     ${PROJECT_NAME}
 )
 
+add_executable(twistToGaitTester
+    src/test/twistToGaitTester.cpp)
+ament_target_dependencies(twistToGaitTester
+    rclcpp
+)
+target_link_libraries(twistToGaitTester
+    ${PROJECT_NAME}
+)
+
 install(
   TARGETS ${PROJECT_NAME}
     subsTester
+    twistToGaitTester
   DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )

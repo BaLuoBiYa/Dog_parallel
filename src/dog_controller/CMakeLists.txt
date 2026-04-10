@@ -4,8 +4,8 @@ project(dog_controller)
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
-
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
@@ -22,10 +22,11 @@ find_package(yaml-cpp REQUIRED)
 
 include_directories(include)
 
-add_library(${PROJECT_NAME}
+add_library(${PROJECT_NAME} SHARED
   src/leg.cpp
   src/trajectoryTracker.cpp
   src/trajectoryTrackerSingle.cpp
+  src/gaitManager.cpp
 )
 ament_export_libraries(${PROJECT_NAME})
 ament_target_dependencies(${PROJECT_NAME} 
@@ -39,6 +40,7 @@ ament_target_dependencies(${PROJECT_NAME}
 target_link_libraries(${PROJECT_NAME}
     pinocchio::pinocchio
     Eigen3::Eigen
+    yaml-cpp
 )
 
 add_executable(PinocchionTest
@@ -125,6 +127,8 @@ target_link_libraries(legTest
     ${PROJECT_NAME}
 )
 
+pluginlib_export_plugin_description_file(controller_interface dog_controllerInterface.xml)
+
 install(
   TARGETS ${PROJECT_NAME}
         PinocchionTest
@@ -137,13 +141,7 @@ install(
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 
-pluginlib_export_plugin_description_file(controller_interface dog_controllerInterface.xml)
-
 ament_export_include_directories(include)
-install(
-  DIRECTORY include/
-  DESTINATION include
-)
 
 ament_export_dependencies(
     rclcpp

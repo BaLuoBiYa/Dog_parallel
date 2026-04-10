@@ -17,25 +17,25 @@ namespace Dog8Dof {
         try {
             parameters_ = configFile_.as<parameters_t>();
         } catch (const YAML::Exception &e) {
-            std::cout << "YAML Error" << e.what() << std::endl;
+            RCLCPP_ERROR(logger_, "YAML Error: %s", e.what());
             return false;
         }
 
         if (parameters_.swingDutyCycle >= 1.0f) {
-            std::cout << "Swing duty cycle can't larger than 1!" << std::endl;
+            RCLCPP_ERROR(logger_, "Swing duty cycle must be less than 1!");
             return false;
         }
 
         if (parameters_.transitionVelMax <= 0.0f) {
-            std::cout << "Transition velocity limit must greater than 0!" << std::endl;
+            RCLCPP_ERROR(logger_, "Transition velocity limit must be greater than 0!");
             return false;
         }
         if (parameters_.deltaSpeed[0] < 0.0f) {
-            std::cout << "Delta speed x must greater than 0!" << std::endl;
+            RCLCPP_ERROR(logger_, "Delta speed x must be greater than 0!");
             return false;
         }
         if (parameters_.deltaSpeed[1] < 0.0f) {
-            std::cout << "Delta speed z must greater than 0!" << std::endl;
+            RCLCPP_ERROR(logger_, "Delta speed z must be greater than 0!");
             return false;
         }
         return true;
@@ -47,12 +47,14 @@ namespace Dog8Dof {
                                    float phaseOffset,
                                    bool useNearestStart) {
         if (stepHeight <= 0.0f) {
-            std::cout << "Step height must greater than 0!" << std::endl;
+            RCLCPP_ERROR(logger_, "Step height must be greater than 0!");
             return false;
         }
         if (baseHeight > Const::BODY_HEIGHT_MAX || baseHeight < Const::BODY_HEIGHT_MIN) {
-            std::cout << "Base height must between " << Const::BODY_HEIGHT_MAX << " and "
-                      << Const::BODY_HEIGHT_MIN << std::endl;
+            RCLCPP_ERROR(logger_,
+                         "Base height must be between %f and %f",
+                         static_cast<double>(Const::BODY_HEIGHT_MAX),
+                         static_cast<double>(Const::BODY_HEIGHT_MIN));
             return false;
         }
 

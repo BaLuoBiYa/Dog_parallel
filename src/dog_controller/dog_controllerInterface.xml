@@ -5,4 +5,11 @@
             trajectory tracker for the base of 8 DOF parallel dog
         </description>
     </class>
+
+    <class name="dog8Dof/singleController" type="Dog8Dof::TrajectoryTrackerSingle"
+        base_class_type="controller_interface::ControllerInterface">
+        <description>
+            trajectory tracker for single leg of 8 DOF parallel dog
+        </description>
+    </class>
 </library>

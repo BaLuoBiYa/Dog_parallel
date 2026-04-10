@@ -3,7 +3,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <iostream>
 
 namespace Dog8Dof {
     namespace {
@@ -87,45 +86,44 @@ namespace Dog8Dof {
         try {
             parameters_ = configFile_.as<parameters_t>();
         } catch (const YAML::Exception &e) {
-            std::cout << "YAML Error: " << e.what() << std::endl;
+            RCLCPP_ERROR(logger_, "YAML Error: %s", e.what());
             return false;
         }
 
         if (parameters_.crouchHeight < Const::BODY_HEIGHT_MIN) {
-            std::cout << "Crouch depth should be greater than min body height!"
-                      << std::endl;
+            RCLCPP_ERROR(logger_, "Crouch depth should be greater than min body height!");
             return false;
         }
         if (parameters_.crouchTime <= 0.0f) {
-            std::cout << "Crouch time must be positive!" << std::endl;
+            RCLCPP_ERROR(logger_, "Crouch time must be positive!");
             return false;
         }
         if (parameters_.transitionTime <= 0.0f) {
-            std::cout << "Transition time must be positive!" << std::endl;
+            RCLCPP_ERROR(logger_, "Transition time must be positive!");
             return false;
         }
         if (parameters_.pushTimeMin <= 0.0f ||
             parameters_.pushTimeMax < parameters_.pushTimeMin) {
-            std::cout << "Push time bounds invalid!" << std::endl;
+            RCLCPP_ERROR(logger_, "Push time bounds invalid!");
             return false;
         }
         if (parameters_.pushTimeScale <= 0.0f) {
-            std::cout << "Push time scale must be positive!" << std::endl;
+            RCLCPP_ERROR(logger_, "Push time scale must be positive!");
             return false;
         }
         if (parameters_.takeoffHeight >= parameters_.crouchHeight) {
-            std::cout << "takeoff height can't greater than crouch height" << std::endl;
+            RCLCPP_ERROR(logger_, "Takeoff height must be less than crouch height");
             return false;
         }
         if (parameters_.slipMass <= 0.0f || parameters_.slipRestLength <= 0.0f ||
             parameters_.slipStiffness <= 0.0f || parameters_.slipDamping < 0.0f ||
             parameters_.slipStanceMaxTime <= 0.0f || parameters_.slipStopSpeed <= 0.0f) {
-            std::cout << "SLIP parameters invalid" << std::endl;
+            RCLCPP_ERROR(logger_, "SLIP parameters invalid");
             return false;
         }
         if (parameters_.slipTouchdownAngleDeg <= 0.0f ||
             parameters_.slipTouchdownAngleDeg >= 80.0f) {
-            std::cout << "SLIP touchdown angle should be in (0, 80) deg" << std::endl;
+            RCLCPP_ERROR(logger_, "SLIP touchdown angle should be in (0, 80) deg");
             return false;
         }
 
@@ -134,11 +132,11 @@ namespace Dog8Dof {
 
     bool JumpTrajectory::setTarget(float launchSpeed, float flyTime) {
         if (std::fabs(launchSpeed) <= kEps) {
-            std::cout << "Launch speed magnitude must be postive" << std::endl;
+            RCLCPP_ERROR(logger_, "Launch speed magnitude must be positive");
             return false;
         }
         if (flyTime <= 0.0f) {
-            std::cout << "Fly time must be positive" << std::endl;
+            RCLCPP_ERROR(logger_, "Fly time must be positive");
             return false;
         }
         targetLaunchSpeed_ = launchSpeed;
@@ -164,7 +162,7 @@ namespace Dog8Dof {
         const float vz0 = -0.5f * Const::G * T; // +Z向下，向上起跳为负
         const float vzNeed = std::fabs(vz0);
         if (speedAbs < vzNeed) {
-            std::cout << "Launch speed too small for requested fly time" << std::endl;
+            RCLCPP_ERROR(logger_, "Launch speed too small for requested fly time");
             return false;
         }
 

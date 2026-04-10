@@ -94,6 +94,8 @@ namespace Dog8Dof {
                          float &targetVz) const;
 
         void appendPhase(Phase phase, float duration, Trajectory &traj) const;
+
+        rclcpp::Logger logger_ = rclcpp::get_logger("jumpTrajectoryLegacy");
     };
 
 } // namespace Dog8Dof

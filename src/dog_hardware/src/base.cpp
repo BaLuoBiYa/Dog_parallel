@@ -65,9 +65,7 @@ namespace Dog8Dof {
         (void)pre;
 
         port_.reset();
-        for (auto &m : motor_) {
-            m.reset();
-        }
+        motor_.clear();
         // 清空智能指针
 
         try {
@@ -80,9 +78,8 @@ namespace Dog8Dof {
 
         for (size_t i = 0; i < 8; ++i) {
             try {
-                motor_[i] = std::make_unique<goM8010Interface>(
-                    jointMapping_[jointNames_[i]], port_);
-                motor_[i]->setZero(zeroOffsetByIndex_[i]);
+                motor_.push_back(goM8010Interface(jointMapping_[jointNames_[i]], port_));
+                motor_[i].setZero(zeroOffsetByIndex_[i]);
             } catch (const std::exception &e) {
                 RCLCPP_ERROR(this->get_logger(),
                              "Motor %s connection failed: %s",
@@ -121,9 +118,7 @@ namespace Dog8Dof {
     BaseInterface::on_deactivate(const rclcpp_lifecycle::State &pre) {
         (void)pre;
         for (size_t i = 0; i < 8; ++i) {
-            if (motor_[i]) {
-                motor_[i]->zeroTor();
-            }
+            motor_[i].zeroTor();
         }
         return hardware_interface::CallbackReturn::SUCCESS;
     }
@@ -132,9 +127,7 @@ namespace Dog8Dof {
     BaseInterface::on_error(const rclcpp_lifecycle::State &previous_state) {
         (void)previous_state;
         for (size_t i = 0; i < 8; ++i) {
-            if (motor_[i]) {
-                motor_[i]->emergencyStop();
-            }
+            motor_[i].emergencyStop();
         }
         return hardware_interface::CallbackReturn::SUCCESS;
     }
@@ -145,18 +138,18 @@ namespace Dog8Dof {
         (void)period;
 
         for (size_t i = 0; i < 8; ++i) {
-            if (!set_state<float>(stPos_[i], motor_[i]->getPos(), false) ||
-                !set_state<float>(stVel_[i], motor_[i]->getVel(), false) ||
-                !set_state<float>(stTau_[i], motor_[i]->getTor(), false)) {
+            if (!set_state<float>(stPos_[i], motor_[i].getPos(), false) ||
+                !set_state<float>(stVel_[i], motor_[i].getVel(), false) ||
+                !set_state<float>(stTau_[i], motor_[i].getTor(), false)) {
                 RCLCPP_ERROR_STREAM(get_logger(),
                                     "Set state failed on " << jointNames_[i]);
                 return hardware_interface::return_type::ERROR;
             }
 
-            if (motor_[i]->getError() != "OK") {
+            if (motor_[i].getError() != "OK") {
                 RCLCPP_ERROR_STREAM(
                     get_logger(),
-                    "Motor " << jointNames_[i] << " " << motor_[i]->getError());
+                    "Motor " << jointNames_[i] << " " << motor_[i].getError());
                 return hardware_interface::return_type::ERROR;
             }
         }
@@ -180,7 +173,7 @@ namespace Dog8Dof {
                 return hardware_interface::return_type::ERROR;
             }
 
-            if (!motor_[i]->setHybrid(tor, pos, vel, kp, kd)) {
+            if (!motor_[i].setHybrid(tor, pos, vel, kp, kd)) {
                 RCLCPP_ERROR_STREAM(get_logger(), "Time out on " << jointNames_[i]);
                 return hardware_interface::return_type::ERROR;
             }

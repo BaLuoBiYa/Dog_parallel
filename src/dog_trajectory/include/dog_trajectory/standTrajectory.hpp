@@ -40,6 +40,8 @@ namespace Dog8Dof {
 
         Eigen::Vector2<float> standTipPos_;
         parameters_t parameters_;
+
+        rclcpp::Logger logger_ = rclcpp::get_logger("standTrajectory");
     };
 
 } // namespace Dog8Dof

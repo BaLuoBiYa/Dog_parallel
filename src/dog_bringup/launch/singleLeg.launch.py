@@ -40,14 +40,14 @@ def generate_launch_description():
     controler_manager = Node(
         package="controller_manager",
         executable="ros2_control_node",
-        arguments=[manager_path],
+        parameters=[manager_path],
     )
     # 加载控制管理器
 
     controler_spawner = Node(
         package="controller_manager",
         executable="spawner",
-        arguments=["legged_controller"],
+        arguments=["base_controller"],
     )
     # 加载主控制器
 

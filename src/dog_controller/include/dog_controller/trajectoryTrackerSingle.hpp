@@ -55,7 +55,7 @@ namespace Dog8Dof {
         std::atomic_bool newCmd_{false};
         std::string commandTopic_;
 
-        float generateDuration_;
+        float updateDuration_;
         float idleTipX_, idleTipZ_;
 
         struct JointStateIndex {
@@ -82,5 +82,9 @@ namespace Dog8Dof {
         bool setJointCommands(size_t legIndex, const Motor &target);
         bool setAllJointCommands();
         bool updateAllGaitManagers();
+
+        float getPos(size_t i);
+        float getVel(size_t i);
+        float getTau(size_t i);
     };
 } // namespace Dog8Dof

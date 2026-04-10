@@ -40,7 +40,7 @@ namespace Dog8Dof {
         std::string portName_;
         std::shared_ptr<SerialPort> port_;
 
-        std::unique_ptr<goM8010Interface> motor_[2];
+        std::vector<goM8010Interface> motor_;
         std::string configPath_;
         std::array<float, 2> zeroOffsetByIndex_{};
 

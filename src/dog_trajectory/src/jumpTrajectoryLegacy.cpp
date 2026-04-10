@@ -3,11 +3,8 @@
 #include <algorithm>
 #include <cmath>
 #include <initializer_list>
-#include <iostream>
 
 namespace Dog8Dof {
-    constexpr float kEps = 1e-6f;
-
     JumpTrajectoryLegacy::JumpTrajectoryLegacy(const std::string &configPath,
                                                rclcpp::Duration period)
         : BaseTrajectory(configPath, period) {
@@ -82,7 +79,7 @@ namespace Dog8Dof {
             }
             // 加载多树的配置文件
         } catch (const YAML::Exception &e) {
-            std::cout << "YAML Error: " << e.what() << std::endl;
+            RCLCPP_ERROR(logger_, "YAML Error: %s", e.what());
             return false;
         }
 
@@ -94,15 +91,17 @@ namespace Dog8Dof {
 
             if (currentParameter.baseHeight < Const::LEG_LENGTH_MIN ||
                 currentParameter.baseHeight > Const::LEG_LENGTH_MAX) {
-                std::cout << "In config " << currentConfigName
-                          << " baseHeight out of range" << std::endl;
+                RCLCPP_ERROR(logger_,
+                             "In config %s baseHeight out of range",
+                             currentConfigName.c_str());
                 return false;
             }
 
             if (currentParameter.crouchDepth < 0.0f ||
                 currentParameter.pushStroke < 0.0f) {
-                std::cout << "In config " << currentConfigName
-                          << " crouchDepth/pushStroke must be non-negative" << std::endl;
+                RCLCPP_ERROR(logger_,
+                             "In config %s crouchDepth/pushStroke must be non-negative",
+                             currentConfigName.c_str());
                 return false;
             }
 
@@ -110,26 +109,30 @@ namespace Dog8Dof {
                 currentParameter.pushDuration <= 0.0f ||
                 currentParameter.flightDuration <= 0.0f ||
                 currentParameter.landDuration <= 0.0f) {
-                std::cout << "In config " << currentConfigName
-                          << " phase duration must be positive" << std::endl;
+                RCLCPP_ERROR(logger_,
+                             "In config %s phase duration must be positive",
+                             currentConfigName.c_str());
                 return false;
             }
 
             if (currentParameter.pushVelocityGain <= 0.0f) {
-                std::cout << "In config " << currentConfigName
-                          << " pushVelocityGain must be positive" << std::endl;
+                RCLCPP_ERROR(logger_,
+                             "In config %s pushVelocityGain must be positive",
+                             currentConfigName.c_str());
                 return false;
             }
 
             if (currentParameter.pushXMode != "smooth" &&
                 currentParameter.pushXMode != "explosive") {
-                std::cout << "In config " << currentConfigName
-                          << "pushXMode must be smooth or explosive" << std::endl;
+                RCLCPP_ERROR(logger_,
+                             "In config %s pushXMode must be smooth or explosive",
+                             currentConfigName.c_str());
                 return false;
             }
 
-            std::cout << "Successfully loaded jump config of " << currentConfigName
-                      << std::endl;
+            RCLCPP_INFO(logger_,
+                        "Successfully loaded jump config of %s",
+                        currentConfigName.c_str());
         }
 
         return true;
@@ -139,7 +142,7 @@ namespace Dog8Dof {
         try {
             parameters_ = configMapping_.at(jumpMapping.at(configIndex));
         } catch (const std::out_of_range &e) {
-            std::cout << e.what() << std::endl;
+            RCLCPP_ERROR(logger_, "%s", e.what());
             return false;
         }
         return true;

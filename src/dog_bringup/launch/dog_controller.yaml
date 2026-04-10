@@ -1,17 +1,17 @@
 controller_manager:
   ros__parameters:
-    update_rate: 1000
+    update_rate: 400
 
     base_controller:
-      type: dog8Dof/baseController
+      type: dog8Dof/singleController
 
 base_controller:
-  robotName: dog
-  standProfile: /home/luo/Project/Horse/Dog_parallel/src/dog_bringup/parameters/stand.yaml
-  walkProfile: /home/luo/Project/Horse/Dog_parallel/src/dog_bringup/parameters/walk.yaml
-  jumpProfile: /home/luo/Project/Horse/Dog_parallel/src/dog_bringup/parameters/jumpLegacy.yaml
+  ros__parameters:
+    robotName: dog
+    standProfile: /home/luo/Project/Horse/Dog_parallel/src/dog_bringup/parameters/stand.yaml
+    walkProfile: /home/luo/Project/Horse/Dog_parallel/src/dog_bringup/parameters/walk.yaml
+    jumpProfile: /home/luo/Project/Horse/Dog_parallel/src/dog_bringup/parameters/jumpLegacy.yaml
 
-  generateDuration: 0.001
-  idleTipX: 0.0
-  idleTipZ: 180.0
-  commandTopic: /dog/command
+    idleTipX: 0.0
+    idleTipZ: 180.0
+    commandTopic: /dog/command

@@ -8,7 +8,7 @@ namespace Dog8Dof {
             std::bind(&TwistToGait::twistCallback, this, std::placeholders::_1));
 
         pub_ =
-            this->create_publisher<dog_msg::msg::TrajectoryCommand>("gait_commands", 10);
+            this->create_publisher<dog_msg::msg::TrajectoryCommand>("/dog/command", 10);
     }
 
     void TwistToGait::twistCallback(const geometry_msgs::msg::Twist::SharedPtr msg) {
@@ -50,7 +50,10 @@ namespace Dog8Dof {
 
         for (size_t i = 0; i < 4; i++) {
             command.par2[i] = stepHeightFactor_ * command.par1[i];
-            command.par3[1] = baisHeight_;
+            command.par3[i] = baisHeight_;
         }
+
+        pub_->publish(command);
+        RCLCPP_INFO(this->get_logger(), "Gait updated");
     }
 } // namespace Dog8Dof

@@ -22,7 +22,8 @@ namespace Dog8Dof {
                 jumpTrajectory_.jumpMapping.at(jumpIndex));
         }
         currentTrajectory_ = std::make_unique<JumpTrajectoryLegacy>(jumpTrajectory_);
-        if (!currentTrajectory_->generate(currentTip_)) {
+        // Use current leg tip as generate start point
+        if (!currentTrajectory_->generate(leg_.getTipCurrent())) {
             currentTrajectory_.reset();
             throw std::runtime_error("JumpTrajectoryLegacy::generate failed");
         }
@@ -40,7 +41,8 @@ namespace Dog8Dof {
                 "WalkTrajectory::setTarget failed (invalid walk parameters)");
         }
         currentTrajectory_ = std::make_unique<WalkTrajectory>(walkTrajectory_);
-        if (!currentTrajectory_->generate(currentTip_)) {
+        // Use current leg tip as generate start point
+        if (!currentTrajectory_->generate(leg_.getTipCurrent())) {
             currentTrajectory_.reset();
             throw std::runtime_error("WalkTrajectory::generate failed");
         }
@@ -53,10 +55,29 @@ namespace Dog8Dof {
                 "StandTrajectory::setTarget failed (invalid tip coordinates)");
         }
         currentTrajectory_ = std::make_unique<StandTrajectory>(standTrajecory_);
-        if (!currentTrajectory_->generate(currentTip_)) {
+        // Use current leg tip as generate start point
+        if (!currentTrajectory_->generate(leg_.getTipCurrent())) {
             currentTrajectory_.reset();
             throw std::runtime_error("StandTrajectory::generate failed");
         }
+        return true;
+    }
+
+    bool GaitManager::init(const Eigen::Vector2f &pos,
+                           const Eigen::Vector2f &vel,
+                           const Eigen::Vector2f &tau) {
+        auto logger = rclcpp::get_logger("GaitManager");
+
+        // 更新电机状态到腿模型
+        if (!leg_.updateMotor(pos, vel, tau)) {
+            RCLCPP_ERROR(logger,
+                         "Leg2Dof::updateMotor failed: impossible motor position");
+            return false;
+        }
+
+        // 同步当前末端状态，保证后续 generate() 使用正确起点
+        currentTip_ = leg_.getTipCurrent();
+
         return true;
     }
 

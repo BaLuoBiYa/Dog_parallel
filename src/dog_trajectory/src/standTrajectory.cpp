@@ -17,7 +17,8 @@ namespace Dog8Dof {
         try {
             parameters_ = configFile_.as<parameters_t>();
         } catch (const YAML::Exception &e) {
-            std::cout << "YAML Error" << e.what() << std::endl;
+            RCLCPP_ERROR(
+                rclcpp::get_logger("stand_trajectory"), "YAML Error: %s", e.what());
             return false;
         }
         // xFilter_.set_Alpha(parameters_.filterAlpha);

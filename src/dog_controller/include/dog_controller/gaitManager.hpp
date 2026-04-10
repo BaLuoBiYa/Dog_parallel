@@ -52,6 +52,17 @@ namespace Dog8Dof {
                     const Eigen::Vector2f &vel,
                     const Eigen::Vector2f &tau);
 
+        /**
+         * @brief 初始化姿态
+         * @param pos 前后电机位置。
+         * @param vel 前后电机速度。
+         * @param tau 前后电机力矩。
+         * @return 是否成功更新模型状态
+         */
+        bool init(const Eigen::Vector2f &pos,
+                  const Eigen::Vector2f &vel,
+                  const Eigen::Vector2f &tau);
+
         Motor getFrontTarget() {
             return leg_.getMotorTarget(Leg2Dof::FRONT);
         };

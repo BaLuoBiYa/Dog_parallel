@@ -5,14 +5,20 @@
 #include <iostream>
 #include <stdexcept>
 
+#include <linux/serial.h>
+#include <sys/ioctl.h>
+#include <termios.h>
+
 namespace Dog8Dof {
 
-    SbusDecoder::SbusDecoder(const std::string &port, uint32_t baudrate)
+    SbusReader::SbusReader(const std::string &port, uint32_t baudrate)
         : serialPath_(port), baudrate_(baudrate),
           workGuard_(boost::asio::make_work_guard(ioContext_)), serialPort_(ioContext_) {
+
         try {
             serialPort_.open(serialPath_);
-            serialPort_.set_option(boost::asio::serial_port_base::baud_rate(baudrate_));
+
+            setBaudrate();
             serialPort_.set_option(boost::asio::serial_port_base::character_size(8));
             serialPort_.set_option(boost::asio::serial_port_base::parity(
                 boost::asio::serial_port_base::parity::even));
@@ -30,7 +36,7 @@ namespace Dog8Dof {
         ioThread_ = std::thread([this]() { ioContext_.run(); });
     }
 
-    SbusDecoder::~SbusDecoder() {
+    SbusReader::~SbusReader() {
         running_.store(false);
 
         try {
@@ -50,7 +56,7 @@ namespace Dog8Dof {
         }
     }
 
-    void SbusDecoder::startAsyncRead() {
+    void SbusReader::startAsyncRead() {
         if (!running_.load()) {
             return;
         }
@@ -80,7 +86,9 @@ namespace Dog8Dof {
             });
     }
 
-    void SbusDecoder::processBuffer() {
+    void SbusReader::processBuffer() {
+
+        std::cout << dataBuffer_.size() << std::endl;
         while (dataBuffer_.size() >= sbusFrameSize) {
             if (dataBuffer_[0] != sbusFrameHeader) {
                 dataBuffer_.erase(dataBuffer_.begin());
@@ -106,7 +114,7 @@ namespace Dog8Dof {
         }
     }
 
-    bool SbusDecoder::decodeFrame(const uint8_t *d) {
+    bool SbusReader::decodeFrame(const uint8_t *d) {
         channelData_[0] = ((d[1] | d[2] << 8) & 0x07FF);
         channelData_[1] = ((d[2] >> 3 | d[3] << 5) & 0x07FF);
         channelData_[2] = ((d[3] >> 6 | d[4] << 2 | d[5] << 10) & 0x07FF);
@@ -126,14 +134,14 @@ namespace Dog8Dof {
         return true;
     }
 
-    void SbusDecoder::applyFilter() {
+    void SbusReader::applyFilter() {
         for (size_t ch = 0; ch < sbusChannelSize; ++ch) {
             const uint16_t medianValue = medianFilter(ch, channelData_[ch]);
             channelData_[ch] = hampelFilter(ch, medianValue);
         }
     }
 
-    uint16_t SbusDecoder::medianFilter(size_t channelIndex, uint16_t newValue) {
+    uint16_t SbusReader::medianFilter(size_t channelIndex, uint16_t newValue) {
         filterBuffer_[channelIndex][filterBufferIndex_[channelIndex]] = newValue;
         filterBufferIndex_[channelIndex] =
             (filterBufferIndex_[channelIndex] + 1) % filterWindowSize;
@@ -143,7 +151,7 @@ namespace Dog8Dof {
         return sorted[filterWindowSize / 2];
     }
 
-    uint16_t SbusDecoder::hampelFilter(size_t channelIndex, uint16_t newValue) {
+    uint16_t SbusReader::hampelFilter(size_t channelIndex, uint16_t newValue) {
         auto window = filterBuffer_[channelIndex];
         auto sorted = window;
         std::sort(sorted.begin(), sorted.end());
@@ -165,7 +173,7 @@ namespace Dog8Dof {
                    : newValue;
     }
 
-    uint16_t SbusDecoder::getChannelValue(size_t channelIndex) const {
+    uint16_t SbusReader::getChannelValue(size_t channelIndex) const {
         if (channelIndex >= sbusChannelSize) {
             throw std::out_of_range("channelIndex out of range");
         }
@@ -174,15 +182,28 @@ namespace Dog8Dof {
         return channelData_[channelIndex];
     }
 
-    std::array<uint16_t, 16> SbusDecoder::getAllChannelValues() const {
+    std::array<uint16_t, 16> SbusReader::getAllChannelValues() const {
         std::lock_guard<std::mutex> lock(dataMutex_);
         return channelData_;
     }
 
-    bool SbusDecoder::hasFreshFrame(double timeoutSeconds) const {
+    bool SbusReader::hasFreshFrame(double timeoutSeconds) const {
         std::lock_guard<std::mutex> lock(dataMutex_);
         const auto elapsed = std::chrono::steady_clock::now() - lastReceiveTime_;
         return std::chrono::duration<double>(elapsed).count() <= timeoutSeconds;
+    }
+
+    void SbusReader::setBaudrate() {
+        int fd = serialPort_.native_handle();
+        struct serial_struct ser;
+        ioctl(fd, TIOCGSERIAL, &ser);
+        ser.custom_divisor = ser.baud_base / baudrate_;
+        ser.flags &= ~ASYNC_SPD_MASK;
+        ser.flags |= ASYNC_SPD_CUST;
+
+        if (ioctl(fd, TIOCSSERIAL, &ser) < 0) {
+            throw std::runtime_error("Failed to set baudrate");
+        }
     }
 
 } // namespace Dog8Dof

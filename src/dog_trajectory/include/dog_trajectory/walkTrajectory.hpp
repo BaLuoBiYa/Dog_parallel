@@ -95,6 +95,8 @@ namespace Dog8Dof {
          * @brief 生成原地踏步的轨迹
          */
         Trajectory generateZeroLength();
+
+        rclcpp::Logger logger_ = rclcpp::get_logger("walkTrajectory");
     };
 
 } // namespace Dog8Dof
