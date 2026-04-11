@@ -1,8 +1,8 @@
 #include "dog_hardware/base.hpp"
 #include "unitree_actuator_sdk/serialPort/SerialPort.h"
+
 #include <cstddef>
-// #include <hardware_interface/hardware_component_interface.hpp>
-#include <hardware_interface/types/hardware_interface_return_values.hpp>
+#include <hardware_interface/system_interface.hpp>
 #include <memory>
 #include <rclcpp/logging.hpp>
 #include <yaml-cpp/yaml.h>
@@ -10,8 +10,8 @@
 namespace Dog8Dof {
 
     hardware_interface::CallbackReturn BaseInterface::on_init(
-        const hardware_interface::HardwareComponentInterfaceParams &params) {
-        if (hardware_interface::SystemInterface::on_init(params) !=
+        const hardware_interface::HardwareInfo &info) {
+        if (hardware_interface::SystemInterface::on_init(info) !=
             hardware_interface::CallbackReturn::SUCCESS) {
             return hardware_interface::CallbackReturn::ERROR;
         }
@@ -60,6 +60,42 @@ namespace Dog8Dof {
         return hardware_interface::CallbackReturn::SUCCESS;
     }
 
+    std::vector<hardware_interface::StateInterface>
+    BaseInterface::export_state_interfaces() {
+        std::vector<hardware_interface::StateInterface> state_interfaces;
+        state_interfaces.reserve(8 * 3);
+
+        for (size_t i = 0; i < 8; ++i) {
+            state_interfaces.emplace_back(
+                jointNames_[i], hardware_interface::HW_IF_POSITION, &stPos_[i]);
+            state_interfaces.emplace_back(
+                jointNames_[i], hardware_interface::HW_IF_VELOCITY, &stVel_[i]);
+            state_interfaces.emplace_back(
+                jointNames_[i], hardware_interface::HW_IF_EFFORT, &stTau_[i]);
+        }
+
+        return state_interfaces;
+    }
+
+    std::vector<hardware_interface::CommandInterface>
+    BaseInterface::export_command_interfaces() {
+        std::vector<hardware_interface::CommandInterface> command_interfaces;
+        command_interfaces.reserve(8 * 5);
+
+        for (size_t i = 0; i < 8; ++i) {
+            command_interfaces.emplace_back(
+                jointNames_[i], hardware_interface::HW_IF_POSITION, &cmdPos_[i]);
+            command_interfaces.emplace_back(
+                jointNames_[i], hardware_interface::HW_IF_VELOCITY, &cmdVel_[i]);
+            command_interfaces.emplace_back(
+                jointNames_[i], hardware_interface::HW_IF_EFFORT, &cmdTau_[i]);
+            command_interfaces.emplace_back(jointNames_[i], "kp", &cmdKp_[i]);
+            command_interfaces.emplace_back(jointNames_[i], "kd", &cmdKd_[i]);
+        }
+
+        return command_interfaces;
+    }
+
     hardware_interface::CallbackReturn
     BaseInterface::on_configure(const rclcpp_lifecycle::State &pre) {
         (void)pre;
@@ -97,11 +133,6 @@ namespace Dog8Dof {
     BaseInterface::on_activate(const rclcpp_lifecycle::State &pre) {
         (void)pre;
 
-        if (!cacheInterfaceHandles()) {
-            return hardware_interface::CallbackReturn::ERROR;
-        }
-        // 缓存命令/状态接口
-
         for (size_t i = 0; i < 8; ++i) {
             bool res;
             res = motor_[i].release();
@@ -138,13 +169,9 @@ namespace Dog8Dof {
         (void)period;
 
         for (size_t i = 0; i < 8; ++i) {
-            if (!set_state<float>(stPos_[i], motor_[i].getPos(), false) ||
-                !set_state<float>(stVel_[i], motor_[i].getVel(), false) ||
-                !set_state<float>(stTau_[i], motor_[i].getTor(), false)) {
-                RCLCPP_ERROR_STREAM(get_logger(),
-                                    "Set state failed on " << jointNames_[i]);
-                return hardware_interface::return_type::ERROR;
-            }
+            stPos_[i] = static_cast<double>(motor_[i].getPos());
+            stVel_[i] = static_cast<double>(motor_[i].getVel());
+            stTau_[i] = static_cast<double>(motor_[i].getTor());
 
             if (motor_[i].getError() != "OK") {
                 RCLCPP_ERROR_STREAM(
@@ -161,17 +188,12 @@ namespace Dog8Dof {
         (void)time;
         (void)period;
 
-        float pos = 0.0f, vel = 0.0f, tor = 0.0f, kp = 0.0f, kd = 0.0f;
         for (size_t i = 0; i < 8; ++i) {
-            if (!get_command<float>(cmdPos_[i], pos, false) ||
-                !get_command<float>(cmdVel_[i], vel, false) ||
-                !get_command<float>(cmdTau_[i], tor, false) ||
-                !get_command<float>(cmdKp_[i], kp, false) ||
-                !get_command<float>(cmdKd_[i], kd, false)) {
-                RCLCPP_ERROR_STREAM(get_logger(),
-                                    "Get command failed on " << jointNames_[i]);
-                return hardware_interface::return_type::ERROR;
-            }
+            const float pos = static_cast<float>(cmdPos_[i]);
+            const float vel = static_cast<float>(cmdVel_[i]);
+            const float tor = static_cast<float>(cmdTau_[i]);
+            const float kp = static_cast<float>(cmdKp_[i]);
+            const float kd = static_cast<float>(cmdKd_[i]);
 
             if (!motor_[i].setHybrid(tor, pos, vel, kp, kd)) {
                 RCLCPP_ERROR_STREAM(get_logger(), "Time out on " << jointNames_[i]);
@@ -179,27 +201,6 @@ namespace Dog8Dof {
             }
         }
         return hardware_interface::return_type::OK;
-    }
-
-    bool BaseInterface::cacheInterfaceHandles() {
-        try {
-            for (size_t i = 0; i < 8; ++i) {
-                stPos_[i] = get_state_interface_handle(jointNames_[i] + "/position");
-                stVel_[i] = get_state_interface_handle(jointNames_[i] + "/velocity");
-                stTau_[i] = get_state_interface_handle(jointNames_[i] + "/effort");
-
-                cmdPos_[i] = get_command_interface_handle(jointNames_[i] + "/position");
-                cmdVel_[i] = get_command_interface_handle(jointNames_[i] + "/velocity");
-                cmdTau_[i] = get_command_interface_handle(jointNames_[i] + "/effort");
-                cmdKp_[i] = get_command_interface_handle(jointNames_[i] + "/kp");
-                cmdKd_[i] = get_command_interface_handle(jointNames_[i] + "/kd");
-            }
-        } catch (const std::exception &e) {
-            RCLCPP_ERROR(
-                this->get_logger(), "Cache interface handles failed: %s", e.what());
-            return false;
-        }
-        return true;
     }
 
 } // namespace Dog8Dof
