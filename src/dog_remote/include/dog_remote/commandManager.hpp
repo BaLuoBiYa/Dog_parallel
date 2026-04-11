@@ -5,6 +5,8 @@
 #include <std_srvs/srv/trigger.hpp>
 #include <yaml-cpp/yaml.h>
 
+#include <thread>
+
 #include "dog_msg/msg/trajectory_command.hpp"
 #include "dog_remote/sbusReader.hpp"
 #include "dog_tools/const.hpp"
@@ -41,14 +43,16 @@ namespace Dog8Dof {
         bool visionMode_ = false;
 
         const rclcpp::Logger logger_ = this->get_logger();
+        std::thread sbusHandler_;
 
+        dog_msg::msg::TrajectoryCommand velTocmd(float vx, float vy);
         void twistToCmd(geometry_msgs::msg::Twist::SharedPtr msg);
         bool isInVisionMode() {
             return visionMode_;
         }
         void checkState(const std_srvs::srv::Trigger::Request::SharedPtr req,
                         std_srvs::srv::Trigger::Response::SharedPtr res);
-        dog_msg::msg::TrajectoryCommand remoteToCmd();
+        void remoteToCmd();
     };
 
 } // namespace Dog8Dof

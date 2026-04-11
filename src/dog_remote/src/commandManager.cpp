@@ -41,9 +41,19 @@ namespace Dog8Dof {
 
         visionControl_ = this->create_service<std_srvs::srv::Trigger>(
             visonControlService, &CommandManager::checkState);
+
+        if (sbusHandler_.joinable()) {
+            sbusHandler_.join();
+        }
+
+        sbusHandler_ = std::thread(&CommandManager::remoteToCmd);
     }
 
     void CommandManager::twistToCmd(const geometry_msgs::msg::Twist::SharedPtr msg) {
+
+        if (!isInVisionMode()) {
+            return;
+        }
 
         cmd_.gait = dog_msg::msg::TrajectoryCommand::WALK;
 
@@ -85,6 +95,7 @@ namespace Dog8Dof {
             cmd_.par3[i] = baisHeight_;
         }
 
+        commandPublisher_->publish(cmd_);
         RCLCPP_INFO(this->get_logger(), "Gait updated");
     }
 
@@ -99,6 +110,15 @@ namespace Dog8Dof {
             res->message = "Switch to vision mode";
             visionMode_ = true;
             res->success = true;
+        }
+    }
+
+    void CommandManager::remoteToCmd() {
+        std::array<uint16_t, 16> remoteData;
+        while (true) {
+            if (subs_->hasFreshFrame()) {
+                remoteData = subs_->getAllChannelValues();
+            }
         }
     }
 
