@@ -1,7 +1,7 @@
 #include "dog_hardware/baseSingle.hpp"
 #include "unitree_actuator_sdk/serialPort/SerialPort.h"
 #include <cstddef>
-#include <hardware_interface/hardware_component_interface.hpp>
+// #include <hardware_interface/hardware_component_interface.hpp>
 #include <hardware_interface/types/hardware_interface_return_values.hpp>
 #include <memory>
 #include <rclcpp/logging.hpp>
