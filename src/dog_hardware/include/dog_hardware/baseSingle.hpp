@@ -4,7 +4,6 @@
 #include "unitree_actuator_sdk/serialPort/SerialPort.h"
 #include <array>
 #include <cstdint>
-#include <hardware_interface/hardware_component_interface.hpp>
 #include <hardware_interface/system_interface.hpp>
 #include <map>
 #include <memory>
@@ -15,7 +14,12 @@ namespace Dog8Dof {
     class SingleLegInterface : public hardware_interface::SystemInterface {
       public:
         hardware_interface::CallbackReturn on_init(
-            const hardware_interface::HardwareComponentInterfaceParams &params) override;
+            const hardware_interface::HardwareInfo &info) override;
+
+        std::vector<hardware_interface::StateInterface>
+        export_state_interfaces() override;
+        std::vector<hardware_interface::CommandInterface>
+        export_command_interfaces() override;
 
         hardware_interface::CallbackReturn
         on_configure(const rclcpp_lifecycle::State &pre) override;
@@ -32,8 +36,6 @@ namespace Dog8Dof {
                                               const rclcpp::Duration &period) override;
 
       private:
-        bool cacheInterfaceHandles();
-
         std::map<std::string, uint8_t> jointMapping_;
         // 默认使用左前腿的两个关节，必要时替换为目标关节名
         std::string jointNames_[2] = {"LF_Front", "LF_Rear"};
@@ -44,15 +46,15 @@ namespace Dog8Dof {
         std::string configPath_;
         std::array<float, 2> zeroOffsetByIndex_{};
 
-        std::array<hardware_interface::StateInterface::SharedPtr, 2> stPos_{};
-        std::array<hardware_interface::StateInterface::SharedPtr, 2> stVel_{};
-        std::array<hardware_interface::StateInterface::SharedPtr, 2> stTau_{};
+        std::array<double, 2> stPos_{};
+        std::array<double, 2> stVel_{};
+        std::array<double, 2> stTau_{};
 
-        std::array<hardware_interface::CommandInterface::SharedPtr, 2> cmdPos_{};
-        std::array<hardware_interface::CommandInterface::SharedPtr, 2> cmdVel_{};
-        std::array<hardware_interface::CommandInterface::SharedPtr, 2> cmdTau_{};
-        std::array<hardware_interface::CommandInterface::SharedPtr, 2> cmdKp_{};
-        std::array<hardware_interface::CommandInterface::SharedPtr, 2> cmdKd_{};
+        std::array<double, 2> cmdPos_{};
+        std::array<double, 2> cmdVel_{};
+        std::array<double, 2> cmdTau_{};
+        std::array<double, 2> cmdKp_{};
+        std::array<double, 2> cmdKd_{};
     };
 
 } // namespace Dog8Dof
