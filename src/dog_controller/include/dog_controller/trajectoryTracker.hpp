@@ -1,9 +1,9 @@
 #pragma once
 #include <controller_interface/controller_interface.hpp>
 #include <rclcpp/rclcpp.hpp>
-#include <realtime_tools/realtime_thread_safe_box.hpp>
 
 #include "dog_controller/gaitManager.hpp"
+#include "dog_controller/threadSafeMessageBox.hpp"
 #include "dog_msg/msg/trajectory_command.hpp"
 
 namespace Dog8Dof {
@@ -52,8 +52,7 @@ namespace Dog8Dof {
                                       "RR_Rear"};
 
         // Subscriber
-        realtime_tools::RealtimeThreadSafeBox<dog_msg::msg::TrajectoryCommand>
-            commandBox_;
+        ThreadSafeMessageBox<dog_msg::msg::TrajectoryCommand> commandBox_;
         rclcpp::Subscription<dog_msg::msg::TrajectoryCommand>::SharedPtr commandSub_;
         std::atomic_bool newCmd_{false};
         std::string commandTopic_;

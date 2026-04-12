@@ -9,14 +9,14 @@
 
 namespace Dog8Dof {
 
-    hardware_interface::CallbackReturn
-    SingleLegInterface::on_init(const hardware_interface::HardwareInfo &info) {
-        if (hardware_interface::SystemInterface::on_init(info) !=
+    hardware_interface::CallbackReturn SingleLegInterface::on_init(
+        const hardware_interface::HardwareComponentInterfaceParams &params) {
+        if (hardware_interface::SystemInterface::on_init(params) !=
             hardware_interface::CallbackReturn::SUCCESS) {
             return hardware_interface::CallbackReturn::ERROR;
         }
 
-        configPath_ = info_.hardware_parameters["configPath"];
+        configPath_ = params.hardware_info.hardware_parameters.find("configPath")->second;
         // trim left
         configPath_.erase(
             configPath_.begin(),
@@ -65,12 +65,9 @@ namespace Dog8Dof {
         state_interfaces.reserve(2 * 3);
 
         for (size_t i = 0; i < 2; ++i) {
-            state_interfaces.emplace_back(
-                jointNames_[i], hardware_interface::HW_IF_POSITION, &stPos_[i]);
-            state_interfaces.emplace_back(
-                jointNames_[i], hardware_interface::HW_IF_VELOCITY, &stVel_[i]);
-            state_interfaces.emplace_back(
-                jointNames_[i], hardware_interface::HW_IF_EFFORT, &stTau_[i]);
+            state_interfaces.emplace_back(jointNames_[i], "position", &stPos_[i]);
+            state_interfaces.emplace_back(jointNames_[i], "velocity", &stVel_[i]);
+            state_interfaces.emplace_back(jointNames_[i], "effort", &stTau_[i]);
         }
 
         return state_interfaces;
@@ -82,12 +79,9 @@ namespace Dog8Dof {
         command_interfaces.reserve(2 * 5);
 
         for (size_t i = 0; i < 2; ++i) {
-            command_interfaces.emplace_back(
-                jointNames_[i], hardware_interface::HW_IF_POSITION, &cmdPos_[i]);
-            command_interfaces.emplace_back(
-                jointNames_[i], hardware_interface::HW_IF_VELOCITY, &cmdVel_[i]);
-            command_interfaces.emplace_back(
-                jointNames_[i], hardware_interface::HW_IF_EFFORT, &cmdTau_[i]);
+            command_interfaces.emplace_back(jointNames_[i], "position", &cmdPos_[i]);
+            command_interfaces.emplace_back(jointNames_[i], "velocity", &cmdVel_[i]);
+            command_interfaces.emplace_back(jointNames_[i], "effort", &cmdTau_[i]);
             command_interfaces.emplace_back(jointNames_[i], "kp", &cmdKp_[i]);
             command_interfaces.emplace_back(jointNames_[i], "kd", &cmdKd_[i]);
         }

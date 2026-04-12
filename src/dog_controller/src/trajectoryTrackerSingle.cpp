@@ -166,7 +166,7 @@ namespace Dog8Dof {
 
         if (newCmd_) {
             auto msg_opt = commandBox_.try_get();
-            if (msg_opt == std::nullopt) {
+            if (!msg_opt.has_value()) {
                 RCLCPP_ERROR(get_node()->get_logger(),
                              "Failed to read command, continue current command");
                 newCmd_ = false;

@@ -11,8 +11,8 @@
 namespace Dog8Dof {
     class BaseInterface : public hardware_interface::SystemInterface {
       public:
-        hardware_interface::CallbackReturn
-        on_init(const hardware_interface::HardwareInfo &info) override;
+        hardware_interface::CallbackReturn on_init(
+            const hardware_interface::HardwareComponentInterfaceParams &params) override;
 
         std::vector<hardware_interface::StateInterface>
         export_state_interfaces() override;
