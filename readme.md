@@ -43,3 +43,14 @@
 
 # 已知问题：
 ## 1.Ubuntu 22.04版本的yaml-cpp库为0.7.0,无法正常安装，需要手动安装0.8.0以上版本
+```bash
+git clone https://github.com/jbeder/yaml-cpp.git
+先尝试仅克隆仓库，colocon应该会自动加入编译，如果编译失败，请安装库
+
+cd yaml-cpp
+mkdir build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DCMAKE_INSTALL_PREFIX=/usr/local
+make -j$(nproc)
+sudo make install
+sudo ldconfig
+```
