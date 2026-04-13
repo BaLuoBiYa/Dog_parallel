@@ -12,7 +12,7 @@ find_package(ament_cmake REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(controller_interface REQUIRED)
-find_package(pinocchio REQUIRED)
+# find_package(pinocchio REQUIRED)
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 
 find_package(dog_tools REQUIRED)
@@ -32,28 +32,28 @@ ament_export_libraries(${PROJECT_NAME})
 ament_target_dependencies(${PROJECT_NAME} 
     rclcpp
     controller_interface
-    pinocchio 
+    # pinocchio 
     Eigen3
     dog_tools
     dog_trajectory
     dog_msg)
 target_link_libraries(${PROJECT_NAME}
-    pinocchio::pinocchio
+    # pinocchio::pinocchio
     Eigen3::Eigen
-    yaml-cpp
+    yaml-cpp::yaml-cpp
 )
 
-add_executable(PinocchionTest
-  src/test/PinocchionTest.cpp
-)
-ament_target_dependencies(PinocchionTest
-  rclcpp
-  pinocchio
-)
-target_link_libraries(PinocchionTest
-    pinocchio::pinocchio
-    Eigen3::Eigen
-)
+# add_executable(PinocchionTest
+#   src/test/PinocchionTest.cpp
+# )
+# ament_target_dependencies(PinocchionTest
+#   rclcpp
+#   pinocchio
+# )
+# target_link_libraries(PinocchionTest
+#     pinocchio::pinocchio
+#     Eigen3::Eigen
+# )
 
 add_executable(standTest
     src/test/standTest.cpp
@@ -67,7 +67,7 @@ ament_target_dependencies(standTest
 )
 target_link_libraries(standTest
     Eigen3::Eigen
-    yaml-cpp
+    yaml-cpp::yaml-cpp
 )
 
 add_executable(walkTest
@@ -82,7 +82,7 @@ ament_target_dependencies(walkTest
 )
 target_link_libraries(walkTest
     Eigen3::Eigen
-    yaml-cpp
+    yaml-cpp::yaml-cpp
 )
 
 add_executable(jumpTest
@@ -97,7 +97,7 @@ ament_target_dependencies(jumpTest
 )
 target_link_libraries(jumpTest
     Eigen3::Eigen
-    yaml-cpp
+    yaml-cpp::yaml-cpp
 )
 
 add_executable(jumpLegacyTest
@@ -112,7 +112,7 @@ ament_target_dependencies(jumpLegacyTest
 )
 target_link_libraries(jumpLegacyTest
     Eigen3::Eigen
-    yaml-cpp
+    yaml-cpp::yaml-cpp
 )
 
 add_executable(legTest 
@@ -131,7 +131,7 @@ pluginlib_export_plugin_description_file(controller_interface dog_controllerInte
 
 install(
   TARGETS ${PROJECT_NAME}
-        PinocchionTest
+        # PinocchionTest
         standTest
         walkTest
         jumpTest

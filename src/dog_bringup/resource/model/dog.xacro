@@ -36,7 +36,7 @@
     <ros2_control name="go8010" type="system">
         <hardware>
             <param name="configPath">
-                /home/luo/Project/Horse/Dog_parallel/src/dog_bringup/parameters/motors.yaml</param>
+                /home/sunrise/Dog_parallel/src/dog_bringup/parameters/motors.yaml</param>
             <plugin>dog8Dof/singleBaseHardware</plugin>
         </hardware>
 

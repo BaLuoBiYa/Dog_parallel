@@ -9,8 +9,8 @@
 
 namespace Dog8Dof {
 
-    hardware_interface::CallbackReturn BaseInterface::on_init(
-        const hardware_interface::HardwareInfo &info) {
+    hardware_interface::CallbackReturn
+    BaseInterface::on_init(const hardware_interface::HardwareInfo &info) {
         if (hardware_interface::SystemInterface::on_init(info) !=
             hardware_interface::CallbackReturn::SUCCESS) {
             return hardware_interface::CallbackReturn::ERROR;
@@ -38,7 +38,7 @@ namespace Dog8Dof {
             for (size_t i = 0; i < 8; ++i) {
                 const YAML::Node joint_node = root[jointNames_[i]];
                 if (!joint_node) {
-                    RCLCPP_ERROR(this->get_logger(),
+                    RCLCPP_ERROR(rclcpp::get_logger("base"),
                                  "Missing joint node: %s",
                                  jointNames_[i].c_str());
                     return hardware_interface::CallbackReturn::ERROR;
@@ -53,7 +53,7 @@ namespace Dog8Dof {
             // 从YAML文件读取参数
 
         } catch (const std::exception &e) {
-            RCLCPP_ERROR(this->get_logger(), "on_init exception: %s", e.what());
+            RCLCPP_ERROR(rclcpp::get_logger("base"), "on_init exception: %s", e.what());
             return hardware_interface::CallbackReturn::ERROR;
         }
 
@@ -66,12 +66,9 @@ namespace Dog8Dof {
         state_interfaces.reserve(8 * 3);
 
         for (size_t i = 0; i < 8; ++i) {
-            state_interfaces.emplace_back(
-                jointNames_[i], hardware_interface::HW_IF_POSITION, &stPos_[i]);
-            state_interfaces.emplace_back(
-                jointNames_[i], hardware_interface::HW_IF_VELOCITY, &stVel_[i]);
-            state_interfaces.emplace_back(
-                jointNames_[i], hardware_interface::HW_IF_EFFORT, &stTau_[i]);
+            state_interfaces.emplace_back(jointNames_[i], "position", &stPos_[i]);
+            state_interfaces.emplace_back(jointNames_[i], "velocity", &stVel_[i]);
+            state_interfaces.emplace_back(jointNames_[i], "effort", &stTau_[i]);
         }
 
         return state_interfaces;
@@ -83,12 +80,9 @@ namespace Dog8Dof {
         command_interfaces.reserve(8 * 5);
 
         for (size_t i = 0; i < 8; ++i) {
-            command_interfaces.emplace_back(
-                jointNames_[i], hardware_interface::HW_IF_POSITION, &cmdPos_[i]);
-            command_interfaces.emplace_back(
-                jointNames_[i], hardware_interface::HW_IF_VELOCITY, &cmdVel_[i]);
-            command_interfaces.emplace_back(
-                jointNames_[i], hardware_interface::HW_IF_EFFORT, &cmdTau_[i]);
+            command_interfaces.emplace_back(jointNames_[i], "position", &cmdPos_[i]);
+            command_interfaces.emplace_back(jointNames_[i], "velocity", &cmdVel_[i]);
+            command_interfaces.emplace_back(jointNames_[i], "effort", &cmdTau_[i]);
             command_interfaces.emplace_back(jointNames_[i], "kp", &cmdKp_[i]);
             command_interfaces.emplace_back(jointNames_[i], "kd", &cmdKd_[i]);
         }
@@ -107,7 +101,8 @@ namespace Dog8Dof {
         try {
             port_ = std::make_shared<SerialPort>(portName_);
         } catch (const std::exception &e) {
-            RCLCPP_ERROR(this->get_logger(), "RS485 connection failed: %s", e.what());
+            RCLCPP_ERROR(
+                rclcpp::get_logger("base"), "RS485 connection failed: %s", e.what());
             return hardware_interface::CallbackReturn::ERROR;
         }
         // 创建串口通信指针
@@ -117,7 +112,7 @@ namespace Dog8Dof {
                 motor_.push_back(goM8010Interface(jointMapping_[jointNames_[i]], port_));
                 motor_[i].setZero(zeroOffsetByIndex_[i]);
             } catch (const std::exception &e) {
-                RCLCPP_ERROR(this->get_logger(),
+                RCLCPP_ERROR(rclcpp::get_logger("base"),
                              "Motor %s connection failed: %s",
                              jointNames_[i].c_str(),
                              e.what());
@@ -175,7 +170,7 @@ namespace Dog8Dof {
 
             if (motor_[i].getError() != "OK") {
                 RCLCPP_ERROR_STREAM(
-                    get_logger(),
+                    rclcpp::get_logger("base"),
                     "Motor " << jointNames_[i] << " " << motor_[i].getError());
                 return hardware_interface::return_type::ERROR;
             }
@@ -196,7 +191,8 @@ namespace Dog8Dof {
             const float kd = static_cast<float>(cmdKd_[i]);
 
             if (!motor_[i].setHybrid(tor, pos, vel, kp, kd)) {
-                RCLCPP_ERROR_STREAM(get_logger(), "Time out on " << jointNames_[i]);
+                RCLCPP_ERROR_STREAM(rclcpp::get_logger("base"),
+                                    "Time out on " << jointNames_[i]);
                 return hardware_interface::return_type::ERROR;
             }
         }

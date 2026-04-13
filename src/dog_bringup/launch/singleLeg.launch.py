@@ -33,6 +33,7 @@ def generate_launch_description():
         package="robot_state_publisher",
         executable="robot_state_publisher",
         parameters=[{"robot_description": robot_description_content}],
+        remappings=[("robot_description", "/controller_manager/robot_description")],
         output="screen"
         )
     # 发布机器人的urdf描述，提供给ros2 control
@@ -41,6 +42,7 @@ def generate_launch_description():
         package="controller_manager",
         executable="ros2_control_node",
         parameters=[manager_path],
+        output="screen"
     )
     # 加载控制管理器
 
@@ -48,6 +50,7 @@ def generate_launch_description():
         package="controller_manager",
         executable="spawner",
         arguments=["base_controller"],
+        output="screen"
     )
     # 加载主控制器
 
@@ -58,12 +61,12 @@ def generate_launch_description():
     )
 
     timeLine1 = TimerAction(
-        period=3.0,
+        period=6.0,
         actions=[controler_manager],
     )
 
     timeLine2 = TimerAction(
-        period=3.0,
+        period=12.0,
         actions=[controler_spawner],
     )
     

@@ -225,7 +225,7 @@ namespace Dog8Dof {
 
         if (newCmd_) {
             auto msg_opt = commandBox_.try_get();
-            if (msg_opt == std::nullopt) {
+            if (!msg_opt.has_value()) {
                 RCLCPP_ERROR(get_node()->get_logger(),
                              "Failed to read command,continue current command");
                 newCmd_ = false;
@@ -399,31 +399,12 @@ namespace Dog8Dof {
 
     bool TrajectoryTracker::setJointCommands(size_t legIndex, const Motor &target) {
         const JointCmdIndex &idx = cmdIdx_[legIndex];
-        rclcpp::Logger logger = this->get_node()->get_logger();
 
-        if (!command_interfaces_[idx.pos].set_value(target.pos)) {
-            RCLCPP_ERROR(
-                logger, "Failed to set %s/position", jointNames_[legIndex].c_str());
-            return false;
-        }
-        if (!command_interfaces_[idx.vel].set_value(target.vel)) {
-            RCLCPP_ERROR(
-                logger, "Failed to set %s/velocity", jointNames_[legIndex].c_str());
-            return false;
-        }
-        if (!command_interfaces_[idx.eff].set_value(target.tau)) {
-            RCLCPP_ERROR(
-                logger, "Failed to set %s/effort", jointNames_[legIndex].c_str());
-            return false;
-        }
-        if (!command_interfaces_[idx.kp].set_value(target.kp)) {
-            RCLCPP_ERROR(logger, "Failed to set %s/kp", jointNames_[legIndex].c_str());
-            return false;
-        }
-        if (!command_interfaces_[idx.kd].set_value(target.kd)) {
-            RCLCPP_ERROR(logger, "Failed to set %s/kd", jointNames_[legIndex].c_str());
-            return false;
-        }
+        command_interfaces_[idx.pos].set_value(target.pos);
+        command_interfaces_[idx.vel].set_value(target.vel);
+        command_interfaces_[idx.eff].set_value(target.tau);
+        command_interfaces_[idx.kp].set_value(target.kp);
+        command_interfaces_[idx.kd].set_value(target.kd);
         return true;
     }
 
@@ -468,39 +449,15 @@ namespace Dog8Dof {
     }
 
     float TrajectoryTracker::getPos(size_t i) {
-        auto opt = state_interfaces_[stateIdx_[i].pos].get_optional<float>();
-        if (!opt.has_value()) {
-            RCLCPP_ERROR(this->get_node()->get_logger(),
-                         "Position state interface for joint %s is not available",
-                         jointNames_[i].c_str());
-            throw std::runtime_error("Missing position state interface");
-        } else {
-            return static_cast<float>(opt.value());
-        }
+        return state_interfaces_[stateIdx_[i].pos].get_value();
     }
 
     float TrajectoryTracker::getVel(size_t i) {
-        auto opt = state_interfaces_[stateIdx_[i].vel].get_optional<float>();
-        if (!opt.has_value()) {
-            RCLCPP_ERROR(this->get_node()->get_logger(),
-                         "Velocity state interface for joint %s is not available",
-                         jointNames_[i].c_str());
-            throw std::runtime_error("Missing velocity state interface");
-        } else {
-            return static_cast<float>(opt.value());
-        }
+        return state_interfaces_[stateIdx_[i].vel].get_value();
     };
 
     float TrajectoryTracker::getTau(size_t i) {
-        auto opt = state_interfaces_[stateIdx_[i].eff].get_optional<float>();
-        if (!opt.has_value()) {
-            RCLCPP_ERROR(this->get_node()->get_logger(),
-                         "Effort state interface for joint %s is not available",
-                         jointNames_[i].c_str());
-            throw std::runtime_error("Missing effort state interface");
-        } else {
-            return static_cast<float>(opt.value());
-        }
+        return state_interfaces_[stateIdx_[i].eff].get_value();
     };
 
 } // namespace Dog8Dof

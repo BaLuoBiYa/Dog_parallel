@@ -38,12 +38,12 @@ target_link_libraries(${PROJECT_NAME}
     yaml-cpp::yaml-cpp
 )
 
-add_executable(subsTester
-    src/test/subsTester.cpp)
-ament_target_dependencies(subsTester
+add_executable(sbusTester
+    src/test/sbusTester.cpp)
+ament_target_dependencies(sbusTester
     rclcpp
 )
-target_link_libraries(subsTester
+target_link_libraries(sbusTester
     ${PROJECT_NAME}
 )
 
@@ -56,22 +56,22 @@ target_link_libraries(twistToGaitTester
     ${PROJECT_NAME}
 )
 
-add_executable(commandManager
-    src/commandManager.cpp)
-ament_target_dependencies(commandManager
-    rclcpp
-    std_srvs
-    dog_msg
-)
-target_link_libraries(commandManager
-    ${PROJECT_NAME}
-)
+# add_executable(commandManager
+#     src/commandManager.cpp)
+# ament_target_dependencies(commandManager
+#     rclcpp
+#     std_srvs
+#     dog_msg
+# )
+# target_link_libraries(commandManager
+#     ${PROJECT_NAME}
+# )
 
 install(
   TARGETS ${PROJECT_NAME}
-    subsTester
+    sbusTester
     twistToGaitTester
-    commandManager
+    # commandManager
   DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )

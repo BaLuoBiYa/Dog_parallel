@@ -12,7 +12,7 @@ int main() {
         cmd.motorType = MotorType::GO_M8010_6;
         data.motorType = MotorType::GO_M8010_6;
         cmd.mode = queryMotorMode(MotorType::GO_M8010_6, MotorMode::FOC);
-        cmd.id = 15;
+        cmd.id = 0;
         cmd.kp = 0.0;
         cmd.kd = 0.01;
         cmd.q = 0.0;

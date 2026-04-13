@@ -17,7 +17,7 @@ BreakBeforeBraces: Attach
 
 NamespaceIndentation: All
 PointerAlignment: Right
-ReferenceAlignment: Right
+# ReferenceAlignment: Right
 SpaceBeforeParens: ControlStatements
 SpaceInEmptyParentheses: false
 SpacesInAngles: false

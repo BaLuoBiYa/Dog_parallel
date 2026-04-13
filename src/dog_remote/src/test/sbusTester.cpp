@@ -35,10 +35,12 @@ int main(int argc, char **argv) {
             }
 
             for (size_t i = 0; i < channels.size(); ++i) {
-                std::cout << "\r\033[2K" << "CH" << i << "=" << channels[i] << std::endl;
+                std::cout << "\r\033[2K"
+                          << "CH" << i << "=" << channels[i] << std::endl;
             }
             auto dur = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-            std::cout << "\r\033[2K" << "Duration=" << dur.count() << std::endl;
+            std::cout << "\r\033[2K"
+                      << "Duration=" << dur.count() << std::endl;
             std::cout << std::flush;
             first = false;
         }
