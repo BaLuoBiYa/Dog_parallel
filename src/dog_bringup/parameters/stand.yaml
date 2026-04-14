@@ -1,5 +1,5 @@
-standKp: 0.8
-standKd: 0.15
+standKp: 0.05
+standKd: 0.0
 
 transitionKp: 0.6
 transitionKd: 0.01
