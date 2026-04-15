@@ -70,7 +70,7 @@ namespace Dog8Dof {
 
         if (!tts_.extract_speaker_embedding(
                 refSamples.data(), refSamples.size(), embedding_)) {
-            RCLCPP_WARN(node_->get_logger(), "Failed to load referance audio");
+            RCLCPP_ERROR(node_->get_logger(), "Failed to load referance audio");
             throw std::runtime_error(tts_.get_error());
         }
         // 加载源音频并进行克隆，保存音色数据
@@ -86,23 +86,23 @@ namespace Dog8Dof {
             return empty;
         } else {
             if (params_.print_timing) {
-                RCLCPP_INFO(node_->get_logger(), "\nTiming:");
-                RCLCPP_INFO_STREAM(
+                RCLCPP_DEBUG(node_->get_logger(), "\nTiming:");
+                RCLCPP_DEBUG_STREAM(
                     node_->get_logger(),
                     "  Load:      " << (long long)result.t_load_ms << " ms");
-                RCLCPP_INFO_STREAM(
+                RCLCPP_DEBUG_STREAM(
                     node_->get_logger(),
                     "  Tokenize:  " << (long long)result.t_tokenize_ms << " ms");
-                RCLCPP_INFO_STREAM(
+                RCLCPP_DEBUG_STREAM(
                     node_->get_logger(),
                     "  Encode:    " << (long long)result.t_encode_ms << " ms");
-                RCLCPP_INFO_STREAM(
+                RCLCPP_DEBUG_STREAM(
                     node_->get_logger(),
                     "  Generate:  " << (long long)result.t_generate_ms << " ms");
-                RCLCPP_INFO_STREAM(
+                RCLCPP_DEBUG_STREAM(
                     node_->get_logger(),
                     "  Decode:    " << (long long)result.t_decode_ms << " ms");
-                RCLCPP_INFO_STREAM(
+                RCLCPP_DEBUG_STREAM(
                     node_->get_logger(),
                     "  Total:     " << (long long)result.t_total_ms << " ms");
             }

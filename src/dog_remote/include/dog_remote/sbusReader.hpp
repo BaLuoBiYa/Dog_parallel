@@ -38,7 +38,6 @@ namespace Dog8Dof {
         uint16_t medianFilter(size_t channelIndex, uint16_t newValue);
         uint16_t hampelFilter(size_t channelIndex, uint16_t newValue);
 
-      private:
         std::string serialPath_;
         uint32_t baudrate_;
 
