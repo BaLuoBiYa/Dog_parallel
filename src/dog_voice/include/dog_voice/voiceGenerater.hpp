@@ -9,14 +9,18 @@ namespace Dog8Dof {
     class VoiceGenerater {
       public:
         VoiceGenerater(const rclcpp::Node::SharedPtr node,
-                       const std::string &modelPath,
-                       const std::string &refAudioPath,
                        const uint8_t threadNum = 4,
                        bool printInfo = true);
 
+        bool init(const std::string &modelDir, const std::string &refAudioPath);
+        size_t getSampleRate() {
+            return 24000;
+        }
         std::vector<float> generateAudio(const std::string &text);
 
       private:
+        bool isInit_ = false;
+
         const rclcpp::Node::SharedPtr node_;
         rclcpp::Subscription<std_msgs::msg::String>::SharedPtr sentenceReceiver_;
 

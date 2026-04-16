@@ -217,5 +217,6 @@ int main(int argc, char **argv) {
     rclcpp::init(argc, argv);
     auto cm = std::make_shared<Dog8Dof::CommandManager>();
     rclcpp::spin(cm);
+    rclcpp::shutdown();
     return 0;
 }
