@@ -1,13 +1,24 @@
-expFactor: 0.5
 port: /dev/ttyUSB0
+
+topic:
+  twist: /dog/twist
+  mode: /dog/mode
 
 channel:
   move:
     x: 1
     y: 2
 
-  slope:
-    x: 3
-    y: 4
+  roll: 3
+  pitch: 4
 
   height: 5
+
+controlSetting:
+  maxLinerSpeed: 0.5
+  maxAngularSpeed: 1.0
+  maxHeight: 0.3
+  maxStepDuration: 0.5
+  maxRoll: 0.5
+  maxPitch: 0.5
+  expFactor: 0.5
