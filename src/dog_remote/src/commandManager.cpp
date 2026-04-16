@@ -1,4 +1,4 @@
-// #include "dog_remote/commandManager.hpp"
+#include "dog_remote/commandManager.hpp"
 
 namespace Dog8Dof {
     CommandManager::CommandManager(std::string nodeName) : rclcpp::Node(nodeName) {
@@ -13,9 +13,9 @@ namespace Dog8Dof {
             twistTopic = topic["twist"].as<std::string>();
             modeTopic = topic["mode"].as<std::string>();
 
-            //             YAML::Node channel = node["channel"];
-            //             controllerMapping_.moveX = channel["move"]["x"].as<uint8_t>();
-            //             controllerMapping_.moveY = channel["move"]["y"].as<uint8_t>();
+            YAML::Node channel = node["channel"];
+            controllerMapping_.moveX = channel["move"]["x"].as<uint8_t>();
+            controllerMapping_.moveY = channel["move"]["y"].as<uint8_t>();
 
             controllerMapping_.roll = channel["roll"].as<uint8_t>();
             controllerMapping_.pitch = channel["pitch"].as<uint8_t>();
@@ -38,21 +38,20 @@ namespace Dog8Dof {
             throw std::runtime_error(e.what());
         }
 
-        //         try {
-        //             subs_ = std::make_unique<SbusReader>(portName, 100000);
-        //         } catch (std::exception &e) {
-        //             RCLCPP_ERROR_STREAM(logger_, "Can't connect to remote");
-        //             throw std::runtime_error(e.what());
-        //         }
+        try {
+            subs_ = std::make_unique<SbusReader>(portName, 100000);
+        } catch (std::exception &e) {
+            RCLCPP_ERROR_STREAM(logger_, "Can't connect to remote");
+            throw std::runtime_error(e.what());
+        }
 
         visionCmd_ = this->create_subscription<geometry_msgs::msg::Twist>(
             twistTopic,
             rclcpp::QoS(1),
             std::bind(&CommandManager::twistCallback, this, std::placeholders::_1));
 
-        //         commandPublisher_ =
-        //         this->create_publisher<dog_msg::msg::TrajectoryCommand>(
-        //             commandTopic, rclcpp::QoS(1));
+        commandPublisher_ = this->create_publisher<dog_msg::msg::TrajectoryCommand>(
+            commandTopic, rclcpp::QoS(1));
 
         visionControl_ = this->create_service<std_srvs::srv::Trigger>(
             modeTopic,
@@ -61,9 +60,9 @@ namespace Dog8Dof {
                       std::placeholders::_1,
                       std::placeholders::_2));
 
-        //         if (sbusHandler_.joinable()) {
-        //             sbusHandler_.join();
-        //         }
+        if (sbusHandler_.joinable()) {
+            sbusHandler_.join();
+        }
 
         sbusHandler_ = std::thread([this] { this->remoteToCmd(); });
     }
@@ -89,17 +88,17 @@ namespace Dog8Dof {
         // 第三边
         const float anotherAngle = M_PI - atan2(bodyWidth, bodyLength) - expectedAngle;
 
-        //         // 步长偏移
-        //         float bias = 0.0f;
-        //         // 防止计算得到的数值小于0
-        //         if (anotherAngle < 0) {
-        //             bias = 0;
-        //         } else {
-        //             // 通过正弦定理得到步长偏置
-        //             bias = sin(expectedAngle) *
-        //                    (sqrt(bodyLength * bodyLength + bodyWidth * bodyWidth) / 2)
-        //                    / sin(anotherAngle);
-        //         }
+        // 步长偏移
+        float bias = 0.0f;
+        // 防止计算得到的数值小于0
+        if (anotherAngle < 0) {
+            bias = 0;
+        } else {
+            // 通过正弦定理得到步长偏置
+            bias = sin(expectedAngle) *
+                   (sqrt(bodyLength * bodyLength + bodyWidth * bodyWidth) / 2) /
+                   sin(anotherAngle);
+        }
 
         cmd_.par1[0] = stepLength + bias;
         cmd_.par1[1] = stepLength + bias;

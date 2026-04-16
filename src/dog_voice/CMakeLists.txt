@@ -34,6 +34,7 @@ add_executable(dogSpeaker
     src/dogSpeaker.cpp)
 ament_target_dependencies(dogSpeaker
     rclcpp
+    std_msgs
     ament_index_cpp
 )
 target_link_libraries(dogSpeaker
