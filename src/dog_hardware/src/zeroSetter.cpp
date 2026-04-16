@@ -110,21 +110,9 @@ namespace Dog8Dof {
             logger_, "Move front motors to true zero spot! Press any to continue...");
         std::getline(std::cin, dummy);
 
-        RCLCPP_INFO_STREAM(
-            logger_,
-            "Start setting current position as the zero position for front motors!");
-        for (size_t i = 0; i < motorNumber_; i = i + 2) {
-            RCLCPP_INFO_STREAM(logger_, "Setting for " << jointNames_[i]);
-            motor_[i]->zeroTor();
-            if (!getOffsetInteractive(i)) {
-                return false;
-            }
-        }
-
-        RCLCPP_WARN_STREAM(
-            logger_, "Move rear motors to true zero spot! Press any to continue...");
-        std::getline(std::cin, dummy);
-        for (size_t i = 1; i < motorNumber_; i = i + 2) {
+        RCLCPP_INFO_STREAM(logger_,
+                           "Start setting current position as the zero position!");
+        for (size_t i = 0; i < motorNumber_; i = i + 1) {
             RCLCPP_INFO_STREAM(logger_, "Setting for " << jointNames_[i]);
             motor_[i]->zeroTor();
             if (!getOffsetInteractive(i)) {
@@ -154,25 +142,51 @@ namespace Dog8Dof {
             return false;
         }
 
-        RCLCPP_WARN_STREAM(logger_, "Start setting zero positions");
+        RCLCPP_WARN_STREAM(logger_,
+                           "Non-interactive mode: verify only, will NOT update offsets");
+
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        bool all_ok = true;
 
-        for (size_t i = 0; i < motorNumber_; i++) {
-            RCLCPP_INFO_STREAM(logger_, "Setting for " << jointNames_[i]);
+        for (size_t i = 0; i < motorNumber_; ++i) {
+            RCLCPP_INFO_STREAM(logger_, "Checking " << jointNames_[i]);
+
             float currentPosSum = 0.0f;
-
             motor_[i]->zeroTor();
-            for (size_t j = 0; j < repeatLoops_; j++) {
-                currentPosSum += motor_[i]->getPos();
+            for (size_t j = 0; j < repeatLoops_; ++j) {
+                currentPosSum += motor_[i]->getPos(); // 这里是原始电机角(当前 setZero(0))
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
             }
-            float measured = currentPosSum / static_cast<float>(repeatLoops_);
-            float desired = (i % 2 == 0) ? frontAngleIdle_ : rearAngleIdle_;
-            float newOffset = measured - desired;
-            writeFile(newOffset, i);
+
+            const float measuredRaw = currentPosSum / static_cast<float>(repeatLoops_);
+            const float oldOffset = zeroOffsetByIndex_[i];
+            const float desiredCtrl = (i % 2 == 0) ? frontAngleIdle_ : rearAngleIdle_;
+            const float expectedRaw =
+                desiredCtrl + oldOffset; // 由 q_c = q_m - offset 推得
+            const float err = measuredRaw - expectedRaw;
+
+            RCLCPP_INFO_STREAM(logger_,
+                               jointNames_[i] << ": measuredRaw=" << measuredRaw
+                                              << ", expectedRaw=" << expectedRaw
+                                              << ", err=" << err);
+
+            if (std::abs(err) > warnThreshold_) {
+                RCLCPP_WARN_STREAM(logger_,
+                                   "Offset check failed on "
+                                       << jointNames_[i] << ", |err|=" << std::abs(err)
+                                       << " > threshold=" << warnThreshold_);
+                all_ok = false;
+            }
         }
 
-        return true;
+        if (!all_ok) {
+            RCLCPP_ERROR(logger_,
+                         "Non-interactive verification failed. Offsets unchanged.");
+        } else {
+            RCLCPP_INFO(logger_,
+                        "Non-interactive verification passed. Offsets unchanged.");
+        }
+        return all_ok;
     }
 
     bool ZeroSetter::select(std::string input) {
