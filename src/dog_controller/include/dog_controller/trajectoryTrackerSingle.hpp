@@ -75,6 +75,11 @@ namespace Dog8Dof {
         std::array<JointStateIndex, 2> stateIdx_{};
         std::array<JointCmdIndex, 2> cmdIdx_{};
         ControlMode currentMode_ = ControlMode::STAND;
+        std::array<std::array<float, 3>, 4> lastWalkParams_{};
+        bool hasLastWalkParams_ = false;
+
+        bool
+        isSameWalkCommand(const std::array<std::array<float, 3>, 4> &walkParams) const;
 
         // 保留原有接口签名（便于复用上层调用逻辑）
         bool cacheInterfaceIndices();

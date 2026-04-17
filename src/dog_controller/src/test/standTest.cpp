@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
     current_tip.pos.setZero();
     current_tip.linerVel.setZero();
     current_tip.pos[0] = 20.0f;
-    current_tip.pos[2] = 120.0f;
+    current_tip.pos[2] = 15.0f;
 
     Body stand_target{};
     stand_target.pos.setZero();

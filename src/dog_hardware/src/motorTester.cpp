@@ -9,6 +9,7 @@
 #include <sstream>
 #include <string>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 
 #include <rclcpp/rclcpp.hpp>
@@ -67,6 +68,50 @@ class MotorTesterApp {
         }
     }
 
+    ~MotorTesterApp() {
+        // 停止循环
+        running_.store(false);
+
+        // 等待命令线程退出
+        if (command_thread_.joinable()) {
+            command_thread_.join();
+        }
+
+        // 等待发布线程退出
+        if (publisher_thread_.joinable()) {
+            publisher_thread_.join();
+        }
+
+        // 清除持续命令
+        {
+            std::lock_guard<std::mutex> lk(cmd_mtx_);
+            continuous_cmds_.clear();
+        }
+
+        // 尝试安全释放电机并清空容器
+        {
+            std::lock_guard<std::mutex> lk(motors_mtx_);
+            for (auto &m : motors_) {
+                if (!m)
+                    continue;
+                try {
+                    m->release();
+                } catch (...) {
+                }
+            }
+            motors_.clear();
+        }
+
+        // 销毁 ROS 节点并 shutdown（如果尚未 shutdown）
+        node_.reset();
+        if (rclcpp::ok()) {
+            rclcpp::shutdown();
+        }
+
+        // 关闭串口
+        port_.reset();
+    }
+
   private:
     std::shared_ptr<SerialPort> port_;
     std::vector<MotorPtr> motors_;
@@ -75,7 +120,7 @@ class MotorTesterApp {
     std::thread publisher_thread_;
     std::thread command_thread_;
     std::mutex cmd_mtx_;
-    ContinuousCommand current_cmd_;
+    std::unordered_map<uint8_t, ContinuousCommand> continuous_cmds_;
     rclcpp::Node::SharedPtr node_;
     rclcpp::Publisher<std_msgs::msg::String>::SharedPtr pub_;
 
@@ -118,6 +163,63 @@ class MotorTesterApp {
             }
         }
         return nullptr;
+    }
+
+    bool hasMotorId(uint8_t id) {
+        std::lock_guard<std::mutex> lk(motors_mtx_);
+        return findByIdLocked(id) != nullptr;
+    }
+
+    void setContinuousCommand(const std::string &target,
+                              const ContinuousCommand &base_cmd) {
+        if (target == "all") {
+            std::lock_guard<std::mutex> m_lk(motors_mtx_);
+            std::lock_guard<std::mutex> c_lk(cmd_mtx_);
+            for (const auto &m : motors_) {
+                if (!m) {
+                    continue;
+                }
+                const uint8_t id = m->getID();
+                ContinuousCommand cmd = base_cmd;
+                cmd.target = std::to_string(static_cast<int>(id));
+                continuous_cmds_[id] = cmd;
+            }
+            return;
+        }
+
+        uint8_t id = 0;
+        if (!parseTargetId(target, id)) {
+            return;
+        }
+        if (!hasMotorId(id)) {
+            return;
+        }
+
+        ContinuousCommand cmd = base_cmd;
+        cmd.target = std::to_string(static_cast<int>(id));
+        std::lock_guard<std::mutex> lk(cmd_mtx_);
+        continuous_cmds_[id] = cmd;
+    }
+
+    void clearContinuousCommands() {
+        std::lock_guard<std::mutex> lk(cmd_mtx_);
+        continuous_cmds_.clear();
+    }
+
+    void clearContinuousCommandForTarget(const std::string &target) {
+        if (target == "all") {
+            clearContinuousCommands();
+            return;
+        }
+
+        uint8_t id = 0;
+        if (!parseTargetId(target, id)) {
+            std::cout << "目标 ID 非法: " << target << std::endl;
+            return;
+        }
+
+        std::lock_guard<std::mutex> lk(cmd_mtx_);
+        continuous_cmds_.erase(id);
     }
 
     bool initMotors() {
@@ -209,27 +311,23 @@ class MotorTesterApp {
     void commandLoop() {
         rclcpp::WallRate rate(2ms);
         while (running_.load()) {
-            ContinuousCommand cmd;
+            std::vector<ContinuousCommand> cmds;
             {
                 std::lock_guard<std::mutex> lk(cmd_mtx_);
-                cmd = current_cmd_;
+                cmds.reserve(continuous_cmds_.size());
+                for (const auto &kv : continuous_cmds_) {
+                    cmds.push_back(kv.second);
+                }
             }
 
-            if (cmd.type != ContinuousCmdType::NONE) {
+            for (const auto &cmd : cmds) {
+                if (cmd.type == ContinuousCmdType::NONE) {
+                    continue;
+                }
                 executeContinuousCommand(cmd);
             }
             rate.sleep();
         }
-    }
-
-    void setCurrentCommand(const ContinuousCommand &cmd) {
-        std::lock_guard<std::mutex> lk(cmd_mtx_);
-        current_cmd_ = cmd;
-    }
-
-    void clearCurrentCommand() {
-        std::lock_guard<std::mutex> lk(cmd_mtx_);
-        current_cmd_ = ContinuousCommand{};
     }
 
     void executeContinuousCommand(const ContinuousCommand &cmd) {
@@ -268,7 +366,7 @@ class MotorTesterApp {
                   << "damp <id|all> <kd>\n"
                   << "lock <id|all>\n"
                   << "release <id|all>\n"
-                  << "clear (清除持续命令)\n"
+                  << "clear [id|all] (清除持续命令，默认 all)\n"
                   << "estop <id|all>\n"
                   << "exit\n";
     }
@@ -325,11 +423,10 @@ class MotorTesterApp {
 
         ContinuousCommand cmd;
         cmd.type = ContinuousCmdType::POS;
-        cmd.target = target;
         cmd.p1 = t;
         cmd.p2 = kp;
         cmd.p3 = kd;
-        setCurrentCommand(cmd);
+        setContinuousCommand(target, cmd);
         executePos(target, t, kp, kd, true);
         printIfVerbose(true, "已设置持续命令: pos\n");
     }
@@ -368,10 +465,9 @@ class MotorTesterApp {
 
         ContinuousCommand cmd;
         cmd.type = ContinuousCmdType::VEL;
-        cmd.target = target;
         cmd.p1 = t;
         cmd.p2 = kd;
-        setCurrentCommand(cmd);
+        setContinuousCommand(target, cmd);
         executeVel(target, t, kd, true);
         printIfVerbose(true, "已设置持续命令: vel\n");
     }
@@ -410,9 +506,8 @@ class MotorTesterApp {
 
         ContinuousCommand cmd;
         cmd.type = ContinuousCmdType::TOR;
-        cmd.target = target;
         cmd.p1 = t;
-        setCurrentCommand(cmd);
+        setContinuousCommand(target, cmd);
         executeTor(target, t, true);
         printIfVerbose(true, "已设置持续命令: tor\n");
     }
@@ -458,13 +553,12 @@ class MotorTesterApp {
 
         ContinuousCommand cmd;
         cmd.type = ContinuousCmdType::HYB;
-        cmd.target = target;
         cmd.p1 = torque;
         cmd.p2 = pos;
         cmd.p3 = vel;
         cmd.p4 = kp;
         cmd.p5 = kd;
-        setCurrentCommand(cmd);
+        setContinuousCommand(target, cmd);
         executeHybrid(target, torque, pos, vel, kp, kd, true);
         printIfVerbose(true, "已设置持续命令: hyb\n");
     }
@@ -497,8 +591,7 @@ class MotorTesterApp {
     void handleZero(const std::string &target) {
         ContinuousCommand cmd;
         cmd.type = ContinuousCmdType::ZERO;
-        cmd.target = target;
-        setCurrentCommand(cmd);
+        setContinuousCommand(target, cmd);
         executeZero(target, true);
         printIfVerbose(true, "已设置持续命令: zero\n");
     }
@@ -563,9 +656,8 @@ class MotorTesterApp {
 
         ContinuousCommand cmd;
         cmd.type = ContinuousCmdType::DAMP;
-        cmd.target = target;
         cmd.p1 = kd;
-        setCurrentCommand(cmd);
+        setContinuousCommand(target, cmd);
         executeDamp(target, kd, true);
         printIfVerbose(true, "已设置持续命令: damp\n");
     }
@@ -597,8 +689,7 @@ class MotorTesterApp {
     void handleLock(const std::string &target) {
         ContinuousCommand cmd;
         cmd.type = ContinuousCmdType::LOCK;
-        cmd.target = target;
-        setCurrentCommand(cmd);
+        setContinuousCommand(target, cmd);
         executeLock(target, true);
         printIfVerbose(true, "已设置持续命令: lock\n");
     }
@@ -630,14 +721,13 @@ class MotorTesterApp {
     void handleRelease(const std::string &target) {
         ContinuousCommand cmd;
         cmd.type = ContinuousCmdType::RELEASE;
-        cmd.target = target;
-        setCurrentCommand(cmd);
+        setContinuousCommand(target, cmd);
         executeRelease(target, true);
         printIfVerbose(true, "已设置持续命令: release\n");
     }
 
     void handleEstop(const std::string &target) {
-        clearCurrentCommand();
+        clearContinuousCommandForTarget(target);
         if (target == "all") {
             std::lock_guard<std::mutex> lk(motors_mtx_);
             for (const auto &m : motors_) {
@@ -666,7 +756,7 @@ class MotorTesterApp {
                   << std::endl;
 
         std::string line;
-        while (true) {
+        while (rclcpp::ok()) {
             std::cout << "> ";
             if (!std::getline(std::cin, line)) {
                 break;
@@ -687,8 +777,15 @@ class MotorTesterApp {
                 continue;
             }
             if (cmd == "clear") {
-                clearCurrentCommand();
-                std::cout << "已清除持续命令\n";
+                std::string clear_target;
+                ss >> clear_target;
+                if (clear_target.empty() || clear_target == "all") {
+                    clearContinuousCommands();
+                    std::cout << "已清除全部持续命令\n";
+                } else {
+                    clearContinuousCommandForTarget(clear_target);
+                    std::cout << "已清除 ID:" << clear_target << " 的持续命令\n";
+                }
                 continue;
             }
 

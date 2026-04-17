@@ -223,6 +223,13 @@ namespace Dog8Dof {
         (void)time;
         (void)period;
 
+        if (!updateAllGaitManagers()) {
+            RCLCPP_ERROR(this->get_node()->get_logger(),
+                         "Failed to update gait managers");
+            return controller_interface::return_type::ERROR;
+        }
+        // 更新步态管理器状态
+
         if (newCmd_) {
             auto msg_opt = commandBox_.try_get();
             if (!msg_opt.has_value()) {
@@ -232,22 +239,23 @@ namespace Dog8Dof {
                 goto updateCommandFinished;
             }
 
-            auto gait = msg_opt.value().gait;
-            float param1[4], param2[4], param3[4];
+            dog_msg::msg::TrajectoryCommand::_gait_type gait = msg_opt.value().gait;
+
+            std::array<std::array<float, 3>, 4> param;
 
             for (size_t i = 0; i < 4; i++) {
-                param1[i] = msg_opt.value().par1[i];
-                param2[i] = msg_opt.value().par2[i];
-                param3[i] = msg_opt.value().par3[i];
+                param[1][i] = msg_opt.value().par1[i];
+                param[2][i] = msg_opt.value().par2[i];
+                param[3][i] = msg_opt.value().par3[i];
             }
 
             try {
                 switch (gait) {
                 case dog_msg::msg::TrajectoryCommand::STAND:
-                    LF_->setStandGait(param1[0], param2[0]);
-                    LR_->setStandGait(param1[1], param2[1]);
-                    RF_->setStandGait(param1[2], param2[2]);
-                    RR_->setStandGait(param1[3], param2[3]);
+                    LF_->setStandGait(param[1][1], param[2][2]);
+                    LR_->setStandGait(param[2][1], param[2][2]);
+                    RF_->setStandGait(param[3][1], param[3][2]);
+                    RR_->setStandGait(param[4][1], param[4][2]);
                     if (currentMode_ != ControlMode::STAND) {
                         RCLCPP_INFO_STREAM(this->get_node()->get_logger(),
                                            "Switched to stand");
@@ -255,24 +263,33 @@ namespace Dog8Dof {
                     currentMode_ = ControlMode::STAND;
                     break;
                 case dog_msg::msg::TrajectoryCommand::WALK:
-                    LF_->setWalkGait(param1[0],
-                                     param2[0],
-                                     param3[0],
+                    if (!LF_->isFinshed() || !LR_->isFinshed() || !RF_->isFinshed() ||
+                        !RR_->isFinshed()) {
+                        if (currentMode_ == ControlMode::WALK &&
+                            isSameWalkCommand(param)) {
+                            newCmd_ = false;
+                            goto updateCommandFinished;
+                        }
+                    }
+
+                    LF_->setWalkGait(param[1][0],
+                                     param[1][0],
+                                     param[1][0],
                                      kWalkPhaseOffset[0],
                                      currentMode_ == ControlMode::WALK);
-                    LR_->setWalkGait(param1[1],
-                                     param2[1],
-                                     param3[1],
+                    LR_->setWalkGait(param[2][1],
+                                     param[2][2],
+                                     param[2][3],
                                      kWalkPhaseOffset[1],
                                      currentMode_ == ControlMode::WALK);
-                    RF_->setWalkGait(param1[2],
-                                     param2[2],
-                                     param3[2],
+                    RF_->setWalkGait(param[3][1],
+                                     param[3][2],
+                                     param[3][3],
                                      kWalkPhaseOffset[2],
                                      currentMode_ == ControlMode::WALK);
-                    RR_->setWalkGait(param1[3],
-                                     param2[3],
-                                     param3[3],
+                    RR_->setWalkGait(param[4][1],
+                                     param[4][2],
+                                     param[4][3],
                                      kWalkPhaseOffset[3],
                                      currentMode_ == ControlMode::WALK);
                     if (currentMode_ != ControlMode::WALK) {
@@ -281,17 +298,20 @@ namespace Dog8Dof {
                     currentMode_ = ControlMode::WALK;
                     break;
                 case dog_msg::msg::TrajectoryCommand::JUMP:
-                    LF_->setJumpGait(param1[0]);
-                    LR_->setJumpGait(param1[1]);
-                    RF_->setJumpGait(param1[2]);
-                    RR_->setJumpGait(param1[3]);
+                    LF_->setJumpGait(param[1][0]);
+                    LR_->setJumpGait(param[2][0]);
+                    RF_->setJumpGait(param[3][0]);
+                    RR_->setJumpGait(param[4][0]);
                     if (currentMode_ != ControlMode::JUMP) {
                         RCLCPP_INFO(this->get_node()->get_logger(), "Switched to jump");
                     }
                     currentMode_ = ControlMode::JUMP;
                     break;
                 default:
-                    return controller_interface::return_type::ERROR;
+                    RCLCPP_INFO(this->get_node()->get_logger(),
+                                "Unknown gait command received, ignore");
+                    newCmd_ = false;
+                    goto updateCommandFinished;
                 }
 
                 const auto syncStart = this->get_node()->get_clock()->now();
@@ -331,6 +351,11 @@ namespace Dog8Dof {
                 RCLCPP_ERROR(this->get_node()->get_logger(),
                              "Failed to update stand gait managers");
                 return controller_interface::return_type::ERROR;
+            } else {
+                if (currentMode_ != ControlMode::STAND) {
+                    RCLCPP_INFO(this->get_node()->get_logger(),
+                                "Current command finished, switch to stand");
+                }
             }
         }
 
@@ -339,13 +364,6 @@ namespace Dog8Dof {
                          "Failed to set currrent joint commands");
             return controller_interface::return_type::ERROR;
         } // 应用当前目标
-
-        if (!updateAllGaitManagers()) {
-            RCLCPP_ERROR(this->get_node()->get_logger(),
-                         "Failed to update gait managers");
-            return controller_interface::return_type::ERROR;
-        }
-        // 更新步态管理器状态
 
         return controller_interface::return_type::OK;
     }
@@ -401,26 +419,26 @@ namespace Dog8Dof {
         const JointCmdIndex &idx = cmdIdx_[legIndex];
         rclcpp::Logger logger = this->get_node()->get_logger();
 
-        if (!command_interfaces_[idx.pos].set_value(target.pos)) {
+        if (!command_interfaces_[idx.pos].set_value(static_cast<double>(target.pos))) {
             RCLCPP_ERROR(
                 logger, "Failed to set %s/position", jointNames_[legIndex].c_str());
             return false;
         }
-        if (!command_interfaces_[idx.vel].set_value(target.vel)) {
+        if (!command_interfaces_[idx.vel].set_value(static_cast<double>(target.vel))) {
             RCLCPP_ERROR(
                 logger, "Failed to set %s/velocity", jointNames_[legIndex].c_str());
             return false;
         }
-        if (!command_interfaces_[idx.eff].set_value(target.tau)) {
+        if (!command_interfaces_[idx.eff].set_value(static_cast<double>(target.tau))) {
             RCLCPP_ERROR(
                 logger, "Failed to set %s/effort", jointNames_[legIndex].c_str());
             return false;
         }
-        if (!command_interfaces_[idx.kp].set_value(target.kp)) {
+        if (!command_interfaces_[idx.kp].set_value(static_cast<double>(target.kp))) {
             RCLCPP_ERROR(logger, "Failed to set %s/kp", jointNames_[legIndex].c_str());
             return false;
         }
-        if (!command_interfaces_[idx.kd].set_value(target.kd)) {
+        if (!command_interfaces_[idx.kd].set_value(static_cast<double>(target.kd))) {
             RCLCPP_ERROR(logger, "Failed to set %s/kd", jointNames_[legIndex].c_str());
             return false;
         }
@@ -465,6 +483,23 @@ namespace Dog8Dof {
                                       Eigen::Vector2f(getTau(6), getTau(7)));
 
         return lfOk && rfOk && lrOk && rrOk;
+    }
+
+    bool TrajectoryTracker::isSameWalkCommand(
+        const std::array<std::array<float, 3>, 4> &walkParams) const {
+        if (!hasLastWalkParams_) {
+            return false;
+        }
+
+        constexpr float kWalkParamEps = 1e-6f;
+        for (size_t i = 0; i < 4; ++i) {
+            for (size_t j = 0; j < 3; ++j) {
+                if (std::fabs(walkParams[i][j] - lastWalkParams_[i][j]) > kWalkParamEps) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     float TrajectoryTracker::getPos(size_t i) {

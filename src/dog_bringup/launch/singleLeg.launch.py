@@ -58,12 +58,12 @@ def generate_launch_description():
     )
 
     timeLine1 = TimerAction(
-        period=3.0,
+        period=1.0,
         actions=[controler_manager],
     )
 
     timeLine2 = TimerAction(
-        period=3.0,
+        period=2.0,
         actions=[controler_spawner],
     )
     

@@ -1,13 +1,13 @@
 RS485_Port: /dev/ttyACM0
 idleAngle:
-  front: 0
-  rear: 0
+  front: 1.88625002
+  rear: -0.408749998
 LF_Front:
-  id: 5
-  offset: 0.629829645
+  id: 1
+  offset: -1.15588176
 LF_Rear:
-  id: 4
-  offset: 0.93541646
+  id: 2
+  offset: 1.00863063
 RF_Front:
   id: 2
   offset: 0.0
