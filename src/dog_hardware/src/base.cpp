@@ -146,7 +146,7 @@ namespace Dog8Dof {
     BaseInterface::on_deactivate(const rclcpp_lifecycle::State &pre) {
         (void)pre;
         for (size_t i = 0; i < 8; ++i) {
-            motor_[i].zeroTor();
+            motor_[i].damp(0.1f);
         }
         return hardware_interface::CallbackReturn::SUCCESS;
     }

@@ -110,12 +110,22 @@ namespace Dog8Dof {
             logger_, "Move front motors to true zero spot! Press any to continue...");
         std::getline(std::cin, dummy);
 
-        RCLCPP_INFO_STREAM(logger_,
-                           "Start setting current position as the zero position!");
-        for (size_t i = 0; i < motorNumber_; i = i + 1) {
-            RCLCPP_INFO_STREAM(logger_, "Setting for " << jointNames_[i]);
+        // RCLCPP_INFO_STREAM(logger_,
+        //                    "Start setting current position as the zero position!");
+        for (size_t i = 0; i < motorNumber_; i = i + 2) {
             motor_[i]->zeroTor();
+            motor_[i + 1]->zeroTor();
+
+            RCLCPP_INFO_STREAM(logger_,
+                               "Setting for " << jointNames_[i] << " and "
+                                              << jointNames_[i + 1]
+                                              << "Press any key to continue...");
+            std::getline(std::cin, dummy);
+
             if (!getOffsetInteractive(i)) {
+                return false;
+            }
+            if (!getOffsetInteractive(i + 1)) {
                 return false;
             }
         }
@@ -154,6 +164,7 @@ namespace Dog8Dof {
             float currentPosSum = 0.0f;
             motor_[i]->zeroTor();
             for (size_t j = 0; j < repeatLoops_; ++j) {
+                motor_[i]->zeroTor();
                 currentPosSum += motor_[i]->getPos(); // 这里是原始电机角(当前 setZero(0))
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
             }
@@ -201,6 +212,7 @@ namespace Dog8Dof {
     bool ZeroSetter::getOffsetInteractive(size_t jointIdx) {
         float currentPosSum = 0.0f;
         for (size_t j = 0; j < repeatLoops_; j++) {
+            motor_[jointIdx]->zeroTor();
             currentPosSum += motor_[jointIdx]->getPos();
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
