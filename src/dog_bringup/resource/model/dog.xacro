@@ -16,6 +16,30 @@
         upper_len="0.13583"
         lower_len="0.18533" />
 
+    <xacro:parallel_leg_4bar_min
+        prefix="RF"
+        parent="base_link"
+        base_xyz="0 0 0"
+        base_rpy="0 0 0"
+        upper_len="0.13583"
+        lower_len="0.18533" />
+
+    <xacro:parallel_leg_4bar_min
+        prefix="LR"
+        parent="base_link"
+        base_xyz="0 0 0"
+        base_rpy="0 0 0"
+        upper_len="0.13583"
+        lower_len="0.18533" />
+
+    <xacro:parallel_leg_4bar_min
+        prefix="RR"
+        parent="base_link"
+        base_xyz="0 0 0"
+        base_rpy="0 0 0"
+        upper_len="0.13583"
+        lower_len="0.18533" />
+
     <xacro:macro name="motor" params="joint_name">
         <joint name="${joint_name}">
             <command_interface name="position" />
@@ -37,11 +61,23 @@
         <hardware>
             <param name="configPath">
                 /home/luo/Project/Horse/Dog_parallel/src/dog_bringup/parameters/motors.yaml</param>
-            <plugin>dog8Dof/singleBaseHardware</plugin>
+            <plugin>dog8Dof/baseHardware</plugin>
         </hardware>
 
         <xacro:motor joint_name="LF_Front" />
         <xacro:motor joint_name="LF_Rear" />
+
+
+        <xacro:motor joint_name="RF_Front" />
+        <xacro:motor joint_name="RF_Rear" />
+
+
+        <xacro:motor joint_name="LR_Front" />
+        <xacro:motor joint_name="LR_Rear" />
+
+
+        <xacro:motor joint_name="RR_Front" />
+        <xacro:motor joint_name="RR_Rear" />
     </ros2_control>
 
 </robot>

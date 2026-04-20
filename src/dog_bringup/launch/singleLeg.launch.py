@@ -14,13 +14,13 @@ def generate_launch_description():
 
     declare_xacro = DeclareLaunchArgument(
         name = 'xacro_path',
-        default_value=get_package_share_directory("dog_bringup") + "/resource/model/dog.xacro"
+        default_value=get_package_share_directory("dog_bringup") + "/resource/model/dog_single.xacro"
     )
     xacro_path = LaunchConfiguration("xacro_path")
 
     declare_manager = DeclareLaunchArgument(
         name = 'manager_path',
-        default_value=get_package_share_directory("dog_bringup") + "/launch/dog_controller.yaml"
+        default_value=get_package_share_directory("dog_bringup") + "/launch/dog_controller_single.yaml"
     )
     manager_path = LaunchConfiguration("manager_path")
 
