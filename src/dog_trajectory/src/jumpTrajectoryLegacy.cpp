@@ -333,8 +333,12 @@ namespace Dog8Dof {
             return false;
         }
 
+        if (trajectory_.time.size() != trajectory_.points.size()) {
+            trajectory_.time.resize(trajectory_.points.size());
+        }
+
         for (size_t i = 0; i < trajectory_.time.size(); ++i) {
-            trajectory_.time[i] = startTimeNanoSec_ + i * durationNanoSec_;
+            trajectory_.time[i] = startTimeNanoSec_ + i * controlDurationNanoSec_;
         }
 
         target_ = trajectory_.points.front();

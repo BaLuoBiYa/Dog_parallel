@@ -2,11 +2,23 @@
 
 namespace Dog8Dof {
     void BaseTrajectory::interpolate(size_t currentNanoSec) {
+        const size_t n = trajectory_.time.size();
+        if (n == 0)
+            return;
+        if (trajectory_.progress >= n)
+            trajectory_.progress = n - 1;
+
         const auto searchBegin = trajectory_.time.begin() + trajectory_.progress;
         const auto upperIt =
             std::lower_bound(searchBegin, trajectory_.time.end(), currentNanoSec);
 
         const size_t upperIndex = static_cast<size_t>(upperIt - trajectory_.time.begin());
+        if (upperIndex == 0) {
+            target_ = trajectory_.points[0];
+            trajectory_.progress = 0;
+            return;
+        }
+
         const size_t lowerIndex = upperIndex - 1;
 
         const size_t t0 = trajectory_.time[lowerIndex];
@@ -52,12 +64,13 @@ namespace Dog8Dof {
     size_t BaseTrajectory::stepsFromDurationNs(size_t durationNs,
                                                size_t minSteps,
                                                size_t maxSteps) const {
-        if (durationNanoSec_ == 0) {
+        if (controlDurationNanoSec_ == 0) {
             return minSteps;
         }
 
         // 四舍五入到最近控制周期
-        size_t steps = (durationNs + durationNanoSec_ / 2) / durationNanoSec_;
+        size_t steps =
+            (durationNs + controlDurationNanoSec_ / 2) / controlDurationNanoSec_;
         steps = std::max(steps, minSteps);
         steps = std::min(steps, maxSteps);
         return steps;

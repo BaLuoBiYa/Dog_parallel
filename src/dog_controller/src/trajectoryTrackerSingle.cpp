@@ -184,19 +184,19 @@ namespace Dog8Dof {
 
             dog_msg::msg::TrajectoryCommand::_gait_type gait = msg_opt.value().gait;
 
-            std::array<std::array<float, 3>, 4> param;
+            std::array<std::array<float, 4>, 3> param;
 
             for (size_t i = 0; i < 4; i++) {
-                param[1][i] = msg_opt.value().par1[i];
-                param[2][i] = msg_opt.value().par2[i];
-                param[3][i] = msg_opt.value().par3[i];
+                param[0][i] = msg_opt.value().par1[i];
+                param[1][i] = msg_opt.value().par2[i];
+                param[2][i] = msg_opt.value().par3[i];
             }
 
             try {
                 switch (gait) {
                 case dog_msg::msg::TrajectoryCommand::STAND:
                     // 仅对 LF_ 应用参数
-                    LF_->setStandGait(param[1][0], param[2][0]);
+                    LF_->setStandGait(param[0][0], param[1][0]);
                     if (currentMode_ != ControlMode::STAND) {
                         RCLCPP_INFO_STREAM(this->get_node()->get_logger(),
                                            "Switched to stand");
@@ -212,9 +212,9 @@ namespace Dog8Dof {
                         }
                     }
 
-                    LF_->setWalkGait(param[1][0],
+                    LF_->setWalkGait(param[0][0],
+                                     param[1][0],
                                      param[2][0],
-                                     param[3][0],
                                      kWalkPhaseOffset[0],
                                      currentMode_ == ControlMode::WALK);
                     if (currentMode_ != ControlMode::WALK) {
@@ -225,7 +225,7 @@ namespace Dog8Dof {
                     hasLastWalkParams_ = true;
                     break;
                 case dog_msg::msg::TrajectoryCommand::JUMP:
-                    LF_->setJumpGait(param[1][0]);
+                    LF_->setJumpGait(param[0][0]);
                     if (currentMode_ != ControlMode::JUMP) {
                         RCLCPP_INFO(this->get_node()->get_logger(), "Switched to jump");
                     }
@@ -254,11 +254,11 @@ namespace Dog8Dof {
         // 如果存在新命令，先处理命令切换轨迹
 
     updateCommandFinished:
-        if (LF_->isFinshed()) {
+        if (LF_->isFinshed() && currentMode_ != ControlMode::STAND) {
             LF_->setStandGait(idleTipX_, idleTipZ_);
             currentMode_ = ControlMode::STAND;
 
-            const auto syncStart = this->get_node()->get_clock()->now();
+            const rclcpp::Time syncStart = this->get_node()->get_clock()->now();
             LF_->start(syncStart);
 
             if (!updateAllGaitManagers()) {
@@ -386,14 +386,14 @@ namespace Dog8Dof {
     }
 
     bool TrajectoryTrackerSingle::isSameWalkCommand(
-        const std::array<std::array<float, 3>, 4> &walkParams) const {
+        const std::array<std::array<float, 4>, 3> &walkParams) const {
         if (!hasLastWalkParams_) {
             return false;
         }
 
         constexpr float kWalkParamEps = 1e-6f;
-        for (size_t i = 0; i < 4; ++i) {
-            for (size_t j = 0; j < 3; ++j) {
+        for (size_t i = 0; i < 3; ++i) {
+            for (size_t j = 0; j < 4; ++j) {
                 if (std::fabs(walkParams[i][j] - lastWalkParams_[i][j]) > kWalkParamEps) {
                     return false;
                 }

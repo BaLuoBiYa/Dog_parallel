@@ -241,21 +241,21 @@ namespace Dog8Dof {
 
             dog_msg::msg::TrajectoryCommand::_gait_type gait = msg_opt.value().gait;
 
-            std::array<std::array<float, 3>, 4> param;
+            std::array<std::array<float, 4>, 3> param;
 
             for (size_t i = 0; i < 4; i++) {
-                param[1][i] = msg_opt.value().par1[i];
-                param[2][i] = msg_opt.value().par2[i];
-                param[3][i] = msg_opt.value().par3[i];
+                param[0][i] = msg_opt.value().par1[i];
+                param[1][i] = msg_opt.value().par2[i];
+                param[2][i] = msg_opt.value().par3[i];
             }
 
             try {
                 switch (gait) {
                 case dog_msg::msg::TrajectoryCommand::STAND:
-                    LF_->setStandGait(param[1][1], param[2][2]);
-                    LR_->setStandGait(param[2][1], param[2][2]);
-                    RF_->setStandGait(param[3][1], param[3][2]);
-                    RR_->setStandGait(param[4][1], param[4][2]);
+                    LF_->setStandGait(param[0][0], param[1][0]);
+                    LR_->setStandGait(param[0][1], param[1][1]);
+                    RF_->setStandGait(param[0][2], param[1][2]);
+                    RR_->setStandGait(param[0][3], param[1][3]);
                     if (currentMode_ != ControlMode::STAND) {
                         RCLCPP_INFO_STREAM(this->get_node()->get_logger(),
                                            "Switched to stand");
@@ -272,36 +272,38 @@ namespace Dog8Dof {
                         }
                     }
 
-                    LF_->setWalkGait(param[1][0],
+                    LF_->setWalkGait(param[0][0],
                                      param[1][0],
-                                     param[1][0],
+                                     param[2][0],
                                      kWalkPhaseOffset[0],
                                      currentMode_ == ControlMode::WALK);
-                    LR_->setWalkGait(param[2][1],
-                                     param[2][2],
-                                     param[2][3],
+                    LR_->setWalkGait(param[0][1],
+                                     param[1][1],
+                                     param[2][1],
                                      kWalkPhaseOffset[1],
                                      currentMode_ == ControlMode::WALK);
-                    RF_->setWalkGait(param[3][1],
-                                     param[3][2],
-                                     param[3][3],
+                    RF_->setWalkGait(param[0][2],
+                                     param[1][2],
+                                     param[2][2],
                                      kWalkPhaseOffset[2],
                                      currentMode_ == ControlMode::WALK);
-                    RR_->setWalkGait(param[4][1],
-                                     param[4][2],
-                                     param[4][3],
+                    RR_->setWalkGait(param[0][3],
+                                     param[1][3],
+                                     param[2][3],
                                      kWalkPhaseOffset[3],
                                      currentMode_ == ControlMode::WALK);
                     if (currentMode_ != ControlMode::WALK) {
                         RCLCPP_INFO(this->get_node()->get_logger(), "Switched to walk");
                     }
                     currentMode_ = ControlMode::WALK;
+                    lastWalkParams_ = param;
+                    hasLastWalkParams_ = true;
                     break;
                 case dog_msg::msg::TrajectoryCommand::JUMP:
-                    LF_->setJumpGait(param[1][0]);
-                    LR_->setJumpGait(param[2][0]);
-                    RF_->setJumpGait(param[3][0]);
-                    RR_->setJumpGait(param[4][0]);
+                    LF_->setJumpGait(param[0][0]);
+                    LR_->setJumpGait(param[0][1]);
+                    RF_->setJumpGait(param[0][2]);
+                    RR_->setJumpGait(param[0][3]);
                     if (currentMode_ != ControlMode::JUMP) {
                         RCLCPP_INFO(this->get_node()->get_logger(), "Switched to jump");
                     }
@@ -333,15 +335,15 @@ namespace Dog8Dof {
         }
 
     updateCommandFinished:
-        if (LF_->isFinshed() || LR_->isFinshed() || RF_->isFinshed() ||
-            RR_->isFinshed()) {
+        if (LF_->isFinshed() && LR_->isFinshed() && RF_->isFinshed() &&
+            RR_->isFinshed() && currentMode_ != ControlMode::STAND) {
             LF_->setStandGait(idleTipX_, idleTipZ_);
             LR_->setStandGait(idleTipX_, idleTipZ_);
             RF_->setStandGait(idleTipX_, idleTipZ_);
             RR_->setStandGait(idleTipX_, idleTipZ_);
             currentMode_ = ControlMode::STAND;
 
-            const auto syncStart = this->get_node()->get_clock()->now();
+            const rclcpp::Time syncStart = this->get_node()->get_clock()->now();
             LF_->start(syncStart);
             LR_->start(syncStart);
             RF_->start(syncStart);
@@ -486,14 +488,14 @@ namespace Dog8Dof {
     }
 
     bool TrajectoryTracker::isSameWalkCommand(
-        const std::array<std::array<float, 3>, 4> &walkParams) const {
+        const std::array<std::array<float, 4>, 3> &walkParams) const {
         if (!hasLastWalkParams_) {
             return false;
         }
 
         constexpr float kWalkParamEps = 1e-6f;
-        for (size_t i = 0; i < 4; ++i) {
-            for (size_t j = 0; j < 3; ++j) {
+        for (size_t i = 0; i < 3; ++i) {
+            for (size_t j = 0; j < 4; ++j) {
                 if (std::fabs(walkParams[i][j] - lastWalkParams_[i][j]) > kWalkParamEps) {
                     return false;
                 }
@@ -503,7 +505,7 @@ namespace Dog8Dof {
     }
 
     float TrajectoryTracker::getPos(size_t i) {
-        auto opt = state_interfaces_[stateIdx_[i].pos].get_optional<float>();
+        auto opt = state_interfaces_[stateIdx_[i].pos].get_optional<double>();
         if (!opt.has_value()) {
             RCLCPP_ERROR(this->get_node()->get_logger(),
                          "Position state interface for joint %s is not available",
@@ -515,7 +517,7 @@ namespace Dog8Dof {
     }
 
     float TrajectoryTracker::getVel(size_t i) {
-        auto opt = state_interfaces_[stateIdx_[i].vel].get_optional<float>();
+        auto opt = state_interfaces_[stateIdx_[i].vel].get_optional<double>();
         if (!opt.has_value()) {
             RCLCPP_ERROR(this->get_node()->get_logger(),
                          "Velocity state interface for joint %s is not available",
@@ -527,7 +529,7 @@ namespace Dog8Dof {
     };
 
     float TrajectoryTracker::getTau(size_t i) {
-        auto opt = state_interfaces_[stateIdx_[i].eff].get_optional<float>();
+        auto opt = state_interfaces_[stateIdx_[i].eff].get_optional<double>();
         if (!opt.has_value()) {
             RCLCPP_ERROR(this->get_node()->get_logger(),
                          "Effort state interface for joint %s is not available",

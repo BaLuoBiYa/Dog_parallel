@@ -54,11 +54,16 @@ namespace Dog8Dof {
         };
 
         const std::map<jumpIndex, std::string> jumpMapping = {
-            {0.0f, "default"},
-            {1.0f, "high_jump"},
-            {2.0f, "long_jump"},
-            {3.0f, "custom1"},
-            {4.0f, "custom2"},
+            {0.0f, "high_wall"},
+            {1.0f, "stair1"},
+            {2.0f, "stair2"},
+            {3.0f, "stair3"},
+            {4.0f, "long_gap"},
+            {5.0f, "slope_up"},
+            {6.0f, "slope_down"},
+            {7.0f, "q_high_wall"},
+            {8.0f, "q_stair1"},
+            {9.0f, "q_stair2"},
         };
 
       private:

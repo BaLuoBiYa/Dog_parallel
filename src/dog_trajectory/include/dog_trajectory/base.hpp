@@ -15,7 +15,7 @@ namespace Dog8Dof {
          * @param period 控制时间周期
          */
         BaseTrajectory(const std::string &configPath, rclcpp::Duration period)
-            : configPath_(configPath), durationNanoSec_(period.nanoseconds()) {
+            : configPath_(configPath), controlDurationNanoSec_(period.nanoseconds()) {
         }
         virtual ~BaseTrajectory() = default;
 
@@ -57,7 +57,7 @@ namespace Dog8Dof {
         YAML::Node configFile_;
 
         size_t startTimeNanoSec_;
-        const size_t durationNanoSec_;
+        const size_t controlDurationNanoSec_;
 
         bool finished_ = false;
         int steps_;

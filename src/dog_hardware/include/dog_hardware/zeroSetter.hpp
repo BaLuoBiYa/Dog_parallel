@@ -7,6 +7,7 @@ namespace Dog8Dof {
     class ZeroSetter : public rclcpp::Node {
       public:
         ZeroSetter(const std::string configFilePath);
+        bool init();
         bool callibrateMotorInteractive();
         bool callibrateMotorNoneInteractive();
 
