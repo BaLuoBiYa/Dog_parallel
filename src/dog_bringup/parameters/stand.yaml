@@ -1,10 +1,10 @@
-standKp: 0.7
-standKd: 0.1
+standKp: 0.5
+standKd: 0.01
 
-transitionKp: 0.6
+transitionKp: 0.5
 transitionKd: 0.01
-transitionVelMax: 1000.0
+transitionVelMax: 500.0
 
-reachThreshold: 0.1
+reachThreshold: 0.01
 stepHeightFactor: 0.1
-transitionTime: 1.5
+transitionTime: 5.0

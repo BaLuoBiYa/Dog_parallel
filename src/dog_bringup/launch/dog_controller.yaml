@@ -1,6 +1,6 @@
 controller_manager:
   ros__parameters:
-    update_rate: 350
+    update_rate: 100
 
     base_controller:
       type: dog8Dof/baseController
@@ -13,5 +13,6 @@ base_controller:
     jumpProfile: /home/luo/Project/Horse/Dog_parallel/src/dog_bringup/parameters/jumpLegacy.yaml
 
     idleTipX: 0.0
-    idleTipZ: 260.0
+    idleTipZ: 250.0
+
     commandTopic: /dog/command

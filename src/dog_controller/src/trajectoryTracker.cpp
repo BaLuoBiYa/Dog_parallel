@@ -8,7 +8,9 @@ namespace Dog8Dof {
         walkProfile_ = auto_declare<std::string>("walkProfile", "");
         jumpProfile_ = auto_declare<std::string>("jumpProfile", "");
 
-        updateDuration_ = 1.0f / this->get_update_rate();
+        updateDuration_ = 1.0f / (this->get_update_rate() *
+                                  10); // 以更高频率更新步态管理器，确保平滑过渡
+
         idleTipX_ = auto_declare<float>("idleTipX", 0.0f);
         idleTipZ_ = auto_declare<float>("idleTipZ", 180.0f);
         commandTopic_ = auto_declare<std::string>("commandTopic", "/dog/command");
@@ -144,14 +146,8 @@ namespace Dog8Dof {
         LR_->setStandGait(idleTipX_, idleTipZ_);
         RF_->setStandGait(idleTipX_, idleTipZ_);
         RR_->setStandGait(idleTipX_, idleTipZ_);
-        // 设置初始站立姿态
         currentMode_ = ControlMode::STAND;
-
-        const auto syncStart = this->get_node()->get_clock()->now();
-        LF_->start(syncStart);
-        LR_->start(syncStart);
-        RF_->start(syncStart);
-        RR_->start(syncStart);
+        initialStandPending_ = true;
 
         return controller_interface::CallbackReturn::SUCCESS;
     }
@@ -223,12 +219,39 @@ namespace Dog8Dof {
         (void)time;
         (void)period;
 
+        if (initialStandPending_) {
+            try {
+                LF_->setStandGait(idleTipX_, idleTipZ_);
+                LR_->setStandGait(idleTipX_, idleTipZ_);
+                RF_->setStandGait(idleTipX_, idleTipZ_);
+                RR_->setStandGait(idleTipX_, idleTipZ_);
+
+                const auto syncStart = this->get_node()->get_clock()->now();
+                LF_->start(syncStart);
+                LR_->start(syncStart);
+                RF_->start(syncStart);
+                RR_->start(syncStart);
+                initialStandPending_ = false;
+            } catch (const std::exception &e) {
+                RCLCPP_ERROR(this->get_node()->get_logger(),
+                             "Failed to initialize stand trajectory: %s",
+                             e.what());
+                return controller_interface::return_type::ERROR;
+            }
+        }
+
         if (!updateAllGaitManagers()) {
             RCLCPP_ERROR(this->get_node()->get_logger(),
                          "Failed to update gait managers");
             return controller_interface::return_type::ERROR;
         }
         // 更新步态管理器状态
+
+        if (!setAllJointCommands()) {
+            RCLCPP_ERROR(this->get_node()->get_logger(),
+                         "Failed to set currrent joint commands");
+            return controller_interface::return_type::ERROR;
+        } // 应用当前目标
 
         if (newCmd_) {
             auto msg_opt = commandBox_.try_get();
@@ -335,37 +358,76 @@ namespace Dog8Dof {
         }
 
     updateCommandFinished:
-        if (LF_->isFinshed() && LR_->isFinshed() && RF_->isFinshed() &&
-            RR_->isFinshed() && currentMode_ != ControlMode::STAND) {
-            LF_->setStandGait(idleTipX_, idleTipZ_);
-            LR_->setStandGait(idleTipX_, idleTipZ_);
-            RF_->setStandGait(idleTipX_, idleTipZ_);
-            RR_->setStandGait(idleTipX_, idleTipZ_);
-            currentMode_ = ControlMode::STAND;
+        const bool lfFinished = LF_->isFinshed();
+        const bool lrFinished = LR_->isFinshed();
+        const bool rfFinished = RF_->isFinshed();
+        const bool rrFinished = RR_->isFinshed();
+        const bool allFinished = lfFinished && lrFinished && rfFinished && rrFinished;
 
-            const rclcpp::Time syncStart = this->get_node()->get_clock()->now();
-            LF_->start(syncStart);
-            LR_->start(syncStart);
-            RF_->start(syncStart);
-            RR_->start(syncStart);
-
-            if (!updateAllGaitManagers()) {
-                RCLCPP_ERROR(this->get_node()->get_logger(),
-                             "Failed to update stand gait managers");
-                return controller_interface::return_type::ERROR;
+        switch (currentMode_) {
+        case ControlMode::STAND:
+            if (!allFinished) {
+                // RCLCPP_WARN(this->get_node()->get_logger(),
+                //             "In stand mode but gait not finished");
+            }
+            break;
+        case ControlMode::WALK:
+            if (!allFinished) {
+                // RCLCPP_WARN(this->get_node()->get_logger(),
+                //             "In walk mode but gait not finished");
+                break;
             } else {
-                if (currentMode_ != ControlMode::STAND) {
+                auto restartWalkCycle = [this]() -> bool {
+                    if (!hasLastWalkParams_) {
+                        RCLCPP_WARN(
+                            this->get_node()->get_logger(),
+                            "Walk finished but no last walk params, fallback to stand");
+                        return switchToStandMode();
+                    }
+
+                    LF_->setWalkGait(lastWalkParams_[0][0],
+                                     lastWalkParams_[1][0],
+                                     lastWalkParams_[2][0],
+                                     kWalkPhaseOffset[0],
+                                     false);
+                    LR_->setWalkGait(lastWalkParams_[0][1],
+                                     lastWalkParams_[1][1],
+                                     lastWalkParams_[2][1],
+                                     kWalkPhaseOffset[1],
+                                     false);
+                    RF_->setWalkGait(lastWalkParams_[0][2],
+                                     lastWalkParams_[1][2],
+                                     lastWalkParams_[2][2],
+                                     kWalkPhaseOffset[2],
+                                     false);
+                    RR_->setWalkGait(lastWalkParams_[0][3],
+                                     lastWalkParams_[1][3],
+                                     lastWalkParams_[2][3],
+                                     kWalkPhaseOffset[3],
+                                     false);
+
+                    const auto syncStart = this->get_node()->get_clock()->now();
+                    LF_->start(syncStart);
+                    LR_->start(syncStart);
+                    RF_->start(syncStart);
+                    RR_->start(syncStart);
+                    currentMode_ = ControlMode::WALK;
+                    return true;
+                };
+
+                if (!restartWalkCycle()) {
+                    return controller_interface::return_type::ERROR;
+                } else {
                     RCLCPP_INFO(this->get_node()->get_logger(),
-                                "Current command finished, switch to stand");
+                                "Walk cycle finished, restarting next cycle");
+                    break;
                 }
             }
-        }
 
-        if (!setAllJointCommands()) {
-            RCLCPP_ERROR(this->get_node()->get_logger(),
-                         "Failed to set currrent joint commands");
-            return controller_interface::return_type::ERROR;
-        } // 应用当前目标
+        default:
+            RCLCPP_INFO(this->get_node()->get_logger(), "Under development");
+            break;
+        }
 
         return controller_interface::return_type::OK;
     }
@@ -413,6 +475,27 @@ namespace Dog8Dof {
                                        cmdEff->second,
                                        cmdKp->second,
                                        cmdKd->second};
+        }
+        return true;
+    }
+
+    bool TrajectoryTracker::switchToStandMode() {
+        LF_->setStandGait(idleTipX_, idleTipZ_);
+        LR_->setStandGait(idleTipX_, idleTipZ_);
+        RF_->setStandGait(idleTipX_, idleTipZ_);
+        RR_->setStandGait(idleTipX_, idleTipZ_);
+        currentMode_ = ControlMode::STAND;
+
+        const rclcpp::Time syncStart = this->get_node()->get_clock()->now();
+        LF_->start(syncStart);
+        LR_->start(syncStart);
+        RF_->start(syncStart);
+        RR_->start(syncStart);
+
+        if (!updateAllGaitManagers()) {
+            RCLCPP_ERROR(this->get_node()->get_logger(),
+                         "Failed to update stand gait managers");
+            return false;
         }
         return true;
     }
@@ -493,7 +576,7 @@ namespace Dog8Dof {
             return false;
         }
 
-        constexpr float kWalkParamEps = 1e-6f;
+        constexpr float kWalkParamEps = 1.0f;
         for (size_t i = 0; i < 3; ++i) {
             for (size_t j = 0; j < 4; ++j) {
                 if (std::fabs(walkParams[i][j] - lastWalkParams_[i][j]) > kWalkParamEps) {

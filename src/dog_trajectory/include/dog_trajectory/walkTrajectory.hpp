@@ -94,7 +94,7 @@ namespace Dog8Dof {
         /**
          * @brief 生成原地踏步的轨迹
          */
-        Trajectory generateZeroLength();
+        Trajectory generateZeroLength(const Body &currentTip);
 
         rclcpp::Logger logger_ = rclcpp::get_logger("walkTrajectory");
     };

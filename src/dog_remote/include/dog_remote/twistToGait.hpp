@@ -21,7 +21,7 @@ namespace Dog8Dof {
 
         const float stepHeight_ = 100.0f;
         const float baisHeight_ = 270.0f;
-        // 假设视觉控制阶段布频固定为该值
+        // 假设视觉控制阶段步频固定为该值
         const float visualPlusNum = 30.0f;
         // 8000来自于生成轨迹生成时的计算phase分母，0.001为时间布长 （待优化）
         const float stepFrequency = (visualPlusNum / 8000) / 0.001;

@@ -178,11 +178,9 @@ namespace Dog8Dof {
             return false;
         }
 
-        RCLCPP_WARN_STREAM(logger_,
-                           "Non-interactive mode: verify only, will NOT update offsets");
+        RCLCPP_WARN_STREAM(logger_, "Non-interactive mode,callibrating....");
 
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
-        bool all_ok = true;
 
         for (size_t i = 0; i < motorNumber_; ++i) {
             RCLCPP_INFO_STREAM(logger_, "Checking " << jointNames_[i]);
@@ -196,34 +194,21 @@ namespace Dog8Dof {
             }
 
             const float measuredRaw = currentPosSum / static_cast<float>(repeatLoops_);
-            const float oldOffset = zeroOffsetByIndex_[i];
+            // const float oldOffset = zeroOffsetByIndex_[i];
             const float desiredCtrl = (i % 2 == 0) ? frontAngleIdle_ : rearAngleIdle_;
-            const float expectedRaw =
-                desiredCtrl + oldOffset; // 由 q_c = q_m - offset 推得
-            const float err = measuredRaw - expectedRaw;
+            // const float expectedRaw =
+            //     desiredCtrl
+            const float offset = measuredRaw - desiredCtrl;
 
             RCLCPP_INFO_STREAM(logger_,
                                jointNames_[i] << ": measuredRaw=" << measuredRaw
-                                              << ", expectedRaw=" << expectedRaw
-                                              << ", err=" << err);
+                                              << ", expectedRaw=" << desiredCtrl
+                                              << ", offset=" << offset);
 
-            if (std::abs(err) > warnThreshold_) {
-                RCLCPP_WARN_STREAM(logger_,
-                                   "Offset check failed on "
-                                       << jointNames_[i] << ", |err|=" << std::abs(err)
-                                       << " > threshold=" << warnThreshold_);
-                all_ok = false;
-            }
+            writeFile(offset, i);
         }
 
-        if (!all_ok) {
-            RCLCPP_ERROR(logger_,
-                         "Non-interactive verification failed. Offsets unchanged.");
-        } else {
-            RCLCPP_INFO(logger_,
-                        "Non-interactive verification passed. Offsets unchanged.");
-        }
-        return all_ok;
+        return true;
     }
 
     bool ZeroSetter::select(std::string input) {
@@ -293,15 +278,8 @@ namespace Dog8Dof {
 
 int main(int argc, char **argv) {
 
-    std::string configPath;
-    if (argc < 2) {
-        std::cout << "Using default config path" << std::endl;
-        configPath = "/home/luo/Project/Horse/Dog_parallel/src/dog_bringup/"
-                     "parameters/motors.yaml";
-    } else {
-        configPath = argv[1];
-        std::cout << "Using config path" << configPath << std::endl;
-    }
+    const std::string configPath = "/home/luo/Project/Horse/Dog_parallel/src/dog_bringup/"
+                                   "parameters/motors.yaml";
     rclcpp::init(argc, argv);
 
     bool interactive = isatty(fileno(stdin));

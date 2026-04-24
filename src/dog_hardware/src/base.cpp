@@ -34,6 +34,8 @@ namespace Dog8Dof {
             const YAML::Node root = YAML::LoadFile(configPath_);
 
             portName_ = root["RS485_Port"].as<std::string>();
+            maxRetry_ = root["maxRetry"].as<size_t>(3);
+            deactiveDamp_ = root["deactiveDamp"].as<float>(0.1);
 
             for (size_t i = 0; i < 8; ++i) {
                 const YAML::Node joint_node = root[jointNames_[i]];
@@ -146,7 +148,7 @@ namespace Dog8Dof {
     BaseInterface::on_deactivate(const rclcpp_lifecycle::State &pre) {
         (void)pre;
         for (size_t i = 0; i < 8; ++i) {
-            motor_[i].damp(0.1f);
+            motor_[i].damp(deactiveDamp_);
         }
         return hardware_interface::CallbackReturn::SUCCESS;
     }
@@ -192,9 +194,17 @@ namespace Dog8Dof {
             const float kp = static_cast<float>(cmdKp_[i]);
             const float kd = static_cast<float>(cmdKd_[i]);
 
+            size_t retry = 0;
+
+        setMotor:
             if (!motor_[i].setHybrid(tor, pos, vel, kp, kd)) {
-                RCLCPP_ERROR_STREAM(get_logger(), "Time out on " << jointNames_[i]);
-                return hardware_interface::return_type::ERROR;
+                retry++;
+                if (retry > maxRetry_) {
+                    RCLCPP_ERROR_STREAM(get_logger(), "Time out on " << jointNames_[i]);
+                    return hardware_interface::return_type::ERROR;
+                } else {
+                    goto setMotor;
+                }
             }
         }
         return hardware_interface::return_type::OK;

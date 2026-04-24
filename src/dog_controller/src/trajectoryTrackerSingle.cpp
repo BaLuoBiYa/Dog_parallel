@@ -106,9 +106,7 @@ namespace Dog8Dof {
 
         LF_->setStandGait(idleTipX_, idleTipZ_);
         currentMode_ = ControlMode::STAND;
-
-        const auto syncStart = this->get_node()->get_clock()->now();
-        LF_->start(syncStart);
+        initialStandPending_ = true;
 
         return controller_interface::CallbackReturn::SUCCESS;
     }
@@ -166,6 +164,21 @@ namespace Dog8Dof {
         (void)time;
         (void)period;
 
+        if (initialStandPending_) {
+            try {
+                LF_->setStandGait(idleTipX_, idleTipZ_);
+
+                const auto syncStart = this->get_node()->get_clock()->now();
+                LF_->start(syncStart);
+                initialStandPending_ = false;
+            } catch (const std::exception &e) {
+                RCLCPP_ERROR(this->get_node()->get_logger(),
+                             "Failed to initialize stand trajectory: %s",
+                             e.what());
+                return controller_interface::return_type::ERROR;
+            }
+        }
+
         if (!updateAllGaitManagers()) {
             RCLCPP_ERROR(this->get_node()->get_logger(),
                          "Failed to update gait managers");
@@ -216,7 +229,7 @@ namespace Dog8Dof {
                                      param[1][0],
                                      param[2][0],
                                      kWalkPhaseOffset[0],
-                                     currentMode_ == ControlMode::WALK);
+                                     false);
                     if (currentMode_ != ControlMode::WALK) {
                         RCLCPP_INFO(this->get_node()->get_logger(), "Switched to walk");
                     }
@@ -255,6 +268,24 @@ namespace Dog8Dof {
 
     updateCommandFinished:
         if (LF_->isFinshed() && currentMode_ != ControlMode::STAND) {
+            if (currentMode_ == ControlMode::WALK && hasLastWalkParams_) {
+                try {
+                    LF_->setWalkGait(lastWalkParams_[0][0],
+                                     lastWalkParams_[1][0],
+                                     lastWalkParams_[2][0],
+                                     kWalkPhaseOffset[0],
+                                     false);
+
+                    const rclcpp::Time syncStart = this->get_node()->get_clock()->now();
+                    LF_->start(syncStart);
+                    return controller_interface::return_type::OK;
+                } catch (const std::exception &e) {
+                    RCLCPP_WARN(this->get_node()->get_logger(),
+                                "Walk cycle restart failed (%s), fallback to stand",
+                                e.what());
+                }
+            }
+
             LF_->setStandGait(idleTipX_, idleTipZ_);
             currentMode_ = ControlMode::STAND;
 

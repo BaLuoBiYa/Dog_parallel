@@ -122,6 +122,12 @@ namespace Dog8Dof {
         dz[3] = zAt(-L2, -W2); // RR
 
         for (size_t i = 0; i < 4; i++) {
+            if (cmd_.par1[i] == 0.0f) {
+                cmd_.par2[i] = 20.0f;
+                cmd_.par3[i] = baisHeight_ + dz[i];
+                continue;
+            }
+
             cmd_.par2[i] = stepHeightFactor_ * cmd_.par1[i]; // 计算步高
             cmd_.par3[i] = baisHeight_ + dz[i];              // 计算基座高度
             if (std::abs(cmd_.par1[i]) > Const::STEP_LENGTH_MAX) {

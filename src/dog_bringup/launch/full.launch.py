@@ -2,11 +2,12 @@
 import os
 from launch import LaunchDescription
 from launch_ros.actions import Node
+from launch.actions import RegisterEventHandler
 from launch.actions import DeclareLaunchArgument,TimerAction,IncludeLaunchDescription
 from launch.substitutions import LaunchConfiguration
 from launch.substitutions import LaunchConfiguration, Command
 from launch_ros.parameter_descriptions import ParameterValue
-from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.event_handlers import OnProcessExit,OnProcessStart
 from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
@@ -27,6 +28,12 @@ def generate_launch_description():
     robot_description_content = ParameterValue(
                 Command(["xacro ", xacro_path]),
                 value_type=str
+    )
+
+    zeroSetter_node = Node(
+        package="dog_hardware",
+        executable="zeroSetter",
+        output = "screen"
     )
 
     statepub_node = Node(
@@ -51,28 +58,28 @@ def generate_launch_description():
     )
     # 加载主控制器
 
-
-    timeLine0 = TimerAction(
-        period=0.0,
-        actions=[statepub_node],
+    event_handler0 = RegisterEventHandler(
+        event_handler=OnProcessExit(
+            target_action=zeroSetter_node,
+            on_exit=[controler_manager]
+        )
     )
 
-    timeLine1 = TimerAction(
-        period=1.0,
-        actions=[controler_manager],
-    )
-
-    timeLine2 = TimerAction(
-        period=2.0,
-        actions=[controler_spawner],
+    event_handler1 = RegisterEventHandler(
+        event_handler=OnProcessStart(
+            target_action=controler_manager,
+            on_start=[controler_spawner]
+        )
     )
     
     ld = LaunchDescription([
             declare_xacro,
             declare_manager,
-            timeLine0,
-            timeLine1,
-            timeLine2
+
+            statepub_node,
+            zeroSetter_node,
+            event_handler0,
+            event_handler1,
         ])
     
     return ld
