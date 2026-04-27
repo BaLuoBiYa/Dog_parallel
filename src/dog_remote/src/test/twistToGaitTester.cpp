@@ -6,17 +6,33 @@ namespace Dog8Dof {
             10,
             std::bind(&TwistToGait::twistCallback, this, std::placeholders::_1));
 
-        pub_ =
-            this->create_publisher<dog_msg::msg::TrajectoryCommand>("/dog/command", 10);
+        pub_ = this->create_publisher<dog_msg::msg::TrajectoryCommand>("/dog/command", 1);
+
+        lastXLinearVelosity_ = 0.0f;
+        lastZAngularVelosity_ = 0.0f;
     }
 
     void TwistToGait::twistCallback(const geometry_msgs::msg::Twist::SharedPtr msg) {
-        dog_msg::msg::TrajectoryCommand command;
-        command.gait = dog_msg::msg::TrajectoryCommand::WALK;
 
         // 提取数据内容
         const float XLinearVelosity = msg->linear.x;
         const float ZAngularVelosity = msg->angular.z;
+
+        // if (std::abs(lastXLinearVelosity_ - XLinearVelosity) > 0.01f ||
+        //     std::abs(lastZAngularVelosity_ - ZAngularVelosity) > 0.01f) {
+        //     RCLCPP_INFO_STREAM(
+        //         this->get_logger(),
+        //         "Received Twist - Linear X: " << XLinearVelosity
+        //                                       << " Angular Z: " << ZAngularVelosity);
+        //     lastXLinearVelosity_ = XLinearVelosity;
+        //     lastZAngularVelosity_ = ZAngularVelosity;
+        // } else {
+        //     // 如果变化不大，则不进行计算，直接返回
+        //     return;
+        // }
+
+        dog_msg::msg::TrajectoryCommand command;
+        command.gait = dog_msg::msg::TrajectoryCommand::WALK;
 
         // 直线行走时计算步长
         // 转化为mm/s
@@ -48,12 +64,12 @@ namespace Dog8Dof {
         // 写入步长
 
         for (size_t i = 0; i < 4; i++) {
-            command.par2[i] = stepHeightFactor_ * command.par1[i];
+            command.par2[i] = stepHeight_;
             command.par3[i] = baisHeight_;
         }
 
         pub_->publish(command);
-        RCLCPP_INFO(this->get_logger(), "Gait updated");
+        RCLCPP_INFO_STREAM(this->get_logger(), "LF step: " << command.par1[0]);
     }
 } // namespace Dog8Dof
 

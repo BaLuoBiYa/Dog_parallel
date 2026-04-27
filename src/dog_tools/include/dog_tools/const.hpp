@@ -52,7 +52,7 @@ namespace Dog8Dof {
 
         // 机身质量
         static constexpr float BODY_MASS = 12.0f;
-        static constexpr float G = 9800.0f;
+        static constexpr float G = 9.8f;
 
         // 轨迹生成参数
         static constexpr unsigned long MAX_RESOLUTION = 1000; // 轨迹生成分辨率

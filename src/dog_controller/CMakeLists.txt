@@ -32,13 +32,11 @@ ament_export_libraries(${PROJECT_NAME})
 ament_target_dependencies(${PROJECT_NAME} 
     rclcpp
     controller_interface
-    # pinocchio 
     Eigen3
     dog_tools
     dog_trajectory
     dog_msg)
 target_link_libraries(${PROJECT_NAME}
-    # pinocchio::pinocchio
     Eigen3::Eigen
     yaml-cpp
 )
@@ -127,6 +125,18 @@ target_link_libraries(legTest
     ${PROJECT_NAME}
 )
 
+add_executable(legCli
+    src/test/legCli.cpp)
+ament_target_dependencies(legCli
+    rclcpp
+    dog_tools
+    Eigen3
+)
+target_link_libraries(legCli
+    Eigen3::Eigen
+    ${PROJECT_NAME}
+)
+
 pluginlib_export_plugin_description_file(controller_interface dog_controllerInterface.xml)
 
 install(
@@ -137,6 +147,7 @@ install(
         jumpTest
         jumpLegacyTest
         legTest
+                legCli
   DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )

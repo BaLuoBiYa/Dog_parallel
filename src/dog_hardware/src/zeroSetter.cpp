@@ -57,7 +57,9 @@ namespace Dog8Dof {
             m.reset();
         }
         // 清空智能指针
+    }
 
+    bool ZeroSetter::init() {
         size_t attempt = 0;
         const std::chrono::seconds retryDelay(3);
         while (rclcpp::ok()) {
@@ -88,19 +90,43 @@ namespace Dog8Dof {
             throw std::runtime_error("RS485 connection failed or aborted");
         }
 
-        for (size_t i = 0; i < motorNumber_; ++i) {
+        attempt = 0;
+
+        while (rclcpp::ok()) {
+            ++attempt;
             try {
-                motor_[i] = std::make_unique<goM8010Interface>(
-                    jointMapping_[jointNames_[i]], port_);
-                motor_[i]->setZero(0.0f);
+                for (size_t i = 0; i < motorNumber_; ++i) {
+
+                    motor_[i] = std::make_unique<goM8010Interface>(
+                        jointMapping_[jointNames_[i]], port_);
+                    motor_[i]->setZero(0.0f);
+                }
             } catch (const std::exception &e) {
-                RCLCPP_ERROR_STREAM(logger_,
-                                    "Motor" << jointNames_[i].c_str()
-                                            << " connection failed: " << e.what());
-                throw std::runtime_error("Can't establish connection to Motor");
+                RCLCPP_WARN_STREAM(logger_,
+                                   "Connecting to motor " << "failed: " << e.what());
+                RCLCPP_INFO_STREAM(
+                    logger_,
+                    "Retrying in " << retryDelay.count() << "s (press Ctrl-C to abort)");
+                std::this_thread::sleep_for(retryDelay);
             }
+
+            size_t i = 0;
+            for (; i < motorNumber_; ++i) {
+                if (!motor_[i]) {
+                    break; // 如果有任何一个电机未成功创建，继续重试
+                }
+            }
+            if (i == motorNumber_) {
+                RCLCPP_INFO_STREAM(
+                    logger_,
+                    "Successfully connected to all motors on attempt " << attempt);
+                return true;
+            }
+            // 创建电机指针
         }
-        // 创建电机指针
+
+        RCLCPP_ERROR(this->get_logger(), "Failed to initilize motors");
+        return false;
     }
 
     bool ZeroSetter::callibrateMotorInteractive() {
@@ -110,12 +136,22 @@ namespace Dog8Dof {
             logger_, "Move front motors to true zero spot! Press any to continue...");
         std::getline(std::cin, dummy);
 
-        RCLCPP_INFO_STREAM(logger_,
-                           "Start setting current position as the zero position!");
-        for (size_t i = 0; i < motorNumber_; i = i + 1) {
-            RCLCPP_INFO_STREAM(logger_, "Setting for " << jointNames_[i]);
+        // RCLCPP_INFO_STREAM(logger_,
+        //                    "Start setting current position as the zero position!");
+        for (size_t i = 0; i < motorNumber_; i = i + 2) {
             motor_[i]->zeroTor();
+            motor_[i + 1]->zeroTor();
+
+            RCLCPP_INFO_STREAM(logger_,
+                               "Setting for " << jointNames_[i] << " and "
+                                              << jointNames_[i + 1]
+                                              << "Press any key to continue...");
+            std::getline(std::cin, dummy);
+
             if (!getOffsetInteractive(i)) {
+                return false;
+            }
+            if (!getOffsetInteractive(i + 1)) {
                 return false;
             }
         }
@@ -154,6 +190,7 @@ namespace Dog8Dof {
             float currentPosSum = 0.0f;
             motor_[i]->zeroTor();
             for (size_t j = 0; j < repeatLoops_; ++j) {
+                motor_[i]->zeroTor();
                 currentPosSum += motor_[i]->getPos(); // 这里是原始电机角(当前 setZero(0))
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
             }
@@ -201,6 +238,7 @@ namespace Dog8Dof {
     bool ZeroSetter::getOffsetInteractive(size_t jointIdx) {
         float currentPosSum = 0.0f;
         for (size_t j = 0; j < repeatLoops_; j++) {
+            motor_[jointIdx]->zeroTor();
             currentPosSum += motor_[jointIdx]->getPos();
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
@@ -270,6 +308,11 @@ int main(int argc, char **argv) {
 
     try {
         auto zs = std::make_unique<Dog8Dof::ZeroSetter>(configPath);
+        if (!zs->init()) {
+            RCLCPP_ERROR(zs->get_logger(), "Failed to initialize ZeroSetter");
+            rclcpp::shutdown();
+            return 1;
+        }
 
         if (interactive) {
             RCLCPP_INFO(

@@ -7,6 +7,7 @@ namespace Dog8Dof {
     class ZeroSetter : public rclcpp::Node {
       public:
         ZeroSetter(const std::string configFilePath);
+        bool init();
         bool callibrateMotorInteractive();
         bool callibrateMotorNoneInteractive();
 
@@ -33,10 +34,10 @@ namespace Dog8Dof {
         const float warnThreshold_ = 10.0f;
 
         static const size_t repeatLoops_ = 100;
-        static const size_t motorNumber_ = 2;
+        static const size_t motorNumber_ = 8;
 
-        float frontAngleIdle_ = (-2.7f); // 初始状态下前电机的理论位置
-        float rearAngleIdle_ = 12.14f;   // 初始状态下后电机的理论位置
+        float frontAngleIdle_; // 初始状态下前电机的理论位置
+        float rearAngleIdle_;  // 初始状态下后电机的理论位置
 
         bool getOffsetInteractive(size_t jointIdx);
         bool select(std::string input);

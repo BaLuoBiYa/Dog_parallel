@@ -78,7 +78,7 @@ namespace Dog8Dof {
         trajectory_ = Trajectory(0);
 
         const size_t totalSteps = stepsFromDurationNs(parameters_.totalTime * 1e9);
-        const float dt = static_cast<float>(durationNanoSec_) * 1e-9f;
+        const float dt = static_cast<float>(controlDurationNanoSec_) * 1e-9f;
         const float TCycle = dt * static_cast<float>(totalSteps);
 
         Trajectory closedCycle;
@@ -260,7 +260,7 @@ namespace Dog8Dof {
         }
 
         for (size_t i = 0; i < trajectory_.time.size(); ++i) {
-            trajectory_.time[i] = startTimeNanoSec_ + i * durationNanoSec_;
+            trajectory_.time[i] = startTimeNanoSec_ + i * controlDurationNanoSec_;
         }
 
         target_ = trajectory_.points.front();
@@ -538,7 +538,7 @@ namespace Dog8Dof {
             return Trajectory(0);
         }
 
-        const float dt = static_cast<float>(durationNanoSec_) * 1e-9f;
+        const float dt = static_cast<float>(controlDurationNanoSec_) * 1e-9f;
         const float cycleTime = dt * static_cast<float>(totalSteps);
 
         size_t swingSteps = static_cast<size_t>(

@@ -1,5 +1,5 @@
 walkKp: 0.05
-walkKd: 0.00
+walkKd: 0.01
 reachThreshold: 1.0
 transitionVelMax: 200.0
 totalTime: 2.0

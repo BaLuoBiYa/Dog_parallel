@@ -73,7 +73,7 @@ namespace Dog8Dof {
             midPos[1] = Const::BODY_HEIGHT_MIN;
         } // 防止足尖穿过机体
 
-        const float durationSec = durationNanoSec_ * 1e-9;
+        const float durationSec = controlDurationNanoSec_ * 1e-9;
         const float T1 = durationSec * 0.5 * totalSteps;
         const float T2 = T1;
         const Eigen::Vector2f zeroAcc(0.0f, 0.0f);
@@ -115,12 +115,12 @@ namespace Dog8Dof {
             return false;
         }
 
-        // if (trajectory_.time.size() != trajectory_.points.size()) {
-        //     trajectory_.time.resize(trajectory_.points.size());
-        // }
+        if (trajectory_.time.size() != trajectory_.points.size()) {
+            trajectory_.time.resize(trajectory_.points.size());
+        }
 
         for (size_t i = 0; i < trajectory_.time.size(); ++i) {
-            trajectory_.time[i] = startTimeNanoSec_ + i * durationNanoSec_;
+            trajectory_.time[i] = startTimeNanoSec_ + i * controlDurationNanoSec_;
         }
 
         target_ = trajectory_.points.front();
@@ -135,8 +135,6 @@ namespace Dog8Dof {
         if (finished_) {
             return target_;
         }
-
-        const size_t pointCount = trajectory_.points.size();
         const size_t currentNanoSec = static_cast<size_t>(currentTime.nanoseconds());
 
         auto assignTransitionGains = [this]() {
@@ -167,15 +165,18 @@ namespace Dog8Dof {
         if (currentNanoSec >= trajectory_.time.back()) {
             target_ = trajectory_.points.back();
             assignStandGains();
-            trajectory_.progress = pointCount;
+            trajectory_.progress = trajectory_.points.size();
             finished_ = true;
             return target_;
         }
 
         interpolate(currentNanoSec);
-        assignTransitionGains();
+
         if (trajectory_.progress == trajectory_.points.size()) {
+            assignStandGains();
             finished_ = true;
+        } else {
+            assignTransitionGains();
         }
         return target_;
     }

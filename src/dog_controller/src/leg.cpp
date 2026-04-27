@@ -3,6 +3,18 @@
 #include <iostream>
 
 namespace Dog8Dof {
+    namespace {
+        constexpr float kMotorSign = -1.0f;
+
+        inline float motorToModel(float v) {
+            return kMotorSign * v;
+        }
+
+        inline float modelToMotor(float v) {
+            return kMotorSign * v;
+        }
+    } // namespace
+
     Leg2Dof::Leg2Dof(float upperLength,
                      float lowerLength,
                      float tipLength,
@@ -10,11 +22,11 @@ namespace Dog8Dof {
                      float rearInitPos)
         : upperLength_(upperLength), lowerLength_(lowerLength), tipLength_(tipLength),
           upperSQ_(upperLength * upperLength), lowerSQ_(lowerLength * lowerLength) {
-        currentMotors_[FRONT] = Motor{frontInitPos, 0.0, 0.0, 0.0, 0.0};
-        currentMotors_[REAR] = Motor{rearInitPos, 0.0, 0.0, 0.0, 0.0};
+        currentMotors_[FRONT] = Motor{motorToModel(frontInitPos), 0.0, 0.0, 0.0, 0.0};
+        currentMotors_[REAR] = Motor{motorToModel(rearInitPos), 0.0, 0.0, 0.0, 0.0};
 
-        targetMotors_[FRONT] = Motor{frontInitPos, 0.0, 0.0, 0.0, 0.0};
-        targetMotors_[REAR] = Motor{rearInitPos, 0.0, 0.0, 0.0, 0.0};
+        targetMotors_[FRONT] = Motor{motorToModel(frontInitPos), 0.0, 0.0, 0.0, 0.0};
+        targetMotors_[REAR] = Motor{motorToModel(rearInitPos), 0.0, 0.0, 0.0, 0.0};
 
         currentTip_ = Body("Mount");
         targetTip_ = Body("Mount");
@@ -47,22 +59,29 @@ namespace Dog8Dof {
     bool Leg2Dof::updateMotor(const Eigen::Vector2f &pos,
                               const Eigen::Vector2f &vel,
                               const Eigen::Vector2f &tau) {
-        currentMotors_[FRONT].pos = pos[0];
-        currentMotors_[REAR].pos = pos[1];
+        const float modelFrontPos = motorToModel(pos[0]);
+        const float modelRearPos = motorToModel(pos[1]);
+        const float modelFrontVel = motorToModel(vel[0]);
+        const float modelRearVel = motorToModel(vel[1]);
+        const float modelFrontTau = motorToModel(tau[0]);
+        const float modelRearTau = motorToModel(tau[1]);
 
-        currentMotors_[FRONT].vel = vel[0];
-        currentMotors_[REAR].vel = vel[1];
+        currentMotors_[FRONT].pos = modelFrontPos;
+        currentMotors_[REAR].pos = modelRearPos;
 
-        currentMotors_[FRONT].tau = tau[0];
-        currentMotors_[REAR].tau = tau[1];
+        currentMotors_[FRONT].vel = modelFrontVel;
+        currentMotors_[REAR].vel = modelRearVel;
 
-        if (!motorPosToTip(pos[0], pos[1])) {
+        currentMotors_[FRONT].tau = modelFrontTau;
+        currentMotors_[REAR].tau = modelRearTau;
+
+        if (!motorPosToTip(modelFrontPos, modelRearPos)) {
             return false;
         }
-        if (!motorVelToTip(vel[0], vel[1])) {
+        if (!motorVelToTip(modelFrontVel, modelRearVel)) {
             return false;
         }
-        if (!motorTauToTip(tau[0], tau[1])) {
+        if (!motorTauToTip(modelFrontTau, modelRearTau)) {
             return false;
         }
 
@@ -86,7 +105,11 @@ namespace Dog8Dof {
     }
 
     Motor Leg2Dof::getMotorTarget(MotorPlacement target) const {
-        return targetMotors_[target];
+        Motor motorTarget = targetMotors_[target];
+        motorTarget.pos = modelToMotor(motorTarget.pos);
+        motorTarget.vel = modelToMotor(motorTarget.vel);
+        motorTarget.tau = modelToMotor(motorTarget.tau);
+        return motorTarget;
     }
 
     Body Leg2Dof::getTipCurrent() const {
