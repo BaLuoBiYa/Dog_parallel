@@ -7,6 +7,10 @@ namespace Dog8Dof {
         if (!reloadParameters()) {
             throw std::invalid_argument("Could not load Config YAML!");
         }
+        stepHeight_ = 20.0f;
+        stepLength_ = 0.0f;
+        baseHeight_ = 180.0f;
+        totalTime_ = 1.0f;
         // 加载参数
     }
 
@@ -43,7 +47,8 @@ namespace Dog8Dof {
     bool WalkTrajectory::setTarget(float stepLength,
                                    float stepHeight,
                                    float baseHeight,
-                                   float phaseOffset) {
+                                   float phaseOffset,
+                                   float totalTime) {
         if (stepHeight <= 0.0f) {
             RCLCPP_ERROR(logger_, "Step height must be greater than 0!");
             return false;
@@ -59,6 +64,7 @@ namespace Dog8Dof {
         stepHeight_ = stepHeight;
         stepLength_ = stepLength;
         baseHeight_ = baseHeight;
+        totalTime_ = totalTime;
 
         // 归一化到 [0, 1)
         phaseOffset_ = phaseOffset - std::floor(phaseOffset);
@@ -74,7 +80,7 @@ namespace Dog8Dof {
         target_ = TrajectoryPoint();
         trajectory_ = Trajectory(0);
 
-        const size_t totalSteps = stepsFromDurationNs(parameters_.totalTime * 1e9);
+        const size_t totalSteps = stepsFromDurationNs(totalTime_ * 1e9);
         const float dt = static_cast<float>(controlDurationNanoSec_) * 1e-9f;
         const float TCycle = dt * static_cast<float>(totalSteps);
 
@@ -617,7 +623,7 @@ namespace Dog8Dof {
         (void)currentTip;
 
         const size_t totalSteps =
-            stepsFromDurationNs(static_cast<size_t>(parameters_.totalTime * 1e9));
+            stepsFromDurationNs(static_cast<size_t>(totalTime_ * 1e9));
         if (totalSteps < 4) {
             return Trajectory(0);
         }
@@ -708,7 +714,6 @@ namespace YAML {
             node["reachThreshold"] = std::sqrt(rhs.reachThresholdSQ);
             node["transitionVelMax"] = rhs.transitionVelMax;
 
-            node["totalTime"] = rhs.totalTime;
             node["swingDutyCycle"] = rhs.swingDutyCycle;
 
             node["pushGain"]["horizontal"] = rhs.horizontalPushGain;
@@ -734,7 +739,6 @@ namespace YAML {
             rhs.verticalPushGain = node["pushGain"]["vertical"].as<float>(0.01);
 
             rhs.swingDutyCycle = node["swingDutyCycle"].as<float>(0.5);
-            rhs.totalTime = node["totalTime"].as<float>(2.0);
 
             rhs.deltaSpeed = Eigen::Vector2f(node["deltaSpeed"]["x"].as<float>(1.0),
                                              node["deltaSpeed"]["z"].as<float>(1.0));

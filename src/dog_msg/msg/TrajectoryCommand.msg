@@ -6,3 +6,4 @@ uint8 gait
 float32[4] par1
 float32[4] par2
 float32[4] par3
+float32[4] par4

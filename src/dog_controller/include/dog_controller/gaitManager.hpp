@@ -25,6 +25,7 @@ namespace Dog8Dof {
         bool setWalkGait(float stepLength,
                          float stepHeight,
                          float baseHeight,
+                         float totalTime,
                          float phaseOffset = 0.0f);
         bool setStandGait(float tipX, float tipZ);
 

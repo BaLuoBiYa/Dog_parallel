@@ -16,6 +16,7 @@ namespace Dog8Dof {
         bool setTarget(float stepLength,
                        float stepHeight,
                        float baseHeight,
+                       float totalTime,
                        float phaseOffset = 0.0f);
         bool generate(const Body &currentTip) override;
         bool start(const rclcpp::Time &startTime) override;
@@ -33,7 +34,6 @@ namespace Dog8Dof {
             float horizontalPushGain;
             float verticalPushGain;
 
-            float totalTime;
             float swingDutyCycle;
 
             float blendTimeNs;
@@ -44,8 +44,7 @@ namespace Dog8Dof {
 
       private:
         parameters_t parameters_;
-        float stepLength_, stepHeight_;
-        float baseHeight_;
+        float stepLength_, stepHeight_, baseHeight_, totalTime_;
         float phaseOffset_ = 0.0f;
 
         /**

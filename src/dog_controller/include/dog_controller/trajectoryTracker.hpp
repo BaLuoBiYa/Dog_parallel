@@ -80,7 +80,13 @@ namespace Dog8Dof {
 
         bool initialStandPending_ = false;
 
-        std::array<std::array<float, 4>, 3> lastWalkParams_{};
+        // 缓存的待执行命令（收到新消息后先缓存，完成当前步态后再应用）
+        bool pendingCmd_ = false;
+        ControlMode pendingMode_ = ControlMode::STAND;
+        std::array<std::array<float, 4>, 4> pendingParams_{};
+
+        // 步行模式循环参数（当前周期结束后自动重启下一周期）
+        std::array<std::array<float, 4>, 4> lastWalkParams_{};
         bool hasLastWalkParams_ = false;
 
         bool
