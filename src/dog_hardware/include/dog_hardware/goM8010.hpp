@@ -112,11 +112,22 @@ namespace Dog8Dof {
          */
         void emergencyStop();
 
+        /**
+         * @brief 构造用于批量发送的 `MotorCmd` 对象
+         */
+        MotorCmd makeCmd(float torque, float pos, float vel, float kp, float kd) const;
+
+        /**
+         * @brief 从 `MotorData` 更新内部状态（批量接收后调用）
+         */
+        void applyState(const MotorData &data);
+
       private:
         MotorCmd command_;
         MotorData state_;
         std::shared_ptr<SerialPort> port_;
         float posOffset_;
+        float gearRatio_ = queryGearRatio(MotorType::GO_M8010_6);
     };
 
 } // namespace Dog8Dof

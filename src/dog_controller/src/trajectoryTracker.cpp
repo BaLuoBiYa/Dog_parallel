@@ -142,10 +142,22 @@ namespace Dog8Dof {
         }
         // 初始化RR
 
-        LF_->setStandGait(idleTipX_, idleTipZ_);
-        LR_->setStandGait(idleTipX_, idleTipZ_);
-        RF_->setStandGait(idleTipX_, idleTipZ_);
-        RR_->setStandGait(idleTipX_, idleTipZ_);
+        if (!LF_->setStandGait(idleTipX_, idleTipZ_)) {
+            RCLCPP_ERROR(this->get_node()->get_logger(), "Failed to init LF");
+            return controller_interface::CallbackReturn::ERROR;
+        }
+        if (!LR_->setStandGait(idleTipX_, idleTipZ_)) {
+            RCLCPP_ERROR(this->get_node()->get_logger(), "Failed to init LR");
+            return controller_interface::CallbackReturn::ERROR;
+        }
+        if (!RF_->setStandGait(idleTipX_, idleTipZ_)) {
+            RCLCPP_ERROR(this->get_node()->get_logger(), "Failed to init RF");
+            return controller_interface::CallbackReturn::ERROR;
+        }
+        if (!RR_->setStandGait(idleTipX_, idleTipZ_)) {
+            RCLCPP_ERROR(this->get_node()->get_logger(), "Failed to init RR");
+            return controller_interface::CallbackReturn::ERROR;
+        }
         currentMode_ = ControlMode::STAND;
         initialStandPending_ = true;
 
@@ -295,26 +307,14 @@ namespace Dog8Dof {
                         }
                     }
 
-                    LF_->setWalkGait(param[0][0],
-                                     param[1][0],
-                                     param[2][0],
-                                     kWalkPhaseOffset[0],
-                                     currentMode_ == ControlMode::WALK);
-                    LR_->setWalkGait(param[0][1],
-                                     param[1][1],
-                                     param[2][1],
-                                     kWalkPhaseOffset[1],
-                                     currentMode_ == ControlMode::WALK);
-                    RF_->setWalkGait(param[0][2],
-                                     param[1][2],
-                                     param[2][2],
-                                     kWalkPhaseOffset[2],
-                                     currentMode_ == ControlMode::WALK);
-                    RR_->setWalkGait(param[0][3],
-                                     param[1][3],
-                                     param[2][3],
-                                     kWalkPhaseOffset[3],
-                                     currentMode_ == ControlMode::WALK);
+                    LF_->setWalkGait(
+                        param[0][0], param[1][0], param[2][0], kWalkPhaseOffset[0]);
+                    LR_->setWalkGait(
+                        param[0][1], param[1][1], param[2][1], kWalkPhaseOffset[1]);
+                    RF_->setWalkGait(
+                        param[0][2], param[1][2], param[2][2], kWalkPhaseOffset[2]);
+                    RR_->setWalkGait(
+                        param[0][3], param[1][3], param[2][3], kWalkPhaseOffset[3]);
                     if (currentMode_ != ControlMode::WALK) {
                         RCLCPP_INFO(this->get_node()->get_logger(), "Switched to walk");
                     }
@@ -388,23 +388,19 @@ namespace Dog8Dof {
                     LF_->setWalkGait(lastWalkParams_[0][0],
                                      lastWalkParams_[1][0],
                                      lastWalkParams_[2][0],
-                                     kWalkPhaseOffset[0],
-                                     false);
+                                     kWalkPhaseOffset[0]);
                     LR_->setWalkGait(lastWalkParams_[0][1],
                                      lastWalkParams_[1][1],
                                      lastWalkParams_[2][1],
-                                     kWalkPhaseOffset[1],
-                                     false);
+                                     kWalkPhaseOffset[1]);
                     RF_->setWalkGait(lastWalkParams_[0][2],
                                      lastWalkParams_[1][2],
                                      lastWalkParams_[2][2],
-                                     kWalkPhaseOffset[2],
-                                     false);
+                                     kWalkPhaseOffset[2]);
                     RR_->setWalkGait(lastWalkParams_[0][3],
                                      lastWalkParams_[1][3],
                                      lastWalkParams_[2][3],
-                                     kWalkPhaseOffset[3],
-                                     false);
+                                     kWalkPhaseOffset[3]);
 
                     const auto syncStart = this->get_node()->get_clock()->now();
                     LF_->start(syncStart);

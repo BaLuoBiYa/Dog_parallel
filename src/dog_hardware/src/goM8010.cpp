@@ -24,9 +24,9 @@ namespace Dog8Dof {
 
     bool
     goM8010Interface::setHybrid(float torque, float pos, float vel, float kp, float kd) {
-        command_.tau = torque / queryGearRatio(MotorType::GO_M8010_6);
-        command_.q = (pos + posOffset_) * queryGearRatio(MotorType::GO_M8010_6);
-        command_.dq = vel * queryGearRatio(MotorType::GO_M8010_6);
+        command_.tau = torque / gearRatio_;
+        command_.q = (pos + posOffset_) * gearRatio_;
+        command_.dq = vel * gearRatio_;
         command_.kp = kp;
         command_.kd = kd;
         return port_->sendRecv(&command_, &state_);
@@ -34,7 +34,7 @@ namespace Dog8Dof {
 
     bool goM8010Interface::setPos(float target, float kp, float kd) {
         command_.tau = 0.0;
-        command_.q = (target + posOffset_) * queryGearRatio(MotorType::GO_M8010_6);
+        command_.q = (target + posOffset_) * gearRatio_;
         command_.dq = 0.0;
         command_.kp = kp;
         command_.kd = kd;
@@ -44,19 +44,37 @@ namespace Dog8Dof {
     bool goM8010Interface::setVel(float target, float kd) {
         command_.tau = 0.0;
         command_.q = 0.0;
-        command_.dq = target * queryGearRatio(MotorType::GO_M8010_6);
+        command_.dq = target * gearRatio_;
         command_.kp = 0.0;
         command_.kd = kd;
         return port_->sendRecv(&command_, &state_);
     }
 
     bool goM8010Interface::setTor(float target) {
-        command_.tau = target / queryGearRatio(MotorType::GO_M8010_6);
+        command_.tau = target / gearRatio_;
         command_.q = 0.0;
         command_.dq = 0.0;
         command_.kp = 0.0;
         command_.kd = 0.0;
         return port_->sendRecv(&command_, &state_);
+    }
+
+    MotorCmd goM8010Interface::makeCmd(float torque, float pos, float vel, float kp, float kd) const {
+        MotorCmd cmd;
+        cmd.motorType = MotorType::GO_M8010_6;
+        cmd.hex_len = 0;
+        cmd.id = command_.id;
+        cmd.mode = command_.mode;
+        cmd.tau = torque / gearRatio_;
+        cmd.q = (pos + posOffset_) * gearRatio_;
+        cmd.dq = vel * gearRatio_;
+        cmd.kp = kp;
+        cmd.kd = kd;
+        return cmd;
+    }
+
+    void goM8010Interface::applyState(const MotorData &data) {
+        state_ = data;
     }
 
     void goM8010Interface::setZero(float offset) {
@@ -92,15 +110,15 @@ namespace Dog8Dof {
     }
 
     float goM8010Interface::getPos() {
-        return state_.q / queryGearRatio(MotorType::GO_M8010_6) - posOffset_;
+        return state_.q / gearRatio_ - posOffset_;
     }
 
     float goM8010Interface::getVel() {
-        return state_.dq / queryGearRatio(MotorType::GO_M8010_6);
+        return state_.dq / gearRatio_;
     }
 
     float goM8010Interface::getTor() {
-        return state_.tau * queryGearRatio(MotorType::GO_M8010_6);
+        return state_.tau * gearRatio_;
     }
 
     int8_t goM8010Interface::getTemp() {

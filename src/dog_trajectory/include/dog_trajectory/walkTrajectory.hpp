@@ -16,8 +16,7 @@ namespace Dog8Dof {
         bool setTarget(float stepLength,
                        float stepHeight,
                        float baseHeight,
-                       float phaseOffset = 0.0f,
-                       bool useNearestStart = false);
+                       float phaseOffset = 0.0f);
         bool generate(const Body &currentTip) override;
         bool start(const rclcpp::Time &startTime) override;
         TrajectoryPoint get(const rclcpp::Time &currentTime) override;
@@ -48,7 +47,6 @@ namespace Dog8Dof {
         float stepLength_, stepHeight_;
         float baseHeight_;
         float phaseOffset_ = 0.0f;
-        bool useNearestStart_ = false;
 
         /**
          * @brief 生成一个完整闭合步态周期
@@ -62,9 +60,6 @@ namespace Dog8Dof {
          * @param cycle 闭合步态轨迹
          * @param currentTip 当前足端状态
          */
-        size_t findNearestPointIndex(const Trajectory &cycle,
-                                     const Body &currentTip) const;
-
         /**
          * @brief 将闭合轨迹重排，使 startIndex 对应点成为起点
          */

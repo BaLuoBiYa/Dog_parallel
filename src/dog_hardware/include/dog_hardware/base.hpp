@@ -52,6 +52,7 @@ namespace Dog8Dof {
 
         size_t maxRetry_;
         float deactiveDamp_;
+        long deactiveDampTime_;
 
         std::array<double, 8> stPos_{};
         std::array<double, 8> stVel_{};

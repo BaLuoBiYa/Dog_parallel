@@ -1,6 +1,5 @@
 #include "dog_trajectory/walkTrajectory.hpp"
 #include "dog_tools/quinticPolynomial.hpp"
-#include <limits>
 
 namespace Dog8Dof {
     WalkTrajectory::WalkTrajectory(const std::string &configPath, rclcpp::Duration period)
@@ -44,8 +43,7 @@ namespace Dog8Dof {
     bool WalkTrajectory::setTarget(float stepLength,
                                    float stepHeight,
                                    float baseHeight,
-                                   float phaseOffset,
-                                   bool useNearestStart) {
+                                   float phaseOffset) {
         if (stepHeight <= 0.0f) {
             RCLCPP_ERROR(logger_, "Step height must be greater than 0!");
             return false;
@@ -61,7 +59,6 @@ namespace Dog8Dof {
         stepHeight_ = stepHeight;
         stepLength_ = stepLength;
         baseHeight_ = baseHeight;
-        useNearestStart_ = useNearestStart;
 
         // 归一化到 [0, 1)
         phaseOffset_ = phaseOffset - std::floor(phaseOffset);
@@ -101,8 +98,6 @@ namespace Dog8Dof {
             startIndex =
                 static_cast<size_t>(std::lround(phaseOffset_ * static_cast<float>(n))) %
                 n;
-        } else if (useNearestStart_) {
-            startIndex = findNearestPointIndex(closedCycle, currentTip);
         } else {
             startIndex =
                 static_cast<size_t>(std::lround(phaseOffset_ * static_cast<float>(n))) %
@@ -114,18 +109,18 @@ namespace Dog8Dof {
             return false;
         }
 
-        // 运行中重规划：仍按最近点直接续接（零步长除外，零步长需要先回中位）
-        if (useNearestStart_ && !isZeroStep) {
-            trajectory_ = std::move(phaseCycle);
-            return true;
-        }
-
         // 相位启动：先从当前位置过渡到相位起点
         const TrajectoryPoint &phaseStart = phaseCycle.points.front();
 
         const Eigen::Vector2f currentPos(currentTip.pos[0], currentTip.pos[2]);
-        const Eigen::Vector2f currentVel(currentTip.linerVel[0], currentTip.linerVel[2]);
         const Eigen::Vector2f phaseStartPos(phaseStart.pos[0], phaseStart.pos[2]);
+        if ((currentPos - phaseStartPos).squaredNorm() < parameters_.reachThresholdSQ) {
+            // 已经在相位起点附近，无需过渡
+            trajectory_ = std::move(phaseCycle);
+            return true;
+        }
+
+        const Eigen::Vector2f currentVel(currentTip.linerVel[0], currentTip.linerVel[2]);
         const Eigen::Vector2f phaseStartVel(phaseStart.vel[0], phaseStart.vel[2]);
         const Eigen::Vector2f zeroAcc = Eigen::Vector2f::Zero();
 
@@ -138,8 +133,7 @@ namespace Dog8Dof {
             std::clamp(stepsFromDurationNs(parameters_.startblendTimeNs, 4, 40),
                        static_cast<size_t>(4),
                        static_cast<size_t>(40));
-        const float transitionTime =
-            std::max(0.08f, static_cast<float>(transitionSteps) * dt);
+        const float transitionTime = static_cast<float>(transitionSteps) * dt;
 
         Trajectory transition(0);
 
@@ -164,15 +158,14 @@ namespace Dog8Dof {
                 std::clamp(baseHeight_, Const::BODY_HEIGHT_MIN, Const::BODY_HEIGHT_MAX));
             const Eigen::Vector2f centerVel = Eigen::Vector2f::Zero();
 
-            const size_t toCenterSteps = std::max<size_t>(6, transitionSteps);
-            const float toCenterTime = std::max(0.12f, transitionTime);
+            const size_t toCenterSteps = transitionSteps;
+            const float toCenterTime = transitionTime;
 
-            const size_t settleSteps = std::max<size_t>(4, transitionSteps / 4);
-            const float settleTime =
-                std::max(0.06f, static_cast<float>(settleSteps) * dt);
+            const size_t settleSteps = transitionSteps / 4;
+            const float settleTime = static_cast<float>(settleSteps) * dt;
 
-            const size_t toPhaseSteps = std::max<size_t>(6, transitionSteps);
-            const float toPhaseTime = std::max(0.12f, transitionTime);
+            const size_t toPhaseSteps = transitionSteps;
+            const float toPhaseTime = transitionTime;
 
             Trajectory toCenter = QuinticPolynomial::generate(currentPos,
                                                               centerPos,
@@ -207,10 +200,10 @@ namespace Dog8Dof {
         } else if (startInForwardDir) {
             // 前向相位起点：抬腿移动到起点
             const Eigen::Vector2f skyDir = getHeightVec(Eigen::Vector2f(stepDir, 0.0f));
-            const float liftMag = std::max(5.0f, std::abs(stepHeight_) * 0.6f);
+            const float liftMag = std::max(10.0f, std::abs(stepHeight_) * 0.6f);
 
-            const size_t steps1 = std::max<size_t>(2, transitionSteps / 2);
-            const size_t steps2 = std::max<size_t>(2, transitionSteps - steps1);
+            const size_t steps1 = transitionSteps / 2;
+            const size_t steps2 = transitionSteps - steps1;
             const float t1 = transitionTime * 0.5f;
             const float t2 = transitionTime - t1;
 
@@ -256,13 +249,12 @@ namespace Dog8Dof {
             appendUnique(transition, std::move(second));
         } else {
             // 后向相位起点：从地面移动到起点
-            const float groundZ =
-                std::max({baseHeight_, currentPos[1], phaseStartPos[1]});
+            const float groundZ = baseHeight_;
             const Eigen::Vector2f groundStart(currentPos[0], groundZ);
             const Eigen::Vector2f groundEnd(phaseStartPos[0], groundZ);
 
-            const size_t steps1 = std::max<size_t>(2, transitionSteps / 2);
-            const size_t steps2 = std::max<size_t>(2, transitionSteps - steps1);
+            const size_t steps1 = transitionSteps / 2;
+            const size_t steps2 = transitionSteps - steps1;
             const float t1 = transitionTime * 0.5f;
             const float t2 = transitionTime - t1;
 
@@ -303,6 +295,23 @@ namespace Dog8Dof {
 
             appendUnique(transition, std::move(first));
             appendUnique(transition, std::move(second));
+        }
+
+        // 过渡段力矩渐变：从 currentTip.tau 平滑过渡到 phaseStart.tau，消除力矩跳变
+        if (!transition.points.empty()) {
+            const float tau_start_x = currentTip.tau[0];
+            const float tau_start_z = currentTip.tau[2];
+            const float tau_end_x = phaseStart.tau[0];
+            const float tau_end_z = phaseStart.tau[2];
+            for (size_t i = 0; i < transition.points.size(); ++i) {
+                const float s =
+                    transition.points.size() <= 1
+                        ? 1.0f
+                        : static_cast<float>(i) /
+                              static_cast<float>(transition.points.size() - 1);
+                transition.points[i].tau[0] = tau_start_x + (tau_end_x - tau_start_x) * s;
+                transition.points[i].tau[2] = tau_start_z + (tau_end_z - tau_start_z) * s;
+            }
         }
 
         // 去掉过渡段末点与相位段首点重复
@@ -396,28 +405,28 @@ namespace Dog8Dof {
         return swing + blend + stance;
     }
 
-    size_t WalkTrajectory::findNearestPointIndex(const Trajectory &cycle,
-                                                 const Body &currentTip) const {
-        if (cycle.points.empty()) {
-            return 0;
-        }
+    // size_t WalkTrajectory::findNearestPointIndex(const Trajectory &cycle,
+    //                                              const Body &currentTip) const {
+    //     if (cycle.points.empty()) {
+    //         return 0;
+    //     }
 
-        const Eigen::Vector2f currentPos(currentTip.pos[0], currentTip.pos[2]);
-        size_t nearestIndex = 0;
-        float bestDistSq = std::numeric_limits<float>::max();
+    //     const Eigen::Vector2f currentPos(currentTip.pos[0], currentTip.pos[2]);
+    //     size_t nearestIndex = 0;
+    //     float bestDistSq = std::numeric_limits<float>::max();
 
-        for (size_t i = 0; i < cycle.points.size(); ++i) {
-            const Eigen::Vector2f pointPos(cycle.points[i].pos[0],
-                                           cycle.points[i].pos[2]);
-            const float distSq = (pointPos - currentPos).squaredNorm();
-            if (distSq < bestDistSq) {
-                bestDistSq = distSq;
-                nearestIndex = i;
-            }
-        }
+    //     for (size_t i = 0; i < cycle.points.size(); ++i) {
+    //         const Eigen::Vector2f pointPos(cycle.points[i].pos[0],
+    //                                        cycle.points[i].pos[2]);
+    //         const float distSq = (pointPos - currentPos).squaredNorm();
+    //         if (distSq < bestDistSq) {
+    //             bestDistSq = distSq;
+    //             nearestIndex = i;
+    //         }
+    //     }
 
-        return nearestIndex;
-    }
+    //     return nearestIndex;
+    // }
 
     Trajectory WalkTrajectory::rotateCycleToStart(const Trajectory &cycle,
                                                   size_t startIndex) const {
@@ -464,33 +473,32 @@ namespace Dog8Dof {
                                                      phaseTime,
                                                      steps);
 
-        // const float pushForce = parameters_.horizontalPushGain * stepLength_;
-        // const float pressForce = Const::BODY_MASS * Const::G * 0.5 +
-        //                          parameters_.verticalPushGain * std::abs(pushForce);
-        // const size_t rampSteps = std::max<size_t>(1, static_cast<size_t>(steps *
-        // 0.1f));
+        const float pushForce = parameters_.horizontalPushGain * stepLength_;
+        const float pressForce = Const::BODY_MASS * Const::G * 0.5 +
+                                 parameters_.verticalPushGain * std::abs(pushForce);
+        const size_t rampSteps = std::max<size_t>(1, static_cast<size_t>(steps * 0.1f));
 
-        // auto smoothstep01 = [](float x) {
-        //     x = std::clamp(x, 0.0f, 1.0f);
-        //     return x * x * (3.0f - 2.0f * x);
-        // };
+        auto smoothstep01 = [](float x) {
+            x = std::clamp(x, 0.0f, 1.0f);
+            return x * x * (3.0f - 2.0f * x);
+        };
 
-        // for (size_t i = 0; i < steps; i++) {
-        //     float scale = 1.0f;
-        //     if (i < rampSteps) {
-        //         const float s = static_cast<float>(i + 1) /
-        //         static_cast<float>(rampSteps); scale = smoothstep01(s);
-        //     } else if (i + rampSteps >= steps) {
-        //         const size_t tailIndex = steps - 1 - i;
-        //         const float s =
-        //             static_cast<float>(tailIndex) / static_cast<float>(rampSteps);
-        //         scale = smoothstep01(s);
-        //     }
+        for (size_t i = 0; i < steps; i++) {
+            float scale = 1.0f;
+            if (i < rampSteps) {
+                const float s = static_cast<float>(i + 1) / static_cast<float>(rampSteps);
+                scale = smoothstep01(s);
+            } else if (i + rampSteps >= steps) {
+                const size_t tailIndex = steps - 1 - i;
+                const float s =
+                    static_cast<float>(tailIndex) / static_cast<float>(rampSteps);
+                scale = smoothstep01(s);
+            }
 
-        //     res.points[i].tau[0] = pushForce * scale;
-        //     res.points[i].tau[1] = 0.0f;
-        //     res.points[i].tau[2] = pressForce * scale;
-        // }
+            res.points[i].tau[0] = pushForce * scale;
+            res.points[i].tau[1] = 0.0f;
+            res.points[i].tau[2] = pressForce * scale;
+        }
         // 添加前馈支撑力矩
         return res;
     }

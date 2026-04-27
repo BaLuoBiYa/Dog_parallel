@@ -2,9 +2,13 @@
 #include "unitree_actuator_sdk/serialPort/SerialPort.h"
 
 #include <cstddef>
+#include <fcntl.h>
 #include <hardware_interface/system_interface.hpp>
+#include <linux/serial.h>
 #include <memory>
 #include <rclcpp/logging.hpp>
+#include <sys/ioctl.h>
+#include <unistd.h>
 #include <yaml-cpp/yaml.h>
 
 namespace Dog8Dof {
@@ -36,6 +40,7 @@ namespace Dog8Dof {
             portName_ = root["RS485_Port"].as<std::string>();
             maxRetry_ = root["maxRetry"].as<size_t>(3);
             deactiveDamp_ = root["deactiveDamp"].as<float>(0.1);
+            deactiveDampTime_ = root["deactiveDampTime"].as<long>(2);
 
             for (size_t i = 0; i < 8; ++i) {
                 const YAML::Node joint_node = root[jointNames_[i]];
@@ -109,6 +114,25 @@ namespace Dog8Dof {
             RCLCPP_ERROR(this->get_logger(), "RS485 connection failed: %s", e.what());
             return hardware_interface::CallbackReturn::ERROR;
         }
+
+        // 设置 USB 串口 low_latency 标志，将 USB 事务延迟从 ~16ms 降低到 ~100µs
+        {
+            const int fd = ::open(portName_.c_str(), O_RDONLY | O_NONBLOCK);
+            if (fd >= 0) {
+                struct serial_struct serinfo;
+                if (::ioctl(fd, TIOCGSERIAL, &serinfo) == 0) {
+                    serinfo.flags |= ASYNC_LOW_LATENCY;
+                    ::ioctl(fd, TIOCSSERIAL, &serinfo);
+                }
+                ::close(fd);
+            } else {
+                RCLCPP_WARN(this->get_logger(),
+                            "Cannot open %s to set low_latency",
+                            portName_.c_str());
+            }
+        }
+        // 缩短超时：电机正常在 300~500µs 内响应，2ms 足够
+        port_->resetSerial(16, 4000000, 2000);
         // 创建串口通信指针
 
         for (size_t i = 0; i < 8; ++i) {
@@ -149,6 +173,10 @@ namespace Dog8Dof {
         (void)pre;
         for (size_t i = 0; i < 8; ++i) {
             motor_[i].damp(deactiveDamp_);
+        }
+        rclcpp::sleep_for(std::chrono::seconds(deactiveDampTime_));
+        for (size_t i = 0; i < 8; ++i) {
+            motor_[i].zeroTor();
         }
         return hardware_interface::CallbackReturn::SUCCESS;
     }
@@ -194,19 +222,12 @@ namespace Dog8Dof {
             const float kp = static_cast<float>(cmdKp_[i]);
             const float kd = static_cast<float>(cmdKd_[i]);
 
-            size_t retry = 0;
-
-        setMotor:
             if (!motor_[i].setHybrid(tor, pos, vel, kp, kd)) {
-                retry++;
-                if (retry > maxRetry_) {
-                    RCLCPP_ERROR_STREAM(get_logger(), "Time out on " << jointNames_[i]);
-                    return hardware_interface::return_type::ERROR;
-                } else {
-                    goto setMotor;
-                }
+                RCLCPP_WARN_STREAM(get_logger(),
+                                   "Motor " << jointNames_[i] << " setHybrid timeout");
             }
         }
+
         return hardware_interface::return_type::OK;
     }
 

@@ -137,6 +137,21 @@ target_link_libraries(legCli
     ${PROJECT_NAME}
 )
 
+add_executable(gaitManagerReplanTest
+    src/test/gaitManagerTest.cpp)
+ament_target_dependencies(gaitManagerReplanTest
+    rclcpp
+    dog_tools
+    dog_trajectory
+    Eigen3
+    ament_index_cpp
+)
+target_link_libraries(gaitManagerReplanTest
+    Eigen3::Eigen
+    ${PROJECT_NAME}
+    yaml-cpp
+)
+
 pluginlib_export_plugin_description_file(controller_interface dog_controllerInterface.xml)
 
 install(
@@ -147,7 +162,8 @@ install(
         jumpTest
         jumpLegacyTest
         legTest
-                legCli
+        legCli
+        gaitManagerReplanTest
   DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )

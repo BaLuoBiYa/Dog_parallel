@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
     const std::string yaml_path =
         (std::filesystem::path(share_dir) / "parameters" / "walk.yaml").string();
 
-    const rclcpp::Duration period = rclcpp::Duration::from_seconds(0.01);
+    const rclcpp::Duration period = rclcpp::Duration::from_seconds(1.0 / (100 * 10));
     WalkTrajectory traj(yaml_path, period);
 
     Body current_tip{};
@@ -41,12 +41,12 @@ int main(int argc, char **argv) {
     current_tip.pos[0] = 0.0f;
     current_tip.pos[2] = 160.0f;
 
-    const float step_length = 200.0f;
-    const float step_height = 40.0f;
-    const float base_height = 160.0f;
-    const float phase_offset = 0.0f;
+    const float step_length = 0.0f;
+    const float step_height = 50.0f;
+    const float base_height = 270.0f;
+    const float phase_offset = 0.5f;
 
-    if (!traj.setTarget(step_length, step_height, base_height, phase_offset, false)) {
+    if (!traj.setTarget(step_length, step_height, base_height, phase_offset)) {
         std::cerr << "setTarget failed\n";
         return 1;
     }
@@ -71,10 +71,10 @@ int main(int argc, char **argv) {
 
     write_header(csv);
 
-    const int max_steps = 2000;
+    const unsigned int max_steps = 0xFFFFFFFF - 1;
     const int64_t dt_ns = period.nanoseconds();
 
-    for (int i = 0; i < max_steps; ++i) {
+    for (unsigned int i = 0; i < max_steps; ++i) {
         const int64_t t_ns = static_cast<int64_t>(i) * dt_ns;
         const rclcpp::Time now(t_ns, RCL_SYSTEM_TIME);
 

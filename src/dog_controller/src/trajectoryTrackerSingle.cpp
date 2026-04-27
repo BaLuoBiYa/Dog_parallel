@@ -225,11 +225,8 @@ namespace Dog8Dof {
                         }
                     }
 
-                    LF_->setWalkGait(param[0][0],
-                                     param[1][0],
-                                     param[2][0],
-                                     kWalkPhaseOffset[0],
-                                     false);
+                    LF_->setWalkGait(
+                        param[0][0], param[1][0], param[2][0], kWalkPhaseOffset[0]);
                     if (currentMode_ != ControlMode::WALK) {
                         RCLCPP_INFO(this->get_node()->get_logger(), "Switched to walk");
                     }
@@ -273,8 +270,7 @@ namespace Dog8Dof {
                     LF_->setWalkGait(lastWalkParams_[0][0],
                                      lastWalkParams_[1][0],
                                      lastWalkParams_[2][0],
-                                     kWalkPhaseOffset[0],
-                                     false);
+                                     kWalkPhaseOffset[0]);
 
                     const rclcpp::Time syncStart = this->get_node()->get_clock()->now();
                     LF_->start(syncStart);

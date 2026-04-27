@@ -1,7 +1,7 @@
-standKp: 0.5
+standKp: 2.0
 standKd: 0.01
 
-transitionKp: 0.5
+transitionKp: 2.0
 transitionKd: 0.01
 transitionVelMax: 500.0
 

@@ -1,8 +1,8 @@
-walkKp: 0.5
-walkKd: 0.02
+walkKp: 3.0
+walkKd: 0.05
 reachThreshold: 1.0
 transitionVelMax: 1000.0
-totalTime: 1.0
+totalTime: 0.5
 swingDutyCycle: 0.5
 
 pushGain:
