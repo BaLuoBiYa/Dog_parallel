@@ -1,28 +1,31 @@
 RS485_Port: /dev/ttyACM0
+maxRetry: 5
+deactiveDamp: 0.1
+deactiveDampTime: 5
 idleAngle:
   front: 1.88625002
   rear: -0.408749998
 LF_Front:
-  id: 5
-  offset: 1.48935902
-LF_Rear:
   id: 6
-  offset: -1.06381595
+  offset: -1.73595738
+LF_Rear:
+  id: 5
+  offset: 0.970215619
 RF_Front:
   id: 2
-  offset: -1.70209885
+  offset: -1.25202346
 RF_Rear:
   id: 1
-  offset: 1.22329867
+  offset: 0.753918529
 LR_Front:
   id: 4
-  offset: -1.90838611
+  offset: -1.40033996
 LR_Rear:
   id: 3
-  offset: 1.49753356
+  offset: 1.03629661
 RR_Front:
   id: 8
-  offset: -1.11220753
+  offset: -1.46541488
 RR_Rear:
   id: 7
-  offset: 0.71851784
+  offset: 1.2478193

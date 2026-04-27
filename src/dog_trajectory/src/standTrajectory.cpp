@@ -73,9 +73,9 @@ namespace Dog8Dof {
             midPos[1] = Const::BODY_HEIGHT_MIN;
         } // 防止足尖穿过机体
 
-        const float durationSec = controlDurationNanoSec_ * 1e-9;
-        const float T1 = durationSec * 0.5 * totalSteps;
-        const float T2 = T1;
+        const float durationSec = parameters_.transitionTime;
+        const float T1 = durationSec * 0.5;
+        const float T2 = durationSec - T1;
         const Eigen::Vector2f zeroAcc(0.0f, 0.0f);
 
         Eigen::Vector2f midVel = QuinticPolynomial::solveMidVel2D(
@@ -98,6 +98,15 @@ namespace Dog8Dof {
             midPos, finishPos, midVel, finishVel, midAcc, zeroAcc, T2, totalSteps / 2);
 
         trajectory_ = first + second;
+
+        // const Eigen::Vector3f tauStart = currentTip.tau;
+        // const Eigen::Vector3f tauEnd(0.0f, 0.0f, (Const::BODY_MASS * Const::G) / 4.0f);
+        // const size_t n = trajectory_.points.size();
+        // for (size_t i = 0; i < n; ++i) {
+        //     float s = (n <= 1) ? 1.0f : static_cast<float>(i) / static_cast<float>(n -
+        //     1); s = s * s * (3.0f - 2.0f * s); trajectory_.points[i].tau = tauStart +
+        //     (tauEnd - tauStart) * s;
+        // }
 
         return !trajectory_.points.empty();
     }

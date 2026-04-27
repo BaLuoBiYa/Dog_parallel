@@ -75,6 +75,7 @@ namespace Dog8Dof {
         std::array<JointStateIndex, 2> stateIdx_{};
         std::array<JointCmdIndex, 2> cmdIdx_{};
         ControlMode currentMode_ = ControlMode::STAND;
+        bool initialStandPending_ = false;
         std::array<std::array<float, 4>, 3> lastWalkParams_{};
         bool hasLastWalkParams_ = false;
 

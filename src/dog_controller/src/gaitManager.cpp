@@ -33,10 +33,8 @@ namespace Dog8Dof {
     bool GaitManager::setWalkGait(float stepLength,
                                   float stepHeight,
                                   float baseHeight,
-                                  float phaseOffset,
-                                  bool useNearestStart) {
-        if (!walkTrajectory_.setTarget(
-                stepLength, stepHeight, baseHeight, phaseOffset, useNearestStart)) {
+                                  float phaseOffset) {
+        if (!walkTrajectory_.setTarget(stepLength, stepHeight, baseHeight, phaseOffset)) {
             throw std::invalid_argument(
                 "WalkTrajectory::setTarget failed (invalid walk parameters)");
         }

@@ -55,8 +55,8 @@ namespace Dog8Dof {
         static constexpr float G = 9.8f;
 
         // 轨迹生成参数
-        static constexpr unsigned long MAX_RESOLUTION = 1000; // 轨迹生成分辨率
-        static constexpr unsigned long MIN_RESOLUTION = 10;   // 轨迹生成分辨率
+        static constexpr unsigned long MAX_RESOLUTION = 0xFFFFFFFF; // 轨迹生成分辨率
+        static constexpr unsigned long MIN_RESOLUTION = 10; // 轨迹生成分辨率
 
         // 机械腿参数
         static constexpr float UPPER_LENGTH = 160.0f;  // 机械腿大腿长度 (mm)

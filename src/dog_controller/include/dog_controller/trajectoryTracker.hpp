@@ -77,6 +77,9 @@ namespace Dog8Dof {
         std::array<JointStateIndex, 8> stateIdx_{};
         std::array<JointCmdIndex, 8> cmdIdx_{};
         ControlMode currentMode_ = ControlMode::STAND;
+
+        bool initialStandPending_ = false;
+
         std::array<std::array<float, 4>, 3> lastWalkParams_{};
         bool hasLastWalkParams_ = false;
 
@@ -84,6 +87,7 @@ namespace Dog8Dof {
         isSameWalkCommand(const std::array<std::array<float, 4>, 3> &walkParams) const;
 
         bool cacheInterfaceIndices();
+        bool switchToStandMode();
         bool setJointCommands(size_t legIndex, const Motor &target);
         bool setAllJointCommands();
         bool updateAllGaitManagers();
