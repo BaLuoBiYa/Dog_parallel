@@ -40,7 +40,7 @@ ament_target_dependencies(${PROJECT_NAME}
 )
 target_link_libraries(${PROJECT_NAME}
   ${ARCH_LIB}
-  yaml-cpp::yaml-cpp
+  yaml-cpp
 )
 
 add_executable(example_goM8010_6_motor
@@ -57,7 +57,7 @@ ament_target_dependencies(zeroSetter
     yaml-cpp
 )
 target_link_libraries(zeroSetter
-    yaml-cpp::yaml-cpp
+    yaml-cpp
     ${PROJECT_NAME}
 )
 

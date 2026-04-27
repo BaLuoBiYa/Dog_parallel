@@ -40,7 +40,7 @@ ament_target_dependencies(${PROJECT_NAME}
 target_link_libraries(${PROJECT_NAME}
     # pinocchio::pinocchio
     Eigen3::Eigen
-    yaml-cpp::yaml-cpp
+    yaml-cpp
 )
 
 # add_executable(PinocchionTest
@@ -67,7 +67,7 @@ ament_target_dependencies(standTest
 )
 target_link_libraries(standTest
     Eigen3::Eigen
-    yaml-cpp::yaml-cpp
+    yaml-cpp
 )
 
 add_executable(walkTest
@@ -82,7 +82,7 @@ ament_target_dependencies(walkTest
 )
 target_link_libraries(walkTest
     Eigen3::Eigen
-    yaml-cpp::yaml-cpp
+    yaml-cpp
 )
 
 add_executable(jumpTest
@@ -97,7 +97,7 @@ ament_target_dependencies(jumpTest
 )
 target_link_libraries(jumpTest
     Eigen3::Eigen
-    yaml-cpp::yaml-cpp
+    yaml-cpp
 )
 
 add_executable(jumpLegacyTest
@@ -112,7 +112,7 @@ ament_target_dependencies(jumpLegacyTest
 )
 target_link_libraries(jumpLegacyTest
     Eigen3::Eigen
-    yaml-cpp::yaml-cpp
+    yaml-cpp
 )
 
 add_executable(legTest 

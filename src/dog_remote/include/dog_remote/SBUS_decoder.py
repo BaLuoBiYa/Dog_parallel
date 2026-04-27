@@ -11,8 +11,12 @@ SBUS_CHANNEL_SIZE = 16
 FILTER_INDEX_SIZE = 5
 
 class SBUSDecoder:
-    def __init__(self, port='/dev/ttyUSB0', baudrate=100000, timeout=0.1):
-        self.ser = serial.Serial(port, baudrate, timeout=timeout)
+    def __init__(self, port='/dev/ttyS1', baudrate=100000, timeout=0.1):
+        self.ser = serial.Serial(port, baudrate, 
+                                 timeout=timeout, 
+                                 parity=serial.PARITY_EVEN,
+                                stopbits=serial.STOPBITS_TWO,
+                                bytesize=serial.EIGHTBITS)
         self.databuffer = bytearray()
         self.channel_data = np.zeros(SBUS_CHANNEL_SIZE, dtype=np.int16)
         self.filter_buffer = np.zeros((SBUS_CHANNEL_SIZE, FILTER_INDEX_SIZE), dtype=float)
@@ -58,7 +62,9 @@ class SBUSDecoder:
         self.channel_data[13] = (((b[18]>> 7) | (b[19] << 1) | (b[20] << 9))  & 0x07FF)
         self.channel_data[14] = (((b[20]>> 2) | (b[21] << 6))                 & 0x07FF)
         self.channel_data[15] = (((b[21]>> 5) | (b[22] << 3))                 & 0x07FF)
-
+        print(self.channel_data[0])
+        print(self.channel_data[1])
+      
     def apply_filter(self):
         for ch in range(SBUS_CHANNEL_SIZE):
             raw_val = float(self.channel_data[ch])
@@ -92,7 +98,7 @@ class SBUSDecoder:
         print("Channels:", ", ".join(str(int(x)) for x in self.channel_data))
 
 def main():
-    port = sys.argv[1] if len(sys.argv) > 1 else '/dev/ttyUSB0'
+    port = sys.argv[1] if len(sys.argv) > 1 else '/dev/ttyS1'
     decoder = SBUSDecoder(port=port)
     try:
         while True:

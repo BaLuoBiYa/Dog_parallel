@@ -33,9 +33,10 @@ ament_target_dependencies(${PROJECT_NAME}
   "dog_msg"
   "dog_tools"
 )
+
 target_link_libraries(${PROJECT_NAME}
     Boost::system
-    yaml-cpp::yaml-cpp
+    yaml-cpp
 )
 
 add_executable(sbusTester
