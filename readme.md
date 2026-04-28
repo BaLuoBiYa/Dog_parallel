@@ -31,17 +31,17 @@
 `以上为高频控制回路，由ros_control管理，运行于高频`
 ---
 
-## dog_remote(进行中)
+## dog_remote
 用于和决策层交互 \
 输入：抽象控制指令 \
 输出：目标步态
 
-## dog_voice(进行中)
+<!-- ## dog_voice(进行中)
 基于Qwen3 TTS的文字转语音模块 \
 输入：字符串 \
 输出：音频流
 > **Note:**该部分的核心推理框架参照\
-> https://github.com/predict-woo/qwen3-tts.cpp
+> https://github.com/predict-woo/qwen3-tts.cpp -->
 
 <!-- ## dog_handler(未完成)
 用于针对不同的环境设置不同的处理策略,需要被`dog_interface`调用 \
