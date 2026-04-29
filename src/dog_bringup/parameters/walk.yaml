@@ -2,7 +2,6 @@ walkKp: 3.0
 walkKd: 0.05
 reachThreshold: 1.0
 transitionVelMax: 1000.0
-totalTime: 0.5
 swingDutyCycle: 0.5
 
 pushGain:
@@ -14,4 +13,4 @@ deltaSpeed:
   z: 1.0
 
 blendTime: 0.1
-startblendTime: 1.0
+startBlendTime: 0.3

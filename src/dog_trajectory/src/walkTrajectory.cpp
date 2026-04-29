@@ -47,8 +47,8 @@ namespace Dog8Dof {
     bool WalkTrajectory::setTarget(float stepLength,
                                    float stepHeight,
                                    float baseHeight,
-                                   float phaseOffset,
-                                   float totalTime) {
+                                   float totalTime,
+                                   float phaseOffset) {
         if (stepHeight <= 0.0f) {
             RCLCPP_ERROR(logger_, "Step height must be greater than 0!");
             return false;
@@ -135,10 +135,7 @@ namespace Dog8Dof {
         const bool startInForwardDir = (phaseStartPos[0] * stepDir) >= 0.0f;
 
         // 过渡时长与步数
-        const size_t transitionSteps =
-            std::clamp(stepsFromDurationNs(parameters_.startblendTimeNs, 4, 40),
-                       static_cast<size_t>(4),
-                       static_cast<size_t>(40));
+        const size_t transitionSteps = stepsFromDurationNs(parameters_.startblendTimeNs);
         const float transitionTime = static_cast<float>(transitionSteps) * dt;
 
         Trajectory transition(0);
@@ -575,10 +572,9 @@ namespace Dog8Dof {
 
     Trajectory WalkTrajectory::generateBlend(const Trajectory &lhs,
                                              const Trajectory &rhs) {
-        const size_t blendSteps =
-            std::clamp(stepsFromDurationNs(parameters_.blendTimeNs, 3, 20),
-                       static_cast<size_t>(3),
-                       static_cast<size_t>(20));
+        const size_t blendSteps = std::clamp(stepsFromDurationNs(parameters_.blendTimeNs),
+                                             static_cast<size_t>(3),
+                                             static_cast<size_t>(20));
         const float blendTime = static_cast<float>(parameters_.blendTimeNs) / 1e9;
         if (lhs.points.empty() || rhs.points.empty()) {
             return Trajectory(0);
@@ -743,8 +739,8 @@ namespace YAML {
             rhs.deltaSpeed = Eigen::Vector2f(node["deltaSpeed"]["x"].as<float>(1.0),
                                              node["deltaSpeed"]["z"].as<float>(1.0));
 
-            rhs.blendTimeNs = node["blendTime"].as<float>(0.03f) * 1e9;
-            rhs.startblendTimeNs = node["startblendTime"].as<float>(1.0f) * 1e9;
+            rhs.blendTimeNs = node["blendTime"].as<float>(1.0f) * 1e9;
+            rhs.startblendTimeNs = node["startBlendTime"].as<float>(1.0f) * 1e9;
             return true;
         }
     };
