@@ -8,11 +8,12 @@ channel:
   move:
     x: 1
     y: 2
-
   roll: 3
   pitch: 4
-
   height: 5
+  stepDuration: 6
+  gait: 7
+  slopeEnable: 8
 
 controlSetting:
   maxLinerSpeed: 0.5

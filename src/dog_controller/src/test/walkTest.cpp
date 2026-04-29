@@ -39,14 +39,16 @@ int main(int argc, char **argv) {
     current_tip.pos.setZero();
     current_tip.linerVel.setZero();
     current_tip.pos[0] = 0.0f;
-    current_tip.pos[2] = 160.0f;
+    current_tip.pos[2] = 270.0f;
 
-    const float step_length = 0.0f;
+    const float step_length = 100.0f;
     const float step_height = 50.0f;
     const float base_height = 270.0f;
+    const float total_time = 0.5f;
     const float phase_offset = 0.5f;
 
-    if (!traj.setTarget(step_length, step_height, base_height, phase_offset)) {
+    if (!traj.setTarget(
+            step_length, step_height, base_height, total_time, phase_offset)) {
         std::cerr << "setTarget failed\n";
         return 1;
     }

@@ -10,7 +10,7 @@ from matplotlib.animation import FuncAnimation, PillowWriter
 import numpy as np
 
 # ====== 在这里修改 CSV 文件路径 ======
-CSV_PATH = "/home/luo/Project/Horse/Dog_parallel/src/dog_controller/src/test/result/walkTrajectory_0Length.csv"
+CSV_PATH = "/home/luo/Project/Horse/Dog_parallel/src/dog_controller/src/test/result/walkTrajectory_0.5.csv"
 # ====================================
 
 def main():
@@ -41,22 +41,19 @@ def main():
     if n < 2:
         raise ValueError("Not enough points to animate")
 
-    # 根据时间戳计算每帧间隔（毫秒）和平均 FPS
-    frame_intervals_ms = np.diff(t) * 1000.0
-    avg_interval_ms = np.mean(frame_intervals_ms) if len(frame_intervals_ms) > 0 else 33.33
-    avg_fps = 1000.0 / avg_interval_ms if avg_interval_ms > 0 else 30.0
-    print(f"Data duration: {t[-1]:.3f}s, {n} frames, avg FPS: {avg_fps:.1f}")
-
-    # ---------- 保存参数 ----------
-    # 为避免 PillowWriter 将所有帧保留在内存中导致 OOM 崩溃，
-    # 当帧数太多时进行降采样，限制保存帧数不超过 MAX_SAVE_FRAMES
-    MAX_SAVE_FRAMES = 800
-    save_stride = max(1, n // MAX_SAVE_FRAMES)
+    # ---------- 固定 100fps 输出 ----------
+    TARGET_FPS = 100
+    TARGET_INTERVAL_MS = 1000.0 / TARGET_FPS       # 10ms/帧
+    duration = t[-1] - t[0]
+    target_frames = max(2, int(round(duration * TARGET_FPS)))
+    # stride: 从原始数据中每 N 个点取 1 个作为输出帧
+    save_stride = max(1, n // target_frames)
     save_indices = list(range(0, n, save_stride))
     if save_indices[-1] != n - 1:
         save_indices.append(n - 1)
     save_n = len(save_indices)
-    print(f"Saving with stride={save_stride}, {save_n} frames to save")
+    print(f"Data: {n} pts @{n/duration:.0f}Hz, duration={duration:.3f}s")
+    print(f"Saving: stride={save_stride}, {save_n} frames @{TARGET_FPS}fps")
 
     # 降采样后的时间、位置、速度
     t_save = t[save_indices]
@@ -130,9 +127,9 @@ def main():
 
     ani = FuncAnimation(
         fig, update_save, frames=save_n, init_func=init_save,
-        interval=avg_interval_ms * save_stride, blit=False,
+        interval=TARGET_INTERVAL_MS, blit=False,
     )
-    ani.save(out_path, writer=PillowWriter(fps=int(avg_fps / save_stride)))
+    ani.save(out_path, writer=PillowWriter(fps=TARGET_FPS))
     print(f"Saved animation: {out_path}")
 
     # ---------- 交互实时播放（关闭之前的 figure 释放内存） ----------
