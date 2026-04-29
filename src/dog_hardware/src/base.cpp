@@ -124,7 +124,7 @@ namespace Dog8Dof {
                 }
                 ::close(fd);
             } else {
-                RCLCPP_WARN(this->get_logger(),
+                RCLCPP_WARN(rclcpp::get_logger("BaseInterface"),
                             "Cannot open %s to set low_latency",
                             portName_.c_str());
             }
@@ -221,7 +221,7 @@ namespace Dog8Dof {
             const float kd = static_cast<float>(cmdKd_[i]);
 
             if (!motor_[i].setHybrid(tor, pos, vel, kp, kd)) {
-                RCLCPP_WARN_STREAM(get_logger(),
+                RCLCPP_WARN_STREAM(rclcpp::get_logger("BaseInterface"),
                                    "Motor " << jointNames_[i] << " setHybrid timeout");
             }
         }

@@ -57,6 +57,13 @@ target_link_libraries(twistToGaitTester
     ${PROJECT_NAME}
 )
 
+add_executable(canTester src/test/canTester.cpp src/CanManager.cpp)
+
+
+target_link_libraries(canTester
+    ${PROJECT_NAME}
+)
+
 # add_executable(commandManager
 #     src/commandManager.cpp)
 # ament_target_dependencies(commandManager
@@ -72,6 +79,7 @@ install(
   TARGETS ${PROJECT_NAME}
     sbusTester
     twistToGaitTester
+    canTester
     # commandManager
   DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME}
