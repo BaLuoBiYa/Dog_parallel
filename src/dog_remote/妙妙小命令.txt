@@ -1,0 +1,11 @@
+上位机USB转can
+删除slcan命令
+sudo killall slcand 2>/dev/null
+通过slcan设置can
+sudo slcand -o -c -s6 /dev/ttyUSB0 can1
+
+RDK 板载can
+关闭can
+sudo ip link set can0 down
+设置can，并且设置波特率为500000
+sudo ip link set can0 up type can bitrate 500000

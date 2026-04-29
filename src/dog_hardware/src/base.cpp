@@ -130,7 +130,7 @@ namespace Dog8Dof {
                 rs485conf.delay_rts_before_send = 0;
                 rs485conf.delay_rts_after_send = 0;
                 if (::ioctl(fd, TIOCSRS485, &rs485conf) < 0) {
-                    RCLCPP_WARN(this->get_logger(),
+                    RCLCPP_WARN(rclcpp::get_logger("BaseInterface"),
                                 "RS485 mode not supported on %s, "
                                 "batch communication may fail",
                                 portName_.c_str());
@@ -231,27 +231,28 @@ namespace Dog8Dof {
         MotorCmd cmds[8];
         MotorData datas[8];
         for (size_t i = 0; i < 8; ++i) {
-            cmds[i] = motor_[i].makeCmd(static_cast<float>(cmdTau_[i]),
-                                        static_cast<float>(cmdPos_[i]),
-                                        static_cast<float>(cmdVel_[i]),
-                                        static_cast<float>(cmdKp_[i]),
-                                        static_cast<float>(cmdKd_[i]));
+            float pos = static_cast<float>(cmdPos_[i]);
+            float vel = static_cast<float>(cmdVel_[i]);
+            float kp = static_cast<float>(cmdKp_[i]);
+            float kd = static_cast<float>(cmdKd_[i]);
+            float tor = static_cast<float>(cmdTau_[i]);
+
+            cmds[i] = motor_[i].makeCmd(tor, pos, vel, kp, kd);
             datas[i].motorType = MotorType::GO_M8010_6;
+
+            if (!motor_[i].setHybrid(tor, pos, vel, kp, kd)) {
+                RCLCPP_WARN_STREAM(rclcpp::get_logger("BaseInterface"),
+                                   "Motor " << jointNames_[i] << " setHybrid timeout");
+            }
         }
 
-        if (!motor_[i].setHybrid(tor, pos, vel, kp, kd)) {
-            RCLCPP_WARN_STREAM(rclcpp::get_logger("BaseInterface"),
-                               "Motor " << jointNames_[i] << " setHybrid timeout");
+        // 将返回的状态数据写入各电机对象
+        for (size_t i = 0; i < 8; ++i) {
+            motor_[i].applyState(datas[i]);
         }
-    }
 
-    // 将返回的状态数据写入各电机对象
-    for (size_t i = 0; i < 8; ++i) {
-        motor_[i].applyState(datas[i]);
+        return hardware_interface::return_type::OK;
     }
-
-    return hardware_interface::return_type::OK;
-}
 
 } // namespace Dog8Dof
 
