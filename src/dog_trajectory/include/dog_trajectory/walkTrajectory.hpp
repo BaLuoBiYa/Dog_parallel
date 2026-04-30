@@ -47,6 +47,25 @@ namespace Dog8Dof {
         float stepLength_, stepHeight_, baseHeight_, totalTime_;
         float phaseOffset_ = 0.0f;
 
+        // ---------- 轨迹缓存 ----------
+        // 当 setTarget 参数不变 且 当前足端位置接近上次 generate 时的状态时，
+        // 跳过重复计算，直接复用缓存轨迹。
+        bool cacheValid_ = false;
+        float cachedStepLength_, cachedStepHeight_, cachedBaseHeight_, cachedTotalTime_;
+        float cachedPhaseOffset_;
+        Eigen::Vector2f cachedTipPos_;
+        Eigen::Vector2f cachedTipVel_;
+        Trajectory cachedTrajectory_;
+
+        // 闭合周期缓存：仅依赖步态参数，不依赖当前足端位置
+        // 参数不变时跳过 O(n) 的 generateClosedCycle 计算
+        bool closedCycleValid_ = false;
+        Trajectory cachedClosedCycle_;
+
+        // 纯相位周期缓存：不含过渡段，仅 rotateCycleToStart 后的 phaseCycle。
+        // 周期间重启时直接复用，避免重放过时的过渡段。
+        Trajectory phaseCycle_;
+
         /**
          * @brief 生成一个完整闭合步态周期
          * @param cycleTime 一个步态周期总时长

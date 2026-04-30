@@ -257,30 +257,24 @@ namespace Dog8Dof {
                          "Failed to update gait managers");
             return controller_interface::return_type::ERROR;
         }
-        // 更新步态管理器状态
 
         if (!setAllJointCommands()) {
             RCLCPP_ERROR(this->get_node()->get_logger(),
                          "Failed to set currrent joint commands");
             return controller_interface::return_type::ERROR;
-        } // 应用当前目标
+        }
 
-        // —— 步骤1：收到新消息时，仅缓存，不立即应用 ——
+        // —— 步骤1：检查新指令并缓存 ——
         if (newCmd_) {
             auto msg_opt = commandBox_.try_get();
-            if (!msg_opt.has_value()) {
-                RCLCPP_ERROR(get_node()->get_logger(),
-                             "Failed to read command, continue current command");
-                newCmd_ = false;
-            } else {
+            if (msg_opt.has_value()) {
                 const auto gait = msg_opt.value().gait;
 
-                std::array<std::array<float, 4>, 4> param;
                 for (size_t i = 0; i < 4; i++) {
-                    param[0][i] = msg_opt.value().par1[i];
-                    param[1][i] = msg_opt.value().par2[i];
-                    param[2][i] = msg_opt.value().par3[i];
-                    param[3][i] = msg_opt.value().par4[i];
+                    pendingParams_[0][i] = msg_opt.value().par1[i];
+                    pendingParams_[1][i] = msg_opt.value().par2[i];
+                    pendingParams_[2][i] = msg_opt.value().par3[i];
+                    pendingParams_[3][i] = msg_opt.value().par4[i];
                 }
 
                 switch (gait) {
@@ -294,131 +288,140 @@ namespace Dog8Dof {
                     pendingMode_ = ControlMode::JUMP;
                     break;
                 default:
-                    RCLCPP_INFO(this->get_node()->get_logger(),
-                                "Unknown gait command received, ignore");
+                    RCLCPP_INFO(this->get_node()->get_logger(), "Unknown gait, ignored");
                     newCmd_ = false;
-                    goto checkFinished;
+                    return controller_interface::return_type::OK;
                 }
 
-                pendingParams_ = param;
                 pendingCmd_ = true;
-                newCmd_ = false;
-
                 RCLCPP_DEBUG(this->get_node()->get_logger(),
-                             "Command cached, will apply after current gait finishes");
+                             "Command cached, pending application");
             }
+            newCmd_ = false;
         }
 
-    checkFinished:
         // —— 步骤2：检查当前步态是否已完成 ——
-        const bool lfFinished = LF_->isFinshed();
-        const bool lrFinished = LR_->isFinshed();
-        const bool rfFinished = RF_->isFinshed();
-        const bool rrFinished = RR_->isFinshed();
-        const bool allFinished = lfFinished && lrFinished && rfFinished && rrFinished;
+        const bool allFinished =
+            LF_->isFinshed() && LR_->isFinshed() && RF_->isFinshed() && RR_->isFinshed();
+        if (!allFinished) {
+            return controller_interface::return_type::OK;
+        }
 
-        // —— 步骤3：当前步态完成后，应用缓存的新命令 ——
-        if (allFinished && pendingCmd_) {
-            try {
-                switch (pendingMode_) {
-                case ControlMode::STAND:
-                    LF_->setStandGait(pendingParams_[0][0], pendingParams_[1][0]);
-                    LR_->setStandGait(pendingParams_[0][1], pendingParams_[1][1]);
-                    RF_->setStandGait(pendingParams_[0][2], pendingParams_[1][2]);
-                    RR_->setStandGait(pendingParams_[0][3], pendingParams_[1][3]);
-                    RCLCPP_INFO(this->get_node()->get_logger(), "Switched to stand");
-                    break;
+        // —— 步骤3：应用缓存指令 或 WALK 自动循环 ——
+        bool restarted = false;
 
-                case ControlMode::WALK:
-                    LF_->setWalkGait(pendingParams_[0][0],
-                                     pendingParams_[1][0],
-                                     pendingParams_[2][0],
-                                     pendingParams_[3][0],
-                                     kWalkPhaseOffset[0]);
-                    LR_->setWalkGait(pendingParams_[0][1],
-                                     pendingParams_[1][1],
-                                     pendingParams_[2][1],
-                                     pendingParams_[3][1],
-                                     kWalkPhaseOffset[1]);
-                    RF_->setWalkGait(pendingParams_[0][2],
-                                     pendingParams_[1][2],
-                                     pendingParams_[2][2],
-                                     pendingParams_[3][2],
-                                     kWalkPhaseOffset[2]);
-                    RR_->setWalkGait(pendingParams_[0][3],
-                                     pendingParams_[1][3],
-                                     pendingParams_[2][3],
-                                     pendingParams_[3][3],
-                                     kWalkPhaseOffset[3]);
-                    // 同时保存为步行循环参数
-                    lastWalkParams_ = pendingParams_;
-                    hasLastWalkParams_ = true;
-                    RCLCPP_INFO(this->get_node()->get_logger(), "Switched to walk");
-                    break;
+        if (pendingCmd_) {
+            // WALK 命令去重：若与上次参数相同，直接重启，跳过 generate() 避免过渡轨迹
+            const bool sameWalkCmd = (pendingMode_ == ControlMode::WALK) &&
+                                     (currentMode_ == ControlMode::WALK) &&
+                                     hasLastWalkParams_ &&
+                                     isSameWalkCommand(pendingParams_);
 
-                case ControlMode::JUMP:
-                    LF_->setJumpGait(pendingParams_[0][0]);
-                    LR_->setJumpGait(pendingParams_[0][1]);
-                    RF_->setJumpGait(pendingParams_[0][2]);
-                    RR_->setJumpGait(pendingParams_[0][3]);
-                    RCLCPP_INFO(this->get_node()->get_logger(), "Switched to jump");
-                    break;
-                }
-
+            if (sameWalkCmd) {
                 const auto syncStart = this->get_node()->get_clock()->now();
                 LF_->start(syncStart);
                 LR_->start(syncStart);
                 RF_->start(syncStart);
                 RR_->start(syncStart);
-
-                currentMode_ = pendingMode_;
                 pendingCmd_ = false;
+                restarted = true;
+            } else {
+                try {
+                    switch (pendingMode_) {
+                    case ControlMode::STAND:
+                        LF_->setStandGait(pendingParams_[0][0], pendingParams_[1][0]);
+                        LR_->setStandGait(pendingParams_[0][1], pendingParams_[1][1]);
+                        RF_->setStandGait(pendingParams_[0][2], pendingParams_[1][2]);
+                        RR_->setStandGait(pendingParams_[0][3], pendingParams_[1][3]);
+                        break;
 
-            } catch (const std::exception &e) {
-                RCLCPP_ERROR(this->get_node()->get_logger(),
-                             "Failed to apply pending gait: %s, fallback to stand",
-                             e.what());
-                pendingCmd_ = false;
-                if (!switchToStandMode()) {
-                    return controller_interface::return_type::ERROR;
+                    case ControlMode::WALK:
+                        LF_->setWalkGait(pendingParams_[0][0],
+                                         pendingParams_[1][0],
+                                         pendingParams_[2][0],
+                                         pendingParams_[3][0],
+                                         kWalkPhaseOffset[0]);
+                        LR_->setWalkGait(pendingParams_[0][1],
+                                         pendingParams_[1][1],
+                                         pendingParams_[2][1],
+                                         pendingParams_[3][1],
+                                         kWalkPhaseOffset[1]);
+                        RF_->setWalkGait(pendingParams_[0][2],
+                                         pendingParams_[1][2],
+                                         pendingParams_[2][2],
+                                         pendingParams_[3][2],
+                                         kWalkPhaseOffset[2]);
+                        RR_->setWalkGait(pendingParams_[0][3],
+                                         pendingParams_[1][3],
+                                         pendingParams_[2][3],
+                                         pendingParams_[3][3],
+                                         kWalkPhaseOffset[3]);
+                        lastWalkParams_ = pendingParams_;
+                        hasLastWalkParams_ = true;
+                        break;
+
+                    case ControlMode::JUMP:
+                        LF_->setJumpGait(static_cast<JumpTrajectoryLegacy::jumpIndex>(
+                            pendingParams_[0][0]));
+                        LR_->setJumpGait(static_cast<JumpTrajectoryLegacy::jumpIndex>(
+                            pendingParams_[0][1]));
+                        RF_->setJumpGait(static_cast<JumpTrajectoryLegacy::jumpIndex>(
+                            pendingParams_[0][2]));
+                        RR_->setJumpGait(static_cast<JumpTrajectoryLegacy::jumpIndex>(
+                            pendingParams_[0][3]));
+                        break;
+                    }
+
+                    const auto syncStart = this->get_node()->get_clock()->now();
+                    LF_->start(syncStart);
+                    LR_->start(syncStart);
+                    RF_->start(syncStart);
+                    RR_->start(syncStart);
+                    currentMode_ = pendingMode_;
+                    pendingCmd_ = false;
+                    restarted = true;
+
+                } catch (const std::exception &e) {
+                    RCLCPP_ERROR(this->get_node()->get_logger(),
+                                 "Failed to apply gait: %s, fallback to stand",
+                                 e.what());
+                    pendingCmd_ = false;
+                    if (!switchToStandMode()) {
+                        return controller_interface::return_type::ERROR;
+                    }
+                    restarted = true;
                 }
             }
-        }
-
-        // —— 步骤4：步行模式周期循环（无新命令时自动重启） ——
-        if (!pendingCmd_ && currentMode_ == ControlMode::WALK && allFinished) {
+        } else if (currentMode_ == ControlMode::WALK) {
+            // WALK 自动循环：无新命令时直接重启，避免重新 generate() 引入过渡轨迹
             if (!hasLastWalkParams_) {
                 RCLCPP_WARN(this->get_node()->get_logger(),
-                            "Walk finished but no last walk params, fallback to stand");
+                            "No walk params for restart, fallback to stand");
                 if (!switchToStandMode()) {
                     return controller_interface::return_type::ERROR;
                 }
+                restarted = true;
             } else {
-                LF_->setWalkGait(lastWalkParams_[0][0],
-                                 lastWalkParams_[1][0],
-                                 lastWalkParams_[2][0],
-                                 kWalkPhaseOffset[0]);
-                LR_->setWalkGait(lastWalkParams_[0][1],
-                                 lastWalkParams_[1][1],
-                                 lastWalkParams_[2][1],
-                                 kWalkPhaseOffset[1]);
-                RF_->setWalkGait(lastWalkParams_[0][2],
-                                 lastWalkParams_[1][2],
-                                 lastWalkParams_[2][2],
-                                 kWalkPhaseOffset[2]);
-                RR_->setWalkGait(lastWalkParams_[0][3],
-                                 lastWalkParams_[1][3],
-                                 lastWalkParams_[2][3],
-                                 kWalkPhaseOffset[3]);
-
                 const auto syncStart = this->get_node()->get_clock()->now();
                 LF_->start(syncStart);
                 LR_->start(syncStart);
                 RF_->start(syncStart);
                 RR_->start(syncStart);
+                restarted = true;
+            }
+        }
 
-                RCLCPP_DEBUG(this->get_node()->get_logger(),
-                             "Walk cycle finished, restarting next cycle");
+        // —— 步骤4：重启后立即取新轨迹第一帧，消除周期间隔 ——
+        if (restarted) {
+            if (!updateAllGaitManagers()) {
+                RCLCPP_ERROR(this->get_node()->get_logger(),
+                             "Failed to re-update after restart");
+                return controller_interface::return_type::ERROR;
+            }
+            if (!setAllJointCommands()) {
+                RCLCPP_ERROR(this->get_node()->get_logger(),
+                             "Failed to re-apply after restart");
+                return controller_interface::return_type::ERROR;
             }
         }
 
@@ -564,13 +567,13 @@ namespace Dog8Dof {
     }
 
     bool TrajectoryTracker::isSameWalkCommand(
-        const std::array<std::array<float, 4>, 3> &walkParams) const {
+        const std::array<std::array<float, 4>, 4> &walkParams) const {
         if (!hasLastWalkParams_) {
             return false;
         }
 
         constexpr float kWalkParamEps = 1.0f;
-        for (size_t i = 0; i < 3; ++i) {
+        for (size_t i = 0; i < 4; ++i) {
             for (size_t j = 0; j < 4; ++j) {
                 if (std::fabs(walkParams[i][j] - lastWalkParams_[i][j]) > kWalkParamEps) {
                     return false;

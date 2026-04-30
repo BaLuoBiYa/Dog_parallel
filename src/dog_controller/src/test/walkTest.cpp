@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
     Body current_tip{};
     current_tip.pos.setZero();
     current_tip.linerVel.setZero();
-    current_tip.pos[0] = 0.0f;
+    current_tip.pos[0] = 50.0f;
     current_tip.pos[2] = 270.0f;
 
     const float step_length = 100.0f;

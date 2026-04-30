@@ -7,25 +7,25 @@ idleAngle:
   rear: -0.408749998
 LF_Front:
   id: 6
-  offset: -1.73595738
+  offset: -1.68082023
 LF_Rear:
   id: 5
-  offset: 0.970215619
+  offset: 0.97379297
 RF_Front:
   id: 2
-  offset: -1.25202346
+  offset: -0.927122056
 RF_Rear:
   id: 1
-  offset: 0.753918529
+  offset: 0.427420735
 LR_Front:
   id: 4
-  offset: -1.40033996
+  offset: -1.75553215
 LR_Rear:
   id: 3
-  offset: 1.03629661
+  offset: 1.0270592
 RR_Front:
   id: 8
-  offset: -1.46541488
+  offset: -1.84334505
 RR_Rear:
   id: 7
-  offset: 1.2478193
+  offset: 0.576452851

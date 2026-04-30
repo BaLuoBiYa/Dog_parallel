@@ -10,10 +10,10 @@ namespace Dog8Dof {
 
     namespace {
         constexpr std::array<float, 4> kWalkPhaseOffset = {
-            0.0f, // LF
-            0.5f, // LR
-            0.5f, // RF
-            0.0f  // RR
+            0.5f, // LF
+            0.0f, // LR
+            0.0f, // RF
+            0.5f  // RR
         };
     }
 
@@ -90,7 +90,7 @@ namespace Dog8Dof {
         bool hasLastWalkParams_ = false;
 
         bool
-        isSameWalkCommand(const std::array<std::array<float, 4>, 3> &walkParams) const;
+        isSameWalkCommand(const std::array<std::array<float, 4>, 4> &walkParams) const;
 
         bool cacheInterfaceIndices();
         bool switchToStandMode();

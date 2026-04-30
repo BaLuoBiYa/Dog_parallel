@@ -114,11 +114,7 @@ namespace Dog8Dof {
     bool StandTrajectory::start(const rclcpp::Time &startTime) {
         startTimeNanoSec_ = static_cast<size_t>(startTime.nanoseconds());
         trajectory_.progress = 0;
-
-        // generate 已经判定“无需过渡”时，直接保持 target_
-        if (finished_) {
-            return true;
-        }
+        finished_ = false;
 
         if (trajectory_.points.empty()) {
             return false;

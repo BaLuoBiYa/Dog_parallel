@@ -59,7 +59,8 @@ namespace Dog8Dof {
         return port_->sendRecv(&command_, &state_);
     }
 
-    MotorCmd goM8010Interface::makeCmd(float torque, float pos, float vel, float kp, float kd) const {
+    MotorCmd goM8010Interface::makeCmd(
+        float torque, float pos, float vel, float kp, float kd) const {
         MotorCmd cmd;
         cmd.motorType = MotorType::GO_M8010_6;
         cmd.hex_len = 0;
@@ -146,7 +147,7 @@ namespace Dog8Dof {
         case 6:
             return "Over Heat on Coil";
         default:
-            return "Unknow Error";
+            return "OK";
         }
     }
 

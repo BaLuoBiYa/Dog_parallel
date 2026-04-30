@@ -7,9 +7,9 @@ namespace Dog8Dof {
         if (!reloadParameters()) {
             throw std::invalid_argument("Could not load Config YAML!");
         }
-        stepHeight_ = 20.0f;
+        stepHeight_ = 0.0f;
         stepLength_ = 0.0f;
-        baseHeight_ = 180.0f;
+        baseHeight_ = 0.0f;
         totalTime_ = 1.0f;
         // 加载参数
     }
@@ -61,36 +61,69 @@ namespace Dog8Dof {
             return false;
         }
 
-        stepHeight_ = stepHeight;
+        // 归一化到 [0, 1)
+        const float phase = phaseOffset - std::floor(phaseOffset);
+        const float clampedPhase = (phase < 0.0f) ? phase + 1.0f : phase;
+
+        // 参数未变,保留缓存；参数变更,标记缓存失效
+        if (cacheValid_ && stepLength == cachedStepLength_ &&
+            stepHeight == cachedStepHeight_ && baseHeight == cachedBaseHeight_ &&
+            totalTime == cachedTotalTime_ && clampedPhase == cachedPhaseOffset_) {
+            stepLength_ = stepLength;
+            stepHeight_ = stepHeight;
+            baseHeight_ = baseHeight;
+            totalTime_ = totalTime;
+            phaseOffset_ = clampedPhase;
+            return true;
+        }
+
+        cacheValid_ = false;
+        closedCycleValid_ = false;
         stepLength_ = stepLength;
+        stepHeight_ = stepHeight;
         baseHeight_ = baseHeight;
         totalTime_ = totalTime;
-
-        // 归一化到 [0, 1)
-        phaseOffset_ = phaseOffset - std::floor(phaseOffset);
-        if (phaseOffset_ < 0.0f) {
-            phaseOffset_ += 1.0f;
-        }
+        phaseOffset_ = clampedPhase;
         return true;
     }
 
     bool WalkTrajectory::generate(const Body &currentTip) {
+        const Eigen::Vector2f tipPos(currentTip.pos[0], currentTip.pos[2]);
+        const Eigen::Vector2f tipVel(currentTip.linerVel[0], currentTip.linerVel[2]);
+
+        // 缓存命中：参数未变 且 足端位置/速度与上次 generate 时一致
+        if (cacheValid_ &&
+            (tipPos - cachedTipPos_).squaredNorm() < parameters_.reachThresholdSQ &&
+            (tipVel - cachedTipVel_).squaredNorm() < parameters_.reachThresholdSQ) {
+            trajectory_ = cachedTrajectory_;
+            finished_ = false;
+            trajectory_.progress = 0;
+            target_ = TrajectoryPoint();
+            return true;
+        }
+
         finished_ = false;
         trajectory_.progress = 0;
         target_ = TrajectoryPoint();
         trajectory_ = Trajectory(0);
 
-        const size_t totalSteps = stepsFromDurationNs(totalTime_ * 1e9);
-        const float dt = static_cast<float>(controlDurationNanoSec_) * 1e-9f;
-        const float TCycle = dt * static_cast<float>(totalSteps);
-
         const bool isZeroStep = std::abs(stepLength_) < 1e-3f;
+        const float dt = static_cast<float>(controlDurationNanoSec_) * 1e-9f;
 
+        // 闭合周期只依赖步态参数；参数未变时复用缓存，跳过 O(n) 计算
         Trajectory closedCycle;
         if (isZeroStep) {
             closedCycle = generateZeroLength(currentTip);
+        } else if (closedCycleValid_) {
+            closedCycle = cachedClosedCycle_;
         } else {
+            const size_t totalSteps = stepsFromDurationNs(totalTime_ * 1e9);
+            const float TCycle = dt * static_cast<float>(totalSteps);
             closedCycle = generateClosedCycle(TCycle, totalSteps);
+            if (!closedCycle.points.empty()) {
+                cachedClosedCycle_ = closedCycle;
+                closedCycleValid_ = true;
+            }
         }
 
         if (closedCycle.points.empty()) {
@@ -98,41 +131,64 @@ namespace Dog8Dof {
         }
 
         const size_t n = closedCycle.points.size();
-        size_t startIndex = 0;
-        if (isZeroStep) {
-            // 零步长也要保留相位差：按 phaseOffset 选择周期起点。
-            startIndex =
-                static_cast<size_t>(std::lround(phaseOffset_ * static_cast<float>(n))) %
-                n;
-        } else {
-            startIndex =
-                static_cast<size_t>(std::lround(phaseOffset_ * static_cast<float>(n))) %
-                n;
-        }
+        const size_t startIndex =
+            static_cast<size_t>(std::lround(phaseOffset_ * static_cast<float>(n))) % n;
 
         Trajectory phaseCycle = rotateCycleToStart(closedCycle, startIndex);
         if (phaseCycle.points.empty()) {
             return false;
         }
 
+        // 保存纯相位周期（不含过渡段），供周期间重启时跳过过渡段直接复用
+        phaseCycle_ = phaseCycle;
+
         // 相位启动：先从当前位置过渡到相位起点
         const TrajectoryPoint &phaseStart = phaseCycle.points.front();
 
         const Eigen::Vector2f currentPos(currentTip.pos[0], currentTip.pos[2]);
         const Eigen::Vector2f phaseStartPos(phaseStart.pos[0], phaseStart.pos[2]);
+
+        // 保存缓存的公共 lambda：所有正常返回路径都调用
+        auto saveCache = [&](Trajectory &traj) {
+            if (!traj.points.empty()) {
+                cachedTrajectory_ = traj;
+                cachedStepLength_ = stepLength_;
+                cachedStepHeight_ = stepHeight_;
+                cachedBaseHeight_ = baseHeight_;
+                cachedTotalTime_ = totalTime_;
+                cachedPhaseOffset_ = phaseOffset_;
+                cachedTipPos_ = Eigen::Vector2f(currentTip.pos[0], currentTip.pos[2]);
+                cachedTipVel_ =
+                    Eigen::Vector2f(currentTip.linerVel[0], currentTip.linerVel[2]);
+                cacheValid_ = true;
+            }
+        };
+
+        // 已在相位起点附近 → 无需过渡，直接使用当前相位周期
         if ((currentPos - phaseStartPos).squaredNorm() < parameters_.reachThresholdSQ) {
-            // 已经在相位起点附近，无需过渡
             trajectory_ = std::move(phaseCycle);
+            saveCache(trajectory_);
             return true;
+        }
+
+        // 已在上一周期终点附近（循环重启）→ 同样无需过渡
+        if (!phaseCycle.points.empty()) {
+            const Eigen::Vector2f phaseEndPos(phaseCycle.points.back().pos[0],
+                                              phaseCycle.points.back().pos[2]);
+            if ((currentPos - phaseEndPos).squaredNorm() < parameters_.reachThresholdSQ) {
+                trajectory_ = std::move(phaseCycle);
+                saveCache(trajectory_);
+                return true;
+            }
         }
 
         const Eigen::Vector2f currentVel(currentTip.linerVel[0], currentTip.linerVel[2]);
         const Eigen::Vector2f phaseStartVel(phaseStart.vel[0], phaseStart.vel[2]);
         const Eigen::Vector2f zeroAcc = Eigen::Vector2f::Zero();
 
-        // 步向符号：>0 前进，<0 后退
-        const float stepDir = (stepLength_ >= 0.0f) ? 1.0f : -1.0f;
-        const bool startInForwardDir = (phaseStartPos[0] * stepDir) >= 0.0f;
+        // 判断相位起点类型：Z < baseHeight（离地=摆动相需抬腿）/ Z ≈
+        // baseHeight（贴地=支撑相）
+        const bool isAirPhase = (phaseStartPos[1] < baseHeight_ - 0.5f);
 
         // 过渡时长与步数
         const size_t transitionSteps = stepsFromDurationNs(parameters_.startblendTimeNs);
@@ -200,8 +256,9 @@ namespace Dog8Dof {
             appendUnique(transition, std::move(toCenter));
             appendUnique(transition, std::move(settle));
             appendUnique(transition, std::move(toPhase));
-        } else if (startInForwardDir) {
-            // 前向相位起点：抬腿移动到起点
+        } else if (isAirPhase) {
+            // 摆动相起点：足端已离地 → 抬腿过渡到起点
+            const float stepDir = (stepLength_ >= 0.0f) ? 1.0f : -1.0f;
             const Eigen::Vector2f skyDir = getHeightVec(Eigen::Vector2f(stepDir, 0.0f));
             const float liftMag = std::max(10.0f, std::abs(stepHeight_) * 0.6f);
 
@@ -251,7 +308,7 @@ namespace Dog8Dof {
             appendUnique(transition, std::move(first));
             appendUnique(transition, std::move(second));
         } else {
-            // 后向相位起点：从地面移动到起点
+            // 支撑相起点：足端贴地 → 沿地面滑动到起点
             const float groundZ = baseHeight_;
             const Eigen::Vector2f groundStart(currentPos[0], groundZ);
             const Eigen::Vector2f groundEnd(phaseStartPos[0], groundZ);
@@ -301,23 +358,24 @@ namespace Dog8Dof {
         }
 
         // 过渡段力矩渐变：从 currentTip.tau 平滑过渡到 phaseStart.tau，消除力矩跳变
-        if (!transition.points.empty()) {
-            const float tau_start_x = currentTip.tau[0];
-            const float tau_start_z = currentTip.tau[2];
-            const float tau_end_x = phaseStart.tau[0];
-            const float tau_end_z = phaseStart.tau[2];
-            for (size_t i = 0; i < transition.points.size(); ++i) {
-                const float s =
-                    transition.points.size() <= 1
-                        ? 1.0f
-                        : static_cast<float>(i) /
-                              static_cast<float>(transition.points.size() - 1);
-                transition.points[i].tau[0] = tau_start_x + (tau_end_x - tau_start_x) * s;
-                transition.points[i].tau[2] = tau_start_z + (tau_end_z - tau_start_z) * s;
-            }
-        }
+        // if (!transition.points.empty()) {
+        //     const float tau_start_x = currentTip.tau[0];
+        //     const float tau_start_z = currentTip.tau[2];
+        //     const float tau_end_x = phaseStart.tau[0];
+        //     const float tau_end_z = phaseStart.tau[2];
+        //     for (size_t i = 0; i < transition.points.size(); ++i) {
+        //         const float s =
+        //             transition.points.size() <= 1
+        //                 ? 1.0f
+        //                 : static_cast<float>(i) /
+        //                       static_cast<float>(transition.points.size() - 1);
+        //         transition.points[i].tau[0] = tau_start_x + (tau_end_x - tau_start_x) *
+        //         s; transition.points[i].tau[2] = tau_start_z + (tau_end_z -
+        //         tau_start_z) * s;
+        //     }
+        // }
 
-        // 去掉过渡段末点与相位段首点重复
+        // 去掉过渡段末点与相位段首点s重复
         if (!transition.points.empty() && !phaseCycle.points.empty()) {
             if (transition.points.back().pos.isApprox(phaseCycle.points.front().pos)) {
                 phaseCycle.points.erase(phaseCycle.points.begin());
@@ -328,6 +386,8 @@ namespace Dog8Dof {
         }
 
         trajectory_ = transition + phaseCycle;
+
+        saveCache(trajectory_);
         return !trajectory_.points.empty();
     }
 
@@ -335,9 +395,12 @@ namespace Dog8Dof {
         startTimeNanoSec_ = static_cast<size_t>(startTime.nanoseconds());
         trajectory_.progress = 0;
 
-        // generate 已经判定“无需过渡”时，直接保持 target_
-        if (finished_) {
-            return true;
+        const bool wasFinished = finished_;
+        finished_ = false;
+
+        // 周期重启：跳过过渡段，直接用纯相位周期，消除周期间的位置跳变
+        if (wasFinished && !phaseCycle_.points.empty()) {
+            trajectory_ = phaseCycle_;
         }
 
         if (trajectory_.points.empty()) {

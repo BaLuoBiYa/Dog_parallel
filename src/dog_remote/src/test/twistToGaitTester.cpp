@@ -38,10 +38,10 @@ namespace Dog8Dof {
         // 转化为mm/s
         const float XLinearVelosity_mm = XLinearVelosity * 1000;
         // 速度/频率 = 步长
-        const float stepLength = XLinearVelosity_mm / stepFrequency;
+        const float stepLength = XLinearVelosity_mm / stepDuration_;
 
         // 转弯时计算步幅偏置
-        const float expectedAngle = ZAngularVelosity / stepFrequency;
+        const float expectedAngle = ZAngularVelosity / stepDuration_;
         // 第三边
         const float anotherAngle = M_PI - atan2(bodyWidth, bodyLength) - expectedAngle;
 
@@ -66,6 +66,7 @@ namespace Dog8Dof {
         for (size_t i = 0; i < 4; i++) {
             command.par2[i] = stepHeight_;
             command.par3[i] = baisHeight_;
+            command.par4[i] = stepDuration_;
         }
 
         pub_->publish(command);

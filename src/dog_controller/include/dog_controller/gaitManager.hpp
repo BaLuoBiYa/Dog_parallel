@@ -73,12 +73,12 @@ namespace Dog8Dof {
       private:
         rclcpp::Clock::SharedPtr clock_;
         Leg2Dof leg_;
-        std::unique_ptr<BaseTrajectory> currentTrajectory_;
+        std::shared_ptr<BaseTrajectory> currentTrajectory_;
         TrajectoryPoint targetPoint_;
         Body currentTip_;
 
-        WalkTrajectory walkTrajectory_;
-        StandTrajectory standTrajecory_;
-        JumpTrajectoryLegacy jumpTrajectory_;
+        std::shared_ptr<WalkTrajectory> walkTrajectory_;
+        std::shared_ptr<StandTrajectory> standTrajecory_;
+        std::shared_ptr<JumpTrajectoryLegacy> jumpTrajectory_;
     };
 } // namespace Dog8Dof

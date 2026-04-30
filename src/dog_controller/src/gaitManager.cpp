@@ -10,18 +10,19 @@ namespace Dog8Dof {
                              float upperLength,
                              float lowerLength,
                              float tipLength)
-        : clock_(clock), leg_(upperLength, lowerLength, tipLength),
-          walkTrajectory_(walkConfig, period), standTrajecory_(standConfig, period),
-          jumpTrajectory_(jumpConfig, period) {
+        : clock_(clock), leg_(upperLength, lowerLength, tipLength) {
+        walkTrajectory_ = std::make_shared<WalkTrajectory>(walkConfig, period);
+        standTrajecory_ = std::make_shared<StandTrajectory>(standConfig, period);
+        jumpTrajectory_ = std::make_shared<JumpTrajectoryLegacy>(jumpConfig, period);
     }
 
     bool GaitManager::setJumpGait(const JumpTrajectoryLegacy::jumpIndex &jumpIndex) {
-        if (!jumpTrajectory_.setTarget(jumpIndex)) {
+        if (!jumpTrajectory_->setTarget(jumpIndex)) {
             throw std::invalid_argument(
                 "JumpTrajectoryLegacy::setTarget failed for config: " +
-                jumpTrajectory_.jumpMapping.at(jumpIndex));
+                jumpTrajectory_->jumpMapping.at(jumpIndex));
         }
-        currentTrajectory_ = std::make_unique<JumpTrajectoryLegacy>(jumpTrajectory_);
+        currentTrajectory_ = jumpTrajectory_;
         // Use current leg tip as generate start point
         if (!currentTrajectory_->generate(leg_.getTipCurrent())) {
             currentTrajectory_.reset();
@@ -35,12 +36,12 @@ namespace Dog8Dof {
                                   float baseHeight,
                                   float totalTime,
                                   float phaseOffset) {
-        if (!walkTrajectory_.setTarget(
+        if (!walkTrajectory_->setTarget(
                 stepLength, stepHeight, baseHeight, totalTime, phaseOffset)) {
             throw std::invalid_argument(
                 "WalkTrajectory::setTarget failed (invalid walk parameters)");
         }
-        currentTrajectory_ = std::make_unique<WalkTrajectory>(walkTrajectory_);
+        currentTrajectory_ = walkTrajectory_;
         // Use current leg tip as generate start point
         if (!currentTrajectory_->generate(leg_.getTipCurrent())) {
             currentTrajectory_.reset();
@@ -50,11 +51,11 @@ namespace Dog8Dof {
     }
 
     bool GaitManager::setStandGait(float tipX, float tipZ) {
-        if (!standTrajecory_.setTarget(tipX, tipZ)) {
+        if (!standTrajecory_->setTarget(tipX, tipZ)) {
             throw std::invalid_argument(
                 "StandTrajectory::setTarget failed (invalid tip coordinates)");
         }
-        currentTrajectory_ = std::make_unique<StandTrajectory>(standTrajecory_);
+        currentTrajectory_ = standTrajecory_;
         // Use current leg tip as generate start point
         if (!currentTrajectory_->generate(leg_.getTipCurrent())) {
             currentTrajectory_.reset();
