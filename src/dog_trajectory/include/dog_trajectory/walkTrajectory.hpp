@@ -2,15 +2,25 @@
 #include "dog_trajectory/base.hpp"
 
 namespace Dog8Dof {
+
+    /**
+     * @brief 步行步态轨迹生成器
+     *
+     * X 轴（前进方向）与 Z 轴（抬腿方向）完全解耦：
+     *   - X：五次多项式，每周期基于最新状态在线重规划，保证 C² 连续
+     *   - Z：独立光滑弧线（quintic smoothstep + 余弦拱形），保证零速起落
+     */
     class WalkTrajectory : public BaseTrajectory {
       public:
         explicit WalkTrajectory(const std::string &configPath, rclcpp::Duration period);
+        enum GaitPhase { SWING, STANCE };
 
         /**
          * @brief 设置步行步态的目标
-         * @param stepLength 步长
-         * @param stepHeight 步高
-         * @param baseHeight 基座高度
+         * @param stepLength  步长 (mm)，正值为前进
+         * @param stepHeight  步高 (mm)
+         * @param baseHeight  基座高度 / 目标站立高度 (mm)
+         * @param totalTime   完整步态周期时间 (s)
          * @param phaseOffset 步态相位偏移，范围 [0, 1)，默认为 0
          */
         bool setTarget(float stepLength,
@@ -18,96 +28,189 @@ namespace Dog8Dof {
                        float baseHeight,
                        float totalTime,
                        float phaseOffset = 0.0f);
-        bool generate(const Body &currentTip) override;
-        bool start(const rclcpp::Time &startTime) override;
-        TrajectoryPoint get(const rclcpp::Time &currentTime) override;
-
+        TrajectoryPoint generate(const Body &currentTip,
+                                 const rclcpp::Time now,
+                                 const GaitPhase initGait);
         bool reloadParameters() override;
 
+        /**
+         * @brief 获取当前时刻的期望轨迹点（每控制周期调用，内部在线重规划）
+         * @param currentTime 当前 ROS 时间
+         * @param currentTip  当前足端传感器反馈（可空，则用轨迹内推状态）
+         * @return 本周期期望的足端状态（位置、速度、PD 增益）
+         */
+        TrajectoryPoint get(const rclcpp::Time &currentTime,
+                            const Body *currentTip = nullptr) override;
+
+        /// 步态参数（从 YAML 加载）
         struct parameters_t {
-            float walkKp;
-            float walkKd;
-
-            float reachThresholdSQ;
-            float transitionVelMax;
-
-            float horizontalPushGain;
-            float verticalPushGain;
-
-            float swingDutyCycle;
-
-            float blendTimeNs;
-            float startblendTimeNs;
-
-            Eigen::Vector2f deltaSpeed;
+            float walkKp = 3.0f;
+            float walkKd = 0.05f;
+            float reachThresholdSQ = 25.0f; // 落地判定阈值² (mm²)
+            float swingDutyCycle = 0.5f;    // 摆动相占空比
+            float minReplanTime = 0.02f;    // 最小重规划时间阈值 (s)，如 20ms
+            float lowPassAlpha = 0.3f;      // 落脚点低通滤波系数
+            float horizontalPushGain = 0.02f; // Raibert 落脚点水平增益
+            float verticalPushGain = 0.02f;   // Raibert 落脚点垂直增益（预留）
+            Eigen::Vector2f deltaSpeed = {0.0f, 1.0f}; // 速度增量 (x,z)
+            float stanceTimeMin = 0.05f;               // 最小支撑时间 (s)
+            float stanceTimeMax = 1.0f;                // 最大支撑时间 (s)
         };
 
+        /// 步态相位枚举
+
       private:
+        // ======================== 摆动相轨迹 ========================
+        /**
+         * @brief 摆动相轨迹：管理从离地到落地的全过程
+         *
+         * 每周期调用 update()，基于最新状态在线重规划 X 轴五次多项式，
+         * Z 轴使用独立的光滑弧线。支持滑动落脚点（Raibert 公式 + 低通滤波）。
+         */
+        class SwingTrajectory {
+          public:
+            SwingTrajectory() = default;
+
+            /**
+             * @brief 初始化摆动相
+             * @param zStart      离地时足端 Z 坐标 (mm)
+             * @param zTarget     目标落地 Z 坐标 / 地形估计 (mm)
+             * @param stepH       期望步高 (mm)
+             * @param swingT      名义摆动时间 (s)
+             * @param alpha       落脚点低通滤波系数 [0,1]
+             * @param minReplan   最小重规划时间阈值 (s)
+             * @param xStart      起始 X 位置 (mm)
+             * @param vxStart     起始 X 速度 (mm/s)
+             * @param axStart     起始 X 加速度 (mm/s²)
+             */
+            void init(float zStart,
+                      float zTarget,
+                      float stepH,
+                      float swingT,
+                      float alpha,
+                      float minReplan,
+                      float xStart,
+                      float vxStart,
+                      float axStart);
+
+            /**
+             * @brief 每控制周期更新，在线重规划
+             * @param dt          控制周期 (s)
+             * @param vDes        期望前进速度 (mm/s)，由步长/周期决定
+             * @param vAct        实际前进速度估计 (mm/s)
+             * @param pushGain    Raibert 水平增益
+             * @param currentTip  足端传感器反馈（可空，空则从轨迹反算）
+             * @param[out] xDes   期望 X 位置 (mm)
+             * @param[out] zDes   期望 Z 位置 (mm)
+             * @param[out] vxDes  期望 X 速度 (mm/s)
+             * @param[out] vzDes  期望 Z 速度 (mm/s)
+             */
+            void update(float dt,
+                        float vDes,
+                        float vAct,
+                        float pushGain,
+                        const Body *currentTip,
+                        float &xDes,
+                        float &zDes,
+                        float &vxDes,
+                        float &vzDes);
+
+            bool isLanded() const {
+                return landed_;
+            }
+
+            /// 获取最终滤波落脚点 X（用于落地衔接）
+            float getTargetX() const {
+                return p_target_x_;
+            }
+            /// 获取目标落地 Z
+            float getZTarget() const {
+                return z_target_;
+            }
+
+          private:
+            // ---- 参数 ----
+            float H_;               ///< 步高 (mm)
+            float T_swing_nominal_; ///< 名义摆动时间 (s)
+            float T_min_;           ///< 最小重规划时间阈值 (s)
+            float alpha_;           ///< 落脚点低通滤波系数
+            float t_elapsed_;       ///< 已耗时 (s)
+
+            // ---- 状态 ----
+            Eigen::Matrix<float, 6, 1> last_coeffs_x_; ///< 上一周期 X 轴五次多项式系数
+            float p_target_x_; ///< 滤波后的目标落脚点 X (mm)
+            float z_start_;    ///< 离地时记录的 Z (mm)
+            float z_target_;   ///< 目标落地 Z (mm)
+
+            bool landed_ = false;
+            bool foothold_locked_ = false; ///< 剩余时间 < T_min 时锁定落脚点
+
+            /// Z 轴光滑弧线：phase ∈ [0,1]
+            float smoothArcZ(float phase) const;
+        };
+
+        // ======================== 支撑相轨迹 ========================
+        /**
+         * @brief 支撑相轨迹：足端在世界坐标系中绝对静止
+         *
+         * 期望位置恒等于落地瞬间记录的位置 (x_land, z_land)（腿坐标系下）。
+         * 每周期更新计时并判断离地条件。
+         */
+        class StanceTrajectory {
+          public:
+            StanceTrajectory() = default;
+
+            /**
+             * @brief 初始化支撑相
+             * @param xLand    落地 X 位置 (mm, 腿坐标系)
+             * @param zLand    落地 Z 位置 (mm, 腿坐标系)
+             * @param stanceT  名义支撑时间 (s)
+             * @param tMin     最小支撑时间 (s)
+             * @param tMax     最大支撑时间 (s)
+             */
+            void init(float xLand, float zLand, float stanceT, float tMin, float tMax);
+
+            /**
+             * @brief 每控制周期更新
+             * @param dt          控制周期 (s)
+             * @param currentTip  足端传感器反馈（用于提前离地判断）
+             * @param[out] xDes   期望 X 位置 (mm)，恒为落地位置
+             * @param[out] zDes   期望 Z 位置 (mm)，恒为落地位置
+             */
+            void update(float dt, const Body *currentTip, float &xDes, float &zDes);
+
+            bool isLifted() const {
+                return lifted_;
+            }
+
+            /// 支撑进度 [0, 1]
+            float getStanceProgress() const {
+                return (T_stance_nominal_ > 0.0f) ? t_stance_ / T_stance_nominal_ : 1.0f;
+            }
+
+          private:
+            Eigen::Vector2f world_pos_land_; ///< 世界坐标系固定落脚点
+            float t_stance_ = 0.0f;          ///< 支撑已耗时 (s)
+            float T_stance_nominal_ = 0.5f;  ///< 名义支撑时间 (s)
+            float T_stance_min_ = 0.05f;     ///< 最小支撑时间 (s)
+            float T_stance_max_ = 1.0f;      ///< 最大支撑时间 (s)
+            bool lifted_ = false;
+        };
+
+        // ======================== WalkTrajectory 成员 ========================
         parameters_t parameters_;
-        float stepLength_, stepHeight_, baseHeight_, totalTime_;
+        float stepLength_ = 0.0f, stepHeight_ = 0.0f, baseHeight_ = 0.0f;
         float phaseOffset_ = 0.0f;
+        float swingTime_ = 0.5f, stanceTime_ = 0.5f;
+        GaitPhase gaitPhase_ = SWING;
 
-        // ---------- 轨迹缓存 ----------
-        // 当 setTarget 参数不变 且 当前足端位置接近上次 generate 时的状态时，
-        // 跳过重复计算，直接复用缓存轨迹。
-        bool cacheValid_ = false;
-        float cachedStepLength_, cachedStepHeight_, cachedBaseHeight_, cachedTotalTime_;
-        float cachedPhaseOffset_;
-        Eigen::Vector2f cachedTipPos_;
-        Eigen::Vector2f cachedTipVel_;
-        Trajectory cachedTrajectory_;
+        SwingTrajectory swing_;
+        StanceTrajectory stance_;
 
-        // 闭合周期缓存：仅依赖步态参数，不依赖当前足端位置
-        // 参数不变时跳过 O(n) 的 generateClosedCycle 计算
-        bool closedCycleValid_ = false;
-        Trajectory cachedClosedCycle_;
-
-        // 纯相位周期缓存：不含过渡段，仅 rotateCycleToStart 后的 phaseCycle。
-        // 周期间重启时直接复用，避免重放过时的过渡段。
-        Trajectory phaseCycle_;
-
-        /**
-         * @brief 生成一个完整闭合步态周期
-         * @param cycleTime 一个步态周期总时长
-         * @param totalSteps 一个步态周期总离散点数
-         */
-        Trajectory generateClosedCycle(const float cycleTime, const size_t totalSteps);
-
-        /**
-         * @brief 在闭合轨迹中找到与当前足端最近的点索引
-         * @param cycle 闭合步态轨迹
-         * @param currentTip 当前足端状态
-         */
-        /**
-         * @brief 将闭合轨迹重排，使 startIndex 对应点成为起点
-         */
-        Trajectory rotateCycleToStart(const Trajectory &cycle, size_t startIndex) const;
-
-        /**
-         * @brief 生成支撑相的轨迹
-         * @param transitionTime 整个步态用时
-         * @param steps 该相位占用的分辨率步数
-         */
-        Trajectory generateStance(const float transitionTime, const size_t steps);
-
-        /**
-         * @brief 生成摆动相的轨迹
-         * @param ransitionTime 整个步态用时
-         * @param steps 该相位占用的分辨率步数
-         */
-        Trajectory generateSwing(const float transitionTime, const size_t steps);
-
-        /**
-         * @brief 生成过渡的轨迹
-         * @param lhs 第一段轨迹
-         * @param rhs 第二段轨迹
-         */
-        Trajectory generateBlend(const Trajectory &lhs, const Trajectory &rhs);
-
-        /**
-         * @brief 生成原地踏步的轨迹
-         */
-        Trajectory generateZeroLength(const Body &currentTip);
+        TrajectoryPoint target_;
+        rclcpp::Time lastUpdateTime_;
+        float vDes_ = 0.0f;     ///< 当前期望前进速度 (mm/s)
+        float lastTipX_ = 0.0f; ///< 上一周期足端 X（用于速度估计）
 
         rclcpp::Logger logger_ = rclcpp::get_logger("walkTrajectory");
     };

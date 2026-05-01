@@ -1,5 +1,4 @@
 #pragma once
-#include "dog_tools/type.hpp"
 #include <Eigen/Dense>
 #include <cstddef>
 
@@ -8,157 +7,184 @@ namespace Dog8Dof {
         using Point2D = Eigen::Vector2<float>;
 
       public:
-        static Trajectory generate(const Point2D &startPos,
-                                   const Point2D &finishPos,
-                                   const Point2D &startVel,
-                                   const Point2D &finishVel,
-                                   const Point2D &startAcc,
-                                   const Point2D &finishAcc,
-                                   float time,
-                                   size_t steps) {
-            Trajectory result(steps);
-            if (steps == 0 || time <= 0.0f) {
-                return result;
+        /**
+         * @brief 计算五次多项式系数
+         * @param startState 起始状态 [位置, 速度, 加速度]
+         * @param finishState 结束状态 [位置, 速度, 加速度]
+         * @param T 运动总时间
+         * @return 6x1 的系数向量 [c0, c1, c2, c3, c4, c5]，对应多项式 p(t) = c0 + c1*t +
+         * c2*t^2 + c3*t^3 + c4*t^4 + c5*t^5
+         */
+        static Eigen::Matrix<float, 6, 1>
+        computeCoefficients(const std::array<float, 3> &startState,
+                            const std::array<float, 3> &finishState,
+                            float T) {
+            return solveQuinticCoeff1D(startState[0],
+                                       startState[1],
+                                       startState[2],
+                                       finishState[0],
+                                       finishState[1],
+                                       finishState[2],
+                                       T);
+        }
+
+        /**
+         * @brief 采样五次多项式轨迹
+         * @param coeff 五次多项式系数 [c0, c1, c2, c3, c4, c5]
+         * @param tStart 采样起始时间
+         * @param tEnd 采样结束时间
+         * @param numPoints 采样点数量
+         * @param positions 输出位置序列
+         * @param velocities 输出速度序列
+         */
+        static void sampleTrajectory(const Eigen::Matrix<float, 6, 1> &coeff,
+                                     float tStart,
+                                     float tEnd,
+                                     size_t numPoints,
+                                     std::vector<float> &positions,
+                                     std::vector<float> &velocities) {
+            positions.clear();
+            velocities.clear();
+            if (numPoints == 0 || tEnd <= tStart) {
+                return;
             }
+            positions.reserve(numPoints);
+            velocities.reserve(numPoints);
 
-            const float T = time;
-            const float T2 = T * T;
-            const float T3 = T2 * T;
-            const float T4 = T3 * T;
-            const float T5 = T4 * T;
-
-            Eigen::Matrix3f A;
-            A << T3, T4, T5, 3.0f * T2, 4.0f * T3, 5.0f * T4, 6.0f * T, 12.0f * T2,
-                20.0f * T3;
-
-            auto solveOneAxis =
-                [&](float p0, float v0, float acc0, float pT, float vT, float accT) {
-                    const float a0 = p0;
-                    const float a1 = v0;
-                    const float a2 = 0.5f * acc0;
-
-                    Eigen::Vector3f b;
-                    b << pT - (a0 + a1 * T + a2 * T2), vT - (a1 + 2.0f * a2 * T),
-                        accT - (2.0f * a2);
-
-                    const Eigen::Vector3f x = A.colPivHouseholderQr().solve(b);
-
-                    Eigen::Matrix<float, 6, 1> coeff;
-                    coeff << a0, a1, a2, x[0], x[1], x[2];
-                    return coeff;
-                };
-
-            const Eigen::Matrix<float, 6, 1> cx = solveOneAxis(startPos[0],
-                                                               startVel[0],
-                                                               startAcc[0],
-                                                               finishPos[0],
-                                                               finishVel[0],
-                                                               finishAcc[0]);
-            const Eigen::Matrix<float, 6, 1> cz = solveOneAxis(startPos[1],
-                                                               startVel[1],
-                                                               startAcc[1],
-                                                               finishPos[1],
-                                                               finishVel[1],
-                                                               finishAcc[1]);
-
-            for (size_t i = 0; i < steps; ++i) {
-                const float s =
-                    (steps == 1) ? 0.0f
-                                 : static_cast<float>(i) / static_cast<float>(steps - 1);
-                const float t = s * T;
+            for (size_t i = 0; i < numPoints; ++i) {
+                const float s = (numPoints == 1) ? 0.0f
+                                                 : static_cast<float>(i) /
+                                                       static_cast<float>(numPoints - 1);
+                const float t = tStart + s * (tEnd - tStart);
                 const float t2 = t * t;
                 const float t3 = t2 * t;
                 const float t4 = t3 * t;
                 const float t5 = t4 * t;
 
-                const float px =
-                    cx[0] + cx[1] * t + cx[2] * t2 + cx[3] * t3 + cx[4] * t4 + cx[5] * t5;
-                const float pz =
-                    cz[0] + cz[1] * t + cz[2] * t2 + cz[3] * t3 + cz[4] * t4 + cz[5] * t5;
+                const float p = coeff[0] + coeff[1] * t + coeff[2] * t2 + coeff[3] * t3 +
+                                coeff[4] * t4 + coeff[5] * t5;
+                const float v = coeff[1] + 2.0f * coeff[2] * t + 3.0f * coeff[3] * t2 +
+                                4.0f * coeff[4] * t3 + 5.0f * coeff[5] * t4;
 
-                const float vx = cx[1] + 2.0f * cx[2] * t + 3.0f * cx[3] * t2 +
-                                 4.0f * cx[4] * t3 + 5.0f * cx[5] * t4;
-                const float vz = cz[1] + 2.0f * cz[2] * t + 3.0f * cz[3] * t2 +
-                                 4.0f * cz[4] * t3 + 5.0f * cz[5] * t4;
-
-                result.points[i].pos[0] = px;
-                result.points[i].pos[1] = 0.0f;
-                result.points[i].pos[2] = pz;
-
-                result.points[i].vel[0] = vx;
-                result.points[i].vel[1] = 0.0f;
-                result.points[i].vel[2] = vz;
-
-                result.points[i].tau.setZero();
+                positions.push_back(p);
+                velocities.push_back(v);
             }
-
-            return result;
         }
 
-        static Eigen::Vector2f solveMidVel2D(const Eigen::Vector2f &startPos,
-                                             const Eigen::Vector2f &midPos,
-                                             const Eigen::Vector2f &finishPos,
-                                             const Eigen::Vector2f &startVel,
-                                             const Eigen::Vector2f &finishVel,
-                                             float T1,
-                                             float T2,
-                                             float maxNorm = -1.0f) {
+        /**
+         * @brief 计算通过中间点的五次多项式的中间速度
+         * @param startState 起始状态 [位置, 速度]
+         * @param finishState 结束状态 [位置, 速度]
+         * @param midPos 中间点位置
+         * @param T1 第一段运动时间 (p0 → pm)
+         * @param T2 第二段运动时间 (pm → p2)
+         * @param maxAbs 最大允许速度绝对值，负值表示不限制
+         * @return 中间点速度
+         */
+        static float solveMidVel1D(std::array<float, 2> startState,
+                                   std::array<float, 2> finishState,
+                                   float midPos,
+                                   float T1,
+                                   float T2,
+                                   float maxAbs = -1.0f) {
             constexpr float eps = 1e-6f;
 
-            Eigen::Vector2f vm = 0.5f * (startVel + finishVel);
+            float vm = 0.5f * (startState[1] + finishState[1]);
 
             if (T1 > eps && T2 > eps) {
-                const Eigen::Vector2f d1 = midPos - startPos;
-                const Eigen::Vector2f d2 = finishPos - midPos;
+                const float d1 = midPos - startState[0];
+                const float d2 = finishState[0] - midPos;
 
                 vm = (6.0f * (d1 / (T1 * T1) + d2 / (T2 * T2)) -
-                      2.0f * (startVel / T1 + finishVel / T2)) /
+                      2.0f * (startState[1] / T1 + finishState[0] / T2)) /
                      (4.0f * (1.0f / T1 + 1.0f / T2));
             }
 
-            if (maxNorm > eps) {
-                const float n = vm.norm();
-                if (n > maxNorm) {
-                    vm *= (maxNorm / n);
+            if (maxAbs > eps) {
+                if (vm > maxAbs) {
+                    vm = maxAbs;
+                } else if (vm < -maxAbs) {
+                    vm = -maxAbs;
                 }
             }
 
             return vm;
         }
 
-        static Eigen::Vector2f solveMidAcc2D(const Eigen::Vector2f &startPos,
-                                             const Eigen::Vector2f &startVel,
-                                             const Eigen::Vector2f &startAcc,
-                                             const Eigen::Vector2f &midPos,
-                                             const Eigen::Vector2f &midVel,
-                                             const Eigen::Vector2f &finishPos,
-                                             const Eigen::Vector2f &finishVel,
-                                             const Eigen::Vector2f &finishAcc,
-                                             float T1,
-                                             float T2) {
+        /**
+         * @brief 计算通过中间点的五次多项式的中间加速度（一维）
+         *
+         * 通过在中间点处 jerk 连续条件求解加速度 am：
+         *   第一段 jerk(t=T1) == 第二段 jerk(t=0)
+         * 由于 jerk 在端点的差距对 am 是线性的，用标准求根法计算。
+         *
+         * @param startState 起始状态 [位置, 速度, 加速度]
+         * @param finishState 结束状态 [位置, 速度, 加速度]
+         * @param midState 中点状态[位置, 速度]
+         * @param p2  结束位置
+         * @param v2  结束速度
+         * @param a2  结束加速度
+         * @param T1  第一段运动时间
+         * @param T2  第二段运动时间
+         * @return 中间点加速度
+         */
+        static float solveMidAcc1D(std::array<float, 3> startState,
+                                   std::array<float, 3> finishState,
+                                   std::array<float, 2> midState,
+                                   float T1,
+                                   float T2) {
+            return solveMidAcc1DImpl(startState[0],
+                                     startState[1],
+                                     startState[2],
+                                     midState[0],
+                                     midState[1],
+                                     finishState[0],
+                                     finishState[1],
+                                     finishState[2],
+                                     T1,
+                                     T2);
+        }
 
-            Eigen::Vector2f am;
-            am[0] = solveMidAcc1D(startPos[0],
-                                  startVel[0],
-                                  startAcc[0],
-                                  midPos[0],
-                                  midVel[0],
-                                  finishPos[0],
-                                  finishVel[0],
-                                  finishAcc[0],
-                                  T1,
-                                  T2);
-            am[1] = solveMidAcc1D(startPos[1],
-                                  startVel[1],
-                                  startAcc[1],
-                                  midPos[1],
-                                  midVel[1],
-                                  finishPos[1],
-                                  finishVel[1],
-                                  finishAcc[1],
-                                  T1,
-                                  T2);
-            return am;
+        /**
+         * @brief 计算五次多项式在时刻 t 的位置
+         * @param coeff 系数向量 [c0..c5], p(t) = Σ cᵢ tⁱ
+         * @param t     时间
+         * @return p(t)
+         */
+        static float evaluatePos(const Eigen::Matrix<float, 6, 1> &coeff, float t) {
+            const float t2 = t * t;
+            const float t3 = t2 * t;
+            const float t4 = t3 * t;
+            const float t5 = t4 * t;
+            return coeff[0] + coeff[1] * t + coeff[2] * t2 + coeff[3] * t3 +
+                   coeff[4] * t4 + coeff[5] * t5;
+        }
+
+        /**
+         * @brief 计算五次多项式在时刻 t 的速度
+         * @param coeff 系数向量 [c0..c5]
+         * @param t     时间
+         * @return v(t) = p'(t)
+         */
+        static float evaluateVel(const Eigen::Matrix<float, 6, 1> &coeff, float t) {
+            const float t2 = t * t;
+            const float t3 = t2 * t;
+            const float t4 = t3 * t;
+            return coeff[1] + 2.0f * coeff[2] * t + 3.0f * coeff[3] * t2 +
+                   4.0f * coeff[4] * t3 + 5.0f * coeff[5] * t4;
+        }
+
+        /**
+         * @brief 计算五次多项式在时刻 t 的加速度
+         * @param coeff 系数向量 [c0..c5]
+         * @param t     时间
+         * @return a(t) = p''(t)
+         */
+        static float evaluateAcc(const Eigen::Matrix<float, 6, 1> &coeff, float t) {
+            const float t2 = t * t;
+            const float t3 = t2 * t;
+            return 2.0f * coeff[2] + 6.0f * coeff[3] * t + 12.0f * coeff[4] * t2 +
+                   20.0f * coeff[5] * t3;
         }
 
       private:
@@ -193,16 +219,16 @@ namespace Dog8Dof {
             return 6.0f * c[3] + 24.0f * c[4] * t + 60.0f * c[5] * t * t;
         }
 
-        static float solveMidAcc1D(float p0,
-                                   float v0,
-                                   float a0,
-                                   float pm,
-                                   float vm,
-                                   float p2,
-                                   float v2,
-                                   float a2,
-                                   float T1,
-                                   float T2) {
+        static float solveMidAcc1DImpl(float p0,
+                                       float v0,
+                                       float a0,
+                                       float pm,
+                                       float vm,
+                                       float p2,
+                                       float v2,
+                                       float a2,
+                                       float T1,
+                                       float T2) {
 
             auto jerkGap = [&](float am) -> float {
                 // 第一段: (p0,v0,a0) -> (pm,vm,am)

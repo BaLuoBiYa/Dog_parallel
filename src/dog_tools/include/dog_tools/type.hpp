@@ -15,29 +15,6 @@ namespace Dog8Dof {
               kd(Eigen::Vector2<float>::Zero()){};
     }; // xyz方式排列,kp/kd顺序为Front->Rear
 
-    struct Trajectory {
-        std::vector<TrajectoryPoint> points;
-        std::vector<size_t> time;
-        size_t progress;
-
-        Trajectory() {
-        }
-        Trajectory(size_t steps) {
-            points.resize(steps);
-            time.resize(steps);
-            progress = 0;
-        }
-
-        Trajectory operator+(const Trajectory &other) const {
-            Trajectory result = *this;
-            result.points.insert(
-                result.points.end(), other.points.begin(), other.points.end());
-            result.time.insert(result.time.end(), other.time.begin(), other.time.end());
-            result.progress = 0;
-            return result;
-        }
-    };
-
     struct Motor {
         float pos;
         float vel;

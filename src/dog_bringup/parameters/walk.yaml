@@ -1,8 +1,11 @@
 walkKp: 3.0
 walkKd: 0.05
 reachThreshold: 5.0
-transitionVelMax: 1000.0
 swingDutyCycle: 0.5
+minReplanTime: 0.02
+lowPassAlpha: 0.3
+stanceTimeMin: 0.05
+stanceTimeMax: 1.0
 
 pushGain:
   horizontal: 0.02
@@ -11,6 +14,3 @@ pushGain:
 deltaSpeed:
   x: 0.0
   z: 1.0
-
-blendTime: 0.1
-startBlendTime: 0.1
