@@ -57,7 +57,23 @@ namespace Dog8Dof {
             float stanceTimeMax = 1.0f;                // 最大支撑时间 (s)
         };
 
-        /// 步态相位枚举
+        friend class StanceTrajectory;
+        friend class SwingTrajectory;
+
+      protected:
+        // ======================== WalkTrajectory 成员 ========================
+        parameters_t parameters_;
+        float stepLength_ = 0.0f, stepHeight_ = 0.0f, baseHeight_ = 0.0f;
+        float phaseOffset_ = 0.0f;
+        float swingTime_ = 0.5f, stanceTime_ = 0.5f;
+        GaitPhase gaitPhase_ = SWING;
+
+        TrajectoryPoint target_;
+        rclcpp::Time lastUpdateTime_;
+        float vDes_ = 0.0f;     ///< 当前期望前进速度 (mm/s)
+        float lastTipX_ = 0.0f; ///< 上一周期足端 X（用于速度估计）
+
+        rclcpp::Logger logger_ = rclcpp::get_logger("walkTrajectory");
 
       private:
         // ======================== 摆动相轨迹 ========================
@@ -151,10 +167,13 @@ namespace Dog8Dof {
 
         // ======================== 支撑相轨迹 ========================
         /**
-         * @brief 支撑相轨迹：足端在世界坐标系中绝对静止
+         * @brief 支撑相轨迹：足端世界静止，输出机体坐标
          *
-         * 期望位置恒等于落地瞬间记录的位置 (x_land, z_land)（腿坐标系下）。
-         * 每周期更新计时并判断离地条件。
+         * 核心：落地瞬间记录落脚点在机体坐标系的位置 (x_land_body, z_land_body)。
+         * 支撑期间机体向前运动，足端在世界系中固定，因此在机体系中向后运动：
+         *   xDes = x_land_body - body_disp_x
+         *   zDes = z_land_body
+         * 每周期更新计时、累加机体位移并判断离地条件。
          */
         class StanceTrajectory {
           public:
@@ -162,8 +181,8 @@ namespace Dog8Dof {
 
             /**
              * @brief 初始化支撑相
-             * @param xLand    落地 X 位置 (mm, 腿坐标系)
-             * @param zLand    落地 Z 位置 (mm, 腿坐标系)
+             * @param xLand    落地 X 位置 (mm, 机体坐标系)
+             * @param zLand    落地 Z 位置 (mm, 机体坐标系)
              * @param stanceT  名义支撑时间 (s)
              * @param tMin     最小支撑时间 (s)
              * @param tMax     最大支撑时间 (s)
@@ -173,11 +192,16 @@ namespace Dog8Dof {
             /**
              * @brief 每控制周期更新
              * @param dt          控制周期 (s)
-             * @param currentTip  足端传感器反馈（用于提前离地判断）
-             * @param[out] xDes   期望 X 位置 (mm)，恒为落地位置
-             * @param[out] zDes   期望 Z 位置 (mm)，恒为落地位置
+             * @param bodyVelX    机体 X 方向速度 (mm/s)，用于累积位移
+             * @param currentTip  足端传感器反馈（可空，用于提前离地判断）
+             * @param[out] xDes   期望 X 位置 (mm, 机体系)
+             * @param[out] zDes   期望 Z 位置 (mm, 机体系)
              */
-            void update(float dt, const Body *currentTip, float &xDes, float &zDes);
+            void update(float dt,
+                        float bodyVelX,
+                        const Body *currentTip,
+                        float &xDes,
+                        float &zDes);
 
             bool isLifted() const {
                 return lifted_;
@@ -189,30 +213,17 @@ namespace Dog8Dof {
             }
 
           private:
-            Eigen::Vector2f world_pos_land_; ///< 世界坐标系固定落脚点
-            float t_stance_ = 0.0f;          ///< 支撑已耗时 (s)
-            float T_stance_nominal_ = 0.5f;  ///< 名义支撑时间 (s)
-            float T_stance_min_ = 0.05f;     ///< 最小支撑时间 (s)
-            float T_stance_max_ = 1.0f;      ///< 最大支撑时间 (s)
+            Eigen::Vector2f foot_pos_land_; ///< 落地瞬间的机体系足端坐标 (mm)
+            float body_disp_x_ = 0.0f; ///< 机体从落地起的累积前进位移 (mm)
+            float t_stance_ = 0.0f;    ///< 支撑已耗时 (s)
+            float T_stance_nominal_ = 0.5f; ///< 名义支撑时间 (s)
+            float T_stance_min_ = 0.05f;    ///< 最小支撑时间 (s)
+            float T_stance_max_ = 1.0f;     ///< 最大支撑时间 (s)
             bool lifted_ = false;
         };
 
-        // ======================== WalkTrajectory 成员 ========================
-        parameters_t parameters_;
-        float stepLength_ = 0.0f, stepHeight_ = 0.0f, baseHeight_ = 0.0f;
-        float phaseOffset_ = 0.0f;
-        float swingTime_ = 0.5f, stanceTime_ = 0.5f;
-        GaitPhase gaitPhase_ = SWING;
-
         SwingTrajectory swing_;
         StanceTrajectory stance_;
-
-        TrajectoryPoint target_;
-        rclcpp::Time lastUpdateTime_;
-        float vDes_ = 0.0f;     ///< 当前期望前进速度 (mm/s)
-        float lastTipX_ = 0.0f; ///< 上一周期足端 X（用于速度估计）
-
-        rclcpp::Logger logger_ = rclcpp::get_logger("walkTrajectory");
     };
 
 } // namespace Dog8Dof

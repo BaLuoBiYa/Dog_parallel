@@ -160,7 +160,7 @@ namespace Dog8Dof {
 
         // ---- 支撑相 ----
         case STANCE: {
-            stance_.update(dt, currentTip, xDes, zDes);
+            stance_.update(dt, vDes_, currentTip, xDes, zDes);
             vxDes = 0.0f;
             vzDes = 0.0f;
 
@@ -376,7 +376,8 @@ namespace Dog8Dof {
     // ===================================================================
     void WalkTrajectory::StanceTrajectory::init(
         float xLand, float zLand, float stanceT, float tMin, float tMax) {
-        world_pos_land_ = Eigen::Vector2f(xLand, zLand);
+        foot_pos_land_ = Eigen::Vector2f(xLand, zLand);
+        body_disp_x_ = 0.0f;
         T_stance_nominal_ = stanceT;
         T_stance_min_ = tMin;
         T_stance_max_ = tMax;
@@ -384,16 +385,16 @@ namespace Dog8Dof {
         lifted_ = false;
     }
 
-    void WalkTrajectory::StanceTrajectory::update(float dt,
-                                                  const Body *currentTip,
-                                                  float &xDes,
-                                                  float &zDes) {
+    void WalkTrajectory::StanceTrajectory::update(
+        float dt, float bodyVelX, const Body *currentTip, float &xDes, float &zDes) {
         t_stance_ += dt;
 
-        // 核心原则：足端在世界坐标系中绝对静止
-        // 期望位置恒等于落地瞬间记录的位置
-        xDes = world_pos_land_[0];
-        zDes = world_pos_land_[1];
+        // 累积机体位移：机体前进 → 足端在机体系中后退
+        body_disp_x_ += bodyVelX * dt;
+
+        // 足端在世界系固定 → 机体系坐标 = 落地机体坐标 - 机体位移
+        xDes = foot_pos_land_[0] - body_disp_x_;
+        zDes = foot_pos_land_[1];
 
         // ---- 离地判定 ----
         // 条件 1：达到名义支撑时间
@@ -409,10 +410,10 @@ namespace Dog8Dof {
         }
 
         // 条件 3：超过最小支撑时间且满足提前离地条件
-        //         （有传感器反馈时，检测跟踪误差是否过大）
+        //         （有传感器反馈时，检测实际足端与期望位置的跟踪误差是否过大）
         if (t_stance_ > T_stance_min_ && currentTip) {
-            const float dx = currentTip->pos[0] - world_pos_land_[0];
-            const float dz = currentTip->pos[2] - world_pos_land_[1];
+            const float dx = currentTip->pos[0] - xDes;
+            const float dz = currentTip->pos[2] - zDes;
             constexpr float earlyLiftErrorSQ = 100.0f; // 10mm 跟踪误差触发提前离地
             if (dx * dx + dz * dz > earlyLiftErrorSQ) {
                 lifted_ = true;
