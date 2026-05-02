@@ -84,16 +84,51 @@ namespace Dog8Dof {
         const float vxStart = 0.0f;
         const float axStart = 0.0f;
 
-        swing_.init(zStart,
-                    zTarget,
-                    stepHeight_,
-                    swingTime_,
-                    parameters_.lowPassAlpha,
-                    parameters_.minReplanTime,
-                    xStart,
-                    vxStart,
-                    axStart);
+        // ---- 相位偏移处理 ----
+        // phaseOffset_ ∈ [0, 1)：表示本腿在全局周期中的起始相位点
+        //
+        // 当 phaseOffset_ = 0.0 时：从 SWING 开始，先摆后撑，完整周期
+        // 当 phaseOffset_ = 0.5 时：从 STANCE 开始，先撑后摆（对侧腿正在摆动）
+        //
+        // Stance 的初始时长按 phaseOffset_ 缩放：
+        //   若 phaseOffset_ < swingDuty，直接按比例进入 SWING 的中间时刻
+        //   若 phaseOffset_ >= swingDuty，从 STANCE 起步，剩余支撑时间 =
+        //       stanceTime * (1 - (phaseOffset - swingDuty) / (1 - swingDuty))
 
+        const float swingDuty = parameters_.swingDutyCycle;
+        const float phase = std::fmod(phaseOffset_, 1.0f);
+
+        if (initGait == SWING) {
+            // SWING 起步：按 phase 比例跳过已过的摆动时间
+            //   skipFraction = phase / swingDuty, clamp to [0,1]
+            const float skipFraction =
+                (swingDuty > 0.0f) ? std::min(phase / swingDuty, 1.0f) : 0.0f;
+            const float effectiveSwingT =
+                std::max(swingTime_ * (1.0f - skipFraction), parameters_.minReplanTime);
+
+            swing_.init(zStart,
+                        zTarget,
+                        stepHeight_,
+                        effectiveSwingT,
+                        parameters_.lowPassAlpha,
+                        parameters_.minReplanTime,
+                        xStart,
+                        vxStart,
+                        axStart);
+        } else {
+            // STANCE 起步：按 (phase - swingDuty) / stanceDuty 比例跳过已过的支撑时间
+            const float stanceDuty = 1.0f - swingDuty;
+            const float stancePhase =
+                (stanceDuty > 0.0f) ? std::min((phase - swingDuty) / stanceDuty, 1.0f)
+                                    : 0.0f;
+            const float effectiveStanceT = stanceTime_ * (1.0f - stancePhase);
+
+            stance_.init(xStart,
+                         zStart,
+                         effectiveStanceT,
+                         parameters_.stanceTimeMin,
+                         parameters_.stanceTimeMax);
+        }
         gaitPhase_ = initGait;
 
         // 返回初始点
@@ -339,7 +374,7 @@ namespace Dog8Dof {
         if (T_rem < T_min_) {
             const float dx = p_target_x_ - xDes;
             const float dz2 = z_target_ - zDes;
-            if (dx * dx + dz2 * dz2 < 1.0f) { // 1mm² 邻域
+            if (dx * dx + dz2 * dz2 < 10.0f) { // 10mm² 邻域
                 xDes = p_target_x_;
                 zDes = z_target_;
                 vxDes = 0.0f;

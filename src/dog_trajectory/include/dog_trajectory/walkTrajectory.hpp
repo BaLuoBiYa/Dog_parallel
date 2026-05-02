@@ -42,6 +42,11 @@ namespace Dog8Dof {
         TrajectoryPoint get(const rclcpp::Time &currentTime,
                             const Body *currentTip = nullptr) override;
 
+        /** @brief 获取摆动相占空比 */
+        float swingDuty() const {
+            return parameters_.swingDutyCycle;
+        }
+
         /// 步态参数（从 YAML 加载）
         struct parameters_t {
             float walkKp = 3.0f;

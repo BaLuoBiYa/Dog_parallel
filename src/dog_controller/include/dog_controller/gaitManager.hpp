@@ -1,9 +1,20 @@
 #pragma once
+
 #include "dog_controller/leg.hpp"
-#include "dog_trajectory/jumpTrajectoryLegacy.hpp"
 #include "dog_trajectory/standTrajectory.hpp"
 #include "dog_trajectory/walkTrajectory.hpp"
+
 namespace Dog8Dof {
+
+    /**
+     * @brief 统一步态管理器 — 在线重规划接口
+     *
+     * 每控制周期调用 update()，内部：
+     *   1. 从电机状态更新腿模型 → currentTip_
+     *   2. 调用 currentTrajectory_->get(now, &currentTip_) 在线重规划并获取期望足端
+     *   3. 逆运动学 + PD 增益下发到腿模型
+     *   4. 自动检测周期结束并衔接下一周期（walk 步态自循环）
+     */
     class GaitManager {
       public:
         GaitManager(rclcpp::Clock::SharedPtr clock,
@@ -11,74 +22,81 @@ namespace Dog8Dof {
 
                     std::string walkConfig,
                     std::string standConfig,
-                    std::string jumpConfig,
 
                     float upperLength = Const::UPPER_LENGTH,
                     float lowerLength = Const::LOWER_LENGTH,
                     float tipLength = 0.0f);
 
+        // ================================================================
+        //  步态切换
+        // ================================================================
+
         /**
-         * @brief 设置目标步态参数
-         * @return 是否成功更新模型状态
+         * @brief 切换到步行步态
+         * @param stepLength  步长 (mm)，正值为前进
+         * @param stepHeight  步高 (mm)
+         * @param baseHeight  基座高度 (mm)
+         * @param totalTime   完整步态周期时间 (s)
+         * @param phaseOffset 相位偏移 [0,1)
          */
-        bool setJumpGait(const JumpTrajectoryLegacy::jumpIndex &jumpIndex);
         bool setWalkGait(float stepLength,
                          float stepHeight,
                          float baseHeight,
                          float totalTime,
                          float phaseOffset = 0.0f);
+
+        /**
+         * @brief 切换到站立步态
+         * @param tipX 目标足端 X (mm, 机体系)
+         * @param tipZ 目标足端 Z (mm, 机体系)
+         */
         bool setStandGait(float tipX, float tipZ);
 
-        /**
-         * @brief 启动步态
-         */
-        bool start(const rclcpp::Time &startTime);
+        // ================================================================
+        //  初始化 & 周期更新
+        // ================================================================
 
         /**
-         * @brief 检测步态周期是否结束
+         * @brief 初始化腿模型（首次建立 currentTip_）
+         * @return 是否成功
          */
-        bool isFinshed() {
-            return currentTrajectory_ ? currentTrajectory_->finished() : true;
-        }
+        bool init(const Eigen::Vector2f &pos,
+                  const Eigen::Vector2f &vel,
+                  const Eigen::Vector2f &tau);
 
         /**
-         * @brief 更新当前姿态
-         * @param pos 前后电机位置。
-         * @param vel 前后电机速度。
-         * @param tau 前后电机力矩。
-         * @return 是否成功更新模型状态
+         * @brief 每控制周期更新（在线重规划 + 逆运动学）
+         * @return 是否成功
          */
         bool update(const Eigen::Vector2f &pos,
                     const Eigen::Vector2f &vel,
                     const Eigen::Vector2f &tau);
 
         /**
-         * @brief 初始化姿态
-         * @param pos 前后电机位置。
-         * @param vel 前后电机速度。
-         * @param tau 前后电机力矩。
-         * @return 是否成功更新模型状态
+         * @brief 获取当前步态是否完成（stand 到达目标；walk 永不完成）
          */
-        bool init(const Eigen::Vector2f &pos,
-                  const Eigen::Vector2f &vel,
-                  const Eigen::Vector2f &tau);
+        bool isFinished() const;
 
-        Motor getFrontTarget() {
-            return leg_.getMotorTarget(Leg2Dof::FRONT);
-        };
-        Motor getRearTarget() {
-            return leg_.getMotorTarget(Leg2Dof::REAR);
-        }
+        // ================================================================
+        //  电机输出
+        // ================================================================
+
+        Motor getFrontTarget() const;
+        Motor getRearTarget() const;
 
       private:
         rclcpp::Clock::SharedPtr clock_;
         Leg2Dof leg_;
-        std::shared_ptr<BaseTrajectory> currentTrajectory_;
-        TrajectoryPoint targetPoint_;
         Body currentTip_;
+        TrajectoryPoint targetPoint_;
 
         std::shared_ptr<WalkTrajectory> walkTrajectory_;
-        std::shared_ptr<StandTrajectory> standTrajecory_;
-        std::shared_ptr<JumpTrajectoryLegacy> jumpTrajectory_;
+        std::shared_ptr<StandTrajectory> standTrajectory_;
+
+        /// 当前活跃轨迹（Walk 或 Stand）
+        std::shared_ptr<BaseTrajectory> currentTrajectory_;
+
+        rclcpp::Logger logger_ = rclcpp::get_logger("GaitManager");
     };
+
 } // namespace Dog8Dof
