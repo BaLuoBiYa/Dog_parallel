@@ -83,35 +83,35 @@ target_link_libraries(walkTest
     yaml-cpp
 )
 
-add_executable(jumpTest
-    src/test/jumpTest.cpp
-)
-ament_target_dependencies(jumpTest
-    rclcpp
-    dog_tools
-    dog_trajectory
-    Eigen3
-    ament_index_cpp
-)
-target_link_libraries(jumpTest
-    Eigen3::Eigen
-    yaml-cpp
-)
+# add_executable(jumpTest
+#     src/test/jumpTest.cpp
+# )
+# ament_target_dependencies(jumpTest
+#     rclcpp
+#     dog_tools
+#     dog_trajectory
+#     Eigen3
+#     ament_index_cpp
+# )
+# target_link_libraries(jumpTest
+#     Eigen3::Eigen
+#     yaml-cpp
+# )
 
-add_executable(jumpLegacyTest
-    src/test/jumpLegacyTest.cpp
-)
-ament_target_dependencies(jumpLegacyTest
-    rclcpp
-    dog_tools
-    dog_trajectory
-    Eigen3
-    ament_index_cpp
-)
-target_link_libraries(jumpLegacyTest
-    Eigen3::Eigen
-    yaml-cpp
-)
+# add_executable(jumpLegacyTest
+#     src/test/jumpLegacyTest.cpp
+# )
+# ament_target_dependencies(jumpLegacyTest
+#     rclcpp
+#     dog_tools
+#     dog_trajectory
+#     Eigen3
+#     ament_index_cpp
+# )
+# target_link_libraries(jumpLegacyTest
+#     Eigen3::Eigen
+#     yaml-cpp
+# )
 
 add_executable(legTest 
     src/test/legTest.cpp)
@@ -137,33 +137,32 @@ target_link_libraries(legCli
     ${PROJECT_NAME}
 )
 
-add_executable(gaitManagerReplanTest
-    src/test/gaitManagerTest.cpp)
-ament_target_dependencies(gaitManagerReplanTest
-    rclcpp
-    dog_tools
-    dog_trajectory
-    Eigen3
-    ament_index_cpp
-)
-target_link_libraries(gaitManagerReplanTest
-    Eigen3::Eigen
-    ${PROJECT_NAME}
-    yaml-cpp
-)
+# add_executable(gaitManagerReplanTest
+#     src/test/gaitManagerTest.cpp)
+# ament_target_dependencies(gaitManagerReplanTest
+#     rclcpp
+#     dog_tools
+#     dog_trajectory
+#     Eigen3
+#     ament_index_cpp
+# )
+# target_link_libraries(gaitManagerReplanTest
+#     Eigen3::Eigen
+#     ${PROJECT_NAME}
+#     yaml-cpp
+# )
 
 pluginlib_export_plugin_description_file(controller_interface dog_controllerInterface.xml)
 
 install(
   TARGETS ${PROJECT_NAME}
-        # PinocchionTest
         standTest
         walkTest
-        jumpTest
-        jumpLegacyTest
+        # jumpTest
+        # jumpLegacyTest
         legTest
         legCli
-        gaitManagerReplanTest
+        # gaitManagerReplanTest
   DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )

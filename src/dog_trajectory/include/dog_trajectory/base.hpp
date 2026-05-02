@@ -26,7 +26,7 @@ namespace Dog8Dof {
          * @return 本周期期望的足端状态（位置、速度、PD 增益）
          */
         virtual TrajectoryPoint get(const rclcpp::Time &currentTime,
-                                    const Body *currentTip = nullptr);
+                                    const Body *currentTip = nullptr) = 0;
 
         /**
          * @brief 启动轨迹生成器，记录起始时间

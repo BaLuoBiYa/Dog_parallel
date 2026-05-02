@@ -7,4 +7,4 @@ transitionVelMax: 500.0
 
 reachThreshold: 0.01
 stepHeightFactor: 0.1
-transitionTime: 5.0
+transitionTime: 3.0

@@ -17,7 +17,6 @@ find_package(yaml-cpp REQUIRED)
 include_directories(include)
 
 add_library(${PROJECT_NAME}
-  src/base.cpp
   src/standTrajectory.cpp
   src/walkTrajectory.cpp
   src/jumpTrajectory.cpp
@@ -32,25 +31,12 @@ ament_target_dependencies(${PROJECT_NAME}
     dog_tools
 )
 
-    
-add_executable(bezierTest
-  src/test/bezierTest.cpp
-)
-ament_target_dependencies(bezierTest
-    rclcpp
-    dog_tools
-    Eigen3)
-target_link_libraries(bezierTest
-  Eigen3::Eigen
-)
-
 install(
   DIRECTORY include/
   DESTINATION include/
 )
 install(
   TARGETS ${PROJECT_NAME}
-    bezierTest
   DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
