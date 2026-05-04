@@ -1,6 +1,7 @@
 #pragma once
 
 #include "dog_controller/leg.hpp"
+#include "dog_trajectory/jumpTrajectory.hpp"
 #include "dog_trajectory/standTrajectory.hpp"
 #include "dog_trajectory/walkTrajectory.hpp"
 
@@ -22,6 +23,7 @@ namespace Dog8Dof {
 
                     std::string walkConfig,
                     std::string standConfig,
+                    std::string jumpConfig,
 
                     float upperLength = Const::UPPER_LENGTH,
                     float lowerLength = Const::LOWER_LENGTH,
@@ -51,6 +53,13 @@ namespace Dog8Dof {
          * @param tipZ 目标足端 Z (mm, 机体系)
          */
         bool setStandGait(float tipX, float tipZ);
+
+        /**
+         * @brief 切换到跳跃步态
+         * @param jumpLength  期望跳跃水平距离 (mm)
+         * @param jumpHeight  期望相对地面最大跳跃高度 (mm)
+         */
+        bool setJumpGait(float jumpLength, float jumpHeight);
 
         // ================================================================
         //  初始化 & 周期更新
@@ -92,8 +101,9 @@ namespace Dog8Dof {
 
         std::shared_ptr<WalkTrajectory> walkTrajectory_;
         std::shared_ptr<StandTrajectory> standTrajectory_;
+        std::shared_ptr<JumpTrajectory> jumpTrajectory_;
 
-        /// 当前活跃轨迹（Walk 或 Stand）
+        /// 当前活跃轨迹（Walk / Stand / Jump）
         std::shared_ptr<BaseTrajectory> currentTrajectory_;
 
         rclcpp::Logger logger_ = rclcpp::get_logger("GaitManager");

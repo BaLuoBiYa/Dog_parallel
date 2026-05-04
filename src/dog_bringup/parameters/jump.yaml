@@ -1,21 +1,16 @@
-transitionKp: 1.0
-transitionKd: 0.05
-transitionTime: 0.4
+pushDuration: 0.15
+crouchFraction: 0.30
+pushKp: 3.0
+pushKd: 0.05
+compressDepth: 30.0
+toeOffLift: 3.0
 
-crouchHeight: 180.0
-crouchTime: 0.3
+flightKp: 1.5
+flightKd: 0.03
+flightClearance: 20.0
 
-takeoffHeight: 100.0
-pushTimeMin: 0.08
-pushTimeMax: 0.30
-pushTimeScale: 0.5
-
-flyHeightRatio: 0.3
-
-slipMass: 16.0
-slipRestLength: 230.0
-slipStiffness: 180.0
-slipDamping: 20.0
-slipTouchdownAngleDeg: 18.0
-slipStanceMaxTime: 0.30
-slipStopSpeed: 120.0
+absorbDuration: 0.10
+absorbKp: 4.0
+absorbKd: 0.08
+absorbCompress: 25.0
+legLengthStand: 270.0

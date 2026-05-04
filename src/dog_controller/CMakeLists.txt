@@ -83,20 +83,20 @@ target_link_libraries(walkTest
     yaml-cpp
 )
 
-# add_executable(jumpTest
-#     src/test/jumpTest.cpp
-# )
-# ament_target_dependencies(jumpTest
-#     rclcpp
-#     dog_tools
-#     dog_trajectory
-#     Eigen3
-#     ament_index_cpp
-# )
-# target_link_libraries(jumpTest
-#     Eigen3::Eigen
-#     yaml-cpp
-# )
+add_executable(jumpTest
+    src/test/jumpTest.cpp
+)
+ament_target_dependencies(jumpTest
+    rclcpp
+    dog_tools
+    dog_trajectory
+    Eigen3
+    ament_index_cpp
+)
+target_link_libraries(jumpTest
+    Eigen3::Eigen
+    yaml-cpp
+)
 
 # add_executable(jumpLegacyTest
 #     src/test/jumpLegacyTest.cpp
@@ -158,7 +158,7 @@ install(
   TARGETS ${PROJECT_NAME}
         standTest
         walkTest
-        # jumpTest
+        jumpTest
         # jumpLegacyTest
         legTest
         legCli

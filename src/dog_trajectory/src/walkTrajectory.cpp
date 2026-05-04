@@ -468,14 +468,11 @@ namespace YAML {
             Node node;
             node["walkKp"] = rhs.walkKp;
             node["walkKd"] = rhs.walkKd;
-            node["reachThreshold"] = std::sqrt(rhs.reachThresholdSQ);
             node["swingDutyCycle"] = rhs.swingDutyCycle;
             node["minReplanTime"] = rhs.minReplanTime;
             node["lowPassAlpha"] = rhs.lowPassAlpha;
             node["pushGain"]["horizontal"] = rhs.horizontalPushGain;
             node["pushGain"]["vertical"] = rhs.verticalPushGain;
-            node["deltaSpeed"]["x"] = rhs.deltaSpeed[0];
-            node["deltaSpeed"]["z"] = rhs.deltaSpeed[1];
             node["stanceTimeMin"] = rhs.stanceTimeMin;
             node["stanceTimeMax"] = rhs.stanceTimeMax;
             return node;
@@ -485,18 +482,12 @@ namespace YAML {
             rhs.walkKp = node["walkKp"].as<float>(3.0f);
             rhs.walkKd = node["walkKd"].as<float>(0.05f);
 
-            const float reachTh = node["reachThreshold"].as<float>(5.0f);
-            rhs.reachThresholdSQ = reachTh * reachTh;
-
             rhs.swingDutyCycle = node["swingDutyCycle"].as<float>(0.5f);
             rhs.minReplanTime = node["minReplanTime"].as<float>(0.02f);
             rhs.lowPassAlpha = node["lowPassAlpha"].as<float>(0.3f);
 
             rhs.horizontalPushGain = node["pushGain"]["horizontal"].as<float>(0.02f);
             rhs.verticalPushGain = node["pushGain"]["vertical"].as<float>(0.02f);
-
-            rhs.deltaSpeed = Eigen::Vector2f(node["deltaSpeed"]["x"].as<float>(0.0f),
-                                             node["deltaSpeed"]["z"].as<float>(1.0f));
 
             rhs.stanceTimeMin = node["stanceTimeMin"].as<float>(0.05f);
             rhs.stanceTimeMax = node["stanceTimeMax"].as<float>(1.0f);

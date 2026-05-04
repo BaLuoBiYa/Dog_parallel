@@ -51,15 +51,13 @@ namespace Dog8Dof {
         struct parameters_t {
             float walkKp = 3.0f;
             float walkKd = 0.05f;
-            float reachThresholdSQ = 25.0f; // 落地判定阈值² (mm²)
-            float swingDutyCycle = 0.5f;    // 摆动相占空比
-            float minReplanTime = 0.02f;    // 最小重规划时间阈值 (s)，如 20ms
-            float lowPassAlpha = 0.3f;      // 落脚点低通滤波系数
+            float swingDutyCycle = 0.5f; // 摆动相占空比
+            float minReplanTime = 0.02f; // 最小重规划时间阈值 (s)，如 20ms
+            float lowPassAlpha = 0.3f;   // 落脚点低通滤波系数
             float horizontalPushGain = 0.02f; // Raibert 落脚点水平增益
             float verticalPushGain = 0.02f;   // Raibert 落脚点垂直增益（预留）
-            Eigen::Vector2f deltaSpeed = {0.0f, 1.0f}; // 速度增量 (x,z)
-            float stanceTimeMin = 0.05f;               // 最小支撑时间 (s)
-            float stanceTimeMax = 1.0f;                // 最大支撑时间 (s)
+            float stanceTimeMin = 0.05f;      // 最小支撑时间 (s)
+            float stanceTimeMax = 1.0f;       // 最大支撑时间 (s)
         };
 
         friend class StanceTrajectory;

@@ -46,11 +46,11 @@ namespace Dog8Dof {
                                                  const rclcpp::Duration &period) override;
 
       private:
-        enum class ControlMode { STAND, WALK };
+        enum class ControlMode { STAND, WALK, JUMP };
 
         // ---- 参数 ----
         std::string robotName_;
-        std::string standProfile_, walkProfile_;
+        std::string standProfile_, walkProfile_, jumpProfile_;
         float updateDuration_;
         float idleTipX_, idleTipZ_;
         std::string commandTopic_;

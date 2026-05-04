@@ -63,14 +63,14 @@ int main(int argc, char **argv) {
     Body currentTip{};
     currentTip.pos.setZero();
     currentTip.linerVel.setZero();
-    currentTip.pos[0] = 50.0f;  // 前向偏移 50mm
+    currentTip.pos[0] = 0.0f;   // 前向偏移 50mm
     currentTip.pos[2] = 270.0f; // 站立高度
 
     // ---- 初始步态参数 ----
     const float baseHeight = 270.0f;
     float stepLength = 50.0f; // 当前步长 (mm)
     float stepHeight = 30.0f; // 步高 (mm)
-    float totalTime = 0.5f;   // 单周期总时间 (s)
+    float totalTime = 5.0f;   // 单周期总时间 (s)
     float phaseOffset = 0.0f;
 
     // 测试计划：在不同时间点在线修改步态参数
@@ -79,14 +79,21 @@ int main(int argc, char **argv) {
         float newStepLength;
         float newTotalTime;
     };
+    // const std::vector<ParamChange> changes = {
+    //     {0.00, 50.0f, 0.5f},  // 前进 50mm/周期
+    //     {1.40, 100.0f, 0.5f}, // 加速（大步长）
+    //     {1.50, 30.0f, 0.4f},  // 小步幅 + 加快步频
+    //     {3.75, 0.0f, 0.5f},   // 原地踏步（零步长）
+    //     {4.30, -30.0f, 0.5f}, // 后退
+    //     {5.15, 0.0f, 0.5f},   // 恢复原地踏步
+    // };
+
     const std::vector<ParamChange> changes = {
-        {0.00, 50.0f, 0.5f},  // 前进 50mm/周期
-        {1.40, 100.0f, 0.5f}, // 加速（大步长）
-        {1.50, 30.0f, 0.4f},  // 小步幅 + 加快步频
-        {3.75, 0.0f, 0.5f},   // 原地踏步（零步长）
-        {4.30, -30.0f, 0.5f}, // 后退
-        {5.15, 0.0f, 0.5f},   // 恢复原地踏步
-    };
+        {0.00, 50.0f, 5.0f},
+        {1.40, 100.0f, 5.0f},
+        {1.50, 30.0f, 5.0},
+        {3.75, 0.0f, 5.0f},
+    }; // 同一周期内修改步长和周期时间，验证 Raibert 公式的在线重规划能力
 
     // 初始化第一个参数段
     if (!traj.setTarget(stepLength, stepHeight, baseHeight, totalTime, phaseOffset)) {

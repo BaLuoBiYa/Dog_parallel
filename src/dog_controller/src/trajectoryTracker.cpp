@@ -15,6 +15,7 @@ namespace Dog8Dof {
         robotName_ = auto_declare<std::string>("robotName", "dog");
         standProfile_ = auto_declare<std::string>("standProfile", "");
         walkProfile_ = auto_declare<std::string>("walkProfile", "");
+        jumpProfile_ = auto_declare<std::string>("jumpProfile", "");
         updateDuration_ = 1.0f / static_cast<float>(this->get_update_rate());
         idleTipX_ = auto_declare<float>("idleTipX", 0.0f);
         idleTipZ_ = auto_declare<float>("idleTipZ", 180.0f);
@@ -36,14 +37,14 @@ namespace Dog8Dof {
         const auto period = rclcpp::Duration::from_seconds(updateDuration_);
 
         try {
-            LF_ =
-                std::make_unique<GaitManager>(clock, period, walkProfile_, standProfile_);
-            LR_ =
-                std::make_unique<GaitManager>(clock, period, walkProfile_, standProfile_);
-            RF_ =
-                std::make_unique<GaitManager>(clock, period, walkProfile_, standProfile_);
-            RR_ =
-                std::make_unique<GaitManager>(clock, period, walkProfile_, standProfile_);
+            LF_ = std::make_unique<GaitManager>(
+                clock, period, walkProfile_, standProfile_, jumpProfile_);
+            LR_ = std::make_unique<GaitManager>(
+                clock, period, walkProfile_, standProfile_, jumpProfile_);
+            RF_ = std::make_unique<GaitManager>(
+                clock, period, walkProfile_, standProfile_, jumpProfile_);
+            RR_ = std::make_unique<GaitManager>(
+                clock, period, walkProfile_, standProfile_, jumpProfile_);
         } catch (const std::exception &e) {
             RCLCPP_ERROR(this->get_node()->get_logger(),
                          "TrajectoryTracker configure failed: %s",
@@ -198,6 +199,15 @@ namespace Dog8Dof {
             RR_->setWalkGait(
                 msg.par1[3], msg.par2[3], msg.par3[3], msg.par4[3], kWalkPhaseOffset[3]);
             currentMode_ = ControlMode::WALK;
+            break;
+        }
+        case TC::JUMP: {
+            // par1[i] = jumpLength, par2[i] = jumpHeight
+            LF_->setJumpGait(msg.par1[0], msg.par2[0]);
+            LR_->setJumpGait(msg.par1[1], msg.par2[1]);
+            RF_->setJumpGait(msg.par1[2], msg.par2[2]);
+            RR_->setJumpGait(msg.par1[3], msg.par2[3]);
+            currentMode_ = ControlMode::JUMP;
             break;
         }
         default:

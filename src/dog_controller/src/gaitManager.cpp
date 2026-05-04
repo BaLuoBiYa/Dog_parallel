@@ -14,12 +14,14 @@ namespace Dog8Dof {
                              rclcpp::Duration period,
                              std::string walkConfig,
                              std::string standConfig,
+                             std::string jumpConfig,
                              float upperLength,
                              float lowerLength,
                              float tipLength)
         : clock_(clock), leg_(upperLength, lowerLength, tipLength) {
         walkTrajectory_ = std::make_shared<WalkTrajectory>(walkConfig, period);
         standTrajectory_ = std::make_shared<StandTrajectory>(standConfig, period);
+        jumpTrajectory_ = std::make_shared<JumpTrajectory>(jumpConfig, period);
     }
 
     // =========================================================================
@@ -66,6 +68,23 @@ namespace Dog8Dof {
                     static_cast<double>(stepLength),
                     static_cast<double>(stepHeight),
                     static_cast<double>(totalTime));
+        return true;
+    }
+
+    // =========================================================================
+    //  setJumpGait() — 切换到跳跃步态
+    // =========================================================================
+    bool GaitManager::setJumpGait(float jumpLength, float jumpHeight) {
+        if (!jumpTrajectory_->setTarget(jumpLength, jumpHeight)) {
+            throw std::invalid_argument(
+                "JumpTrajectory::setTarget failed (invalid jump parameters)");
+        }
+        currentTrajectory_ = jumpTrajectory_;
+        jumpTrajectory_->generate(currentTip_, clock_->now());
+        RCLCPP_INFO(logger_,
+                    "Jump gait set: length=%.0f height=%.0f",
+                    static_cast<double>(jumpLength),
+                    static_cast<double>(jumpHeight));
         return true;
     }
 
@@ -125,27 +144,31 @@ namespace Dog8Dof {
             return false;
         }
 
-        // 5. Walk 步态自循环：当前周期结束时自动衔接下一周期
+        // 5. Walk 自循环 / Jump 完成后回落 Stand
         if (currentTrajectory_ == walkTrajectory_ && walkTrajectory_->finished()) {
-            // 以当前足端真实位姿为起点，续接下一 SWING 周期
             walkTrajectory_->generate(currentTip_, clock_->now(), WalkTrajectory::SWING);
+        } else if (currentTrajectory_ == jumpTrajectory_ &&
+                   jumpTrajectory_->getPhase() == JumpTrajectory::FINISHED) {
+            // 跳跃完成后自动切回站立（以当前足端位置作为站立目标）
+            standTrajectory_->setTarget(currentTip_.pos[0], currentTip_.pos[2]);
+            standTrajectory_->generate(currentTip_, clock_->now());
+            currentTrajectory_ = standTrajectory_;
+            RCLCPP_INFO(logger_, "Jump finished, fallback to stand");
         }
 
         return true;
     }
 
     // =========================================================================
-    //  isFinished() — Stand 到达目标则完成，Walk 永不完成
+    //  isFinished() — Stand 到达 HOLD 则完成，Walk 永不完成，Jump 完成即 true
     // =========================================================================
     bool GaitManager::isFinished() const {
         if (!currentTrajectory_)
             return true;
-
-        // Walk 轨迹内部自循环，对外永远不 finished
         if (currentTrajectory_ == walkTrajectory_)
             return false;
-
-        // Stand 到达 HOLD 阶段就算完成
+        if (currentTrajectory_ == jumpTrajectory_)
+            return jumpTrajectory_->getPhase() == JumpTrajectory::FINISHED;
         return standTrajectory_->isHolding();
     }
 
