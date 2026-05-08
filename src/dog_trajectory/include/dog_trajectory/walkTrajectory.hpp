@@ -71,6 +71,7 @@ namespace Dog8Dof {
 
         TrajectoryPoint target_;
         rclcpp::Time lastUpdateTime_;
+        rclcpp::Time gaitEpoch_; ///< 步态纪元时刻，用于锁定全局相位
         float vDes_ = 0.0f;     ///< 当前期望前进速度 (mm/s)
         float lastTipX_ = 0.0f; ///< 上一周期足端 X（用于速度估计）
 

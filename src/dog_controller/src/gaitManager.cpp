@@ -52,9 +52,15 @@ namespace Dog8Dof {
             throw std::invalid_argument(
                 "WalkTrajectory::setTarget failed (invalid walk parameters)");
         }
+
+        const bool isNewMode = (currentTrajectory_ != walkTrajectory_);
         currentTrajectory_ = walkTrajectory_;
 
-        walkTrajectory_->generate(currentTip_, clock_->now());
+        // generate() 仅在首次切换到 WALK 模式时调用，避免高频重置轨迹导致抖动
+        if (isNewMode) {
+            walkTrajectory_->generate(currentTip_, clock_->now());
+        }
+
         RCLCPP_INFO(logger_,
                     "Walk gait set: stepLen=%.0f stepH=%.0f cycleT=%.3f",
                     static_cast<double>(stepLength),

@@ -73,6 +73,7 @@ namespace Dog8Dof {
                                              const rclcpp::Time now) {
         finished_ = false;
         lastUpdateTime_ = now;
+        gaitEpoch_ = now; // 锁定全局相位纪元
         lastTipX_ = currentTip.pos[0];
 
         // 以当前足端位置作为摆动相起点，初始化摆动相
@@ -175,6 +176,48 @@ namespace Dog8Dof {
         float zDes = target_.pos[2];
         float vxDes = 0.0f;
         float vzDes = 0.0f;
+
+        // ---- 全局相位锁：基于绝对时间的确定性相位 ----
+        // 所有腿接收相同的 currentTime，确保相位永不漂移
+        const float totalPeriod = swingTime_ + stanceTime_;
+        if (totalPeriod > 0.0f) {
+            const double elapsed = (currentTime - gaitEpoch_).seconds();
+            const double globalPhase =
+                std::fmod(std::max(0.0, elapsed) / static_cast<double>(totalPeriod) +
+                              static_cast<double>(phaseOffset_),
+                          1.0);
+            const float swingDuty = parameters_.swingDutyCycle;
+            const GaitPhase clockPhase =
+                (globalPhase < static_cast<double>(swingDuty)) ? SWING : STANCE;
+
+            // 全局时钟认为应切换相位时，强制切换
+            if (clockPhase != gaitPhase_) {
+                if (clockPhase == STANCE) {
+                    // 摆动→支撑：立即锁定落脚点并初始化支撑相
+                    stance_.init(swing_.getTargetX(),
+                                 swing_.getZTarget(),
+                                 stanceTime_,
+                                 parameters_.stanceTimeMin,
+                                 parameters_.stanceTimeMax);
+                } else {
+                    // 支撑→摆动：从当前足端状态出发
+                    const float zs = currentTip ? currentTip->pos[2] : zDes;
+                    const float xs = currentTip ? currentTip->pos[0] : xDes;
+                    const float vxs = currentTip ? currentTip->linerVel[0] : 0.0f;
+                    swing_.init(zs,
+                                baseHeight_,
+                                stepHeight_,
+                                swingTime_,
+                                parameters_.lowPassAlpha,
+                                parameters_.minReplanTime,
+                                xs,
+                                vxs,
+                                0.0f,
+                                stepLength_);
+                }
+                gaitPhase_ = clockPhase;
+            }
+        }
 
         switch (gaitPhase_) {
         // ---- 摆动相 ----
