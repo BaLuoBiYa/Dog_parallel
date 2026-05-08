@@ -1,6 +1,5 @@
 #pragma once
 
-#include "dog_tools/quinticPolynomial.hpp"
 #include "dog_trajectory/base.hpp"
 #include <Eigen/Dense>
 

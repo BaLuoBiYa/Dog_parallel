@@ -70,8 +70,7 @@ namespace Dog8Dof {
     }
 
     TrajectoryPoint WalkTrajectory::generate(const Body &currentTip,
-                                             const rclcpp::Time now,
-                                             const GaitPhase initGait) {
+                                             const rclcpp::Time now) {
         finished_ = false;
         lastUpdateTime_ = now;
         lastTipX_ = currentTip.pos[0];
@@ -98,11 +97,17 @@ namespace Dog8Dof {
         const float swingDuty = parameters_.swingDutyCycle;
         const float phase = std::fmod(phaseOffset_, 1.0f);
 
-        if (initGait == SWING) {
+        // 根据 phaseOffset 自动推导初始步态，保证相位一致
+        //   phase <  swingDuty → 从 SWING 开始（先摆后撑）
+        //   phase >= swingDuty → 从 STANCE 开始（先撑后摆）
+        const GaitPhase effectiveInitGait = (phase < swingDuty) ? SWING : STANCE;
+
+        if (effectiveInitGait == SWING) {
             // SWING 起步：按 phase 比例跳过已过的摆动时间
             //   skipFraction = phase / swingDuty, clamp to [0,1]
             const float skipFraction =
-                (swingDuty > 0.0f) ? std::min(phase / swingDuty, 1.0f) : 0.0f;
+                (swingDuty > 0.0f) ? std::max(0.0f, std::min(phase / swingDuty, 1.0f))
+                                   : 0.0f;
             const float effectiveSwingT =
                 std::max(swingTime_ * (1.0f - skipFraction), parameters_.minReplanTime);
 
@@ -114,13 +119,15 @@ namespace Dog8Dof {
                         parameters_.minReplanTime,
                         xStart,
                         vxStart,
-                        axStart);
+                        axStart,
+                        stepLength_);
         } else {
             // STANCE 起步：按 (phase - swingDuty) / stanceDuty 比例跳过已过的支撑时间
             const float stanceDuty = 1.0f - swingDuty;
             const float stancePhase =
-                (stanceDuty > 0.0f) ? std::min((phase - swingDuty) / stanceDuty, 1.0f)
-                                    : 0.0f;
+                (stanceDuty > 0.0f)
+                    ? std::max(0.0f, std::min((phase - swingDuty) / stanceDuty, 1.0f))
+                    : 0.0f;
             const float effectiveStanceT = stanceTime_ * (1.0f - stancePhase);
 
             stance_.init(xStart,
@@ -129,7 +136,7 @@ namespace Dog8Dof {
                          parameters_.stanceTimeMin,
                          parameters_.stanceTimeMax);
         }
-        gaitPhase_ = initGait;
+        gaitPhase_ = effectiveInitGait;
 
         // 返回初始点
         target_.pos[0] = xStart;
@@ -180,7 +187,8 @@ namespace Dog8Dof {
                           xDes,
                           zDes,
                           vxDes,
-                          vzDes);
+                          vzDes,
+                          stepLength_);
 
             if (swing_.isLanded()) {
                 // 摆动→支撑 切换
@@ -195,7 +203,11 @@ namespace Dog8Dof {
 
         // ---- 支撑相 ----
         case STANCE: {
-            stance_.update(dt, vDes_, currentTip, xDes, zDes);
+            // 使用支撑相专用机体速度，保证支撑期间机体移动完整步长，
+            // 使足端在机体系下从 +stepLength/2 移动到 -stepLength/2
+            const float stanceBodyVel =
+                (stanceTime_ > 0.0f) ? (stepLength_ / stanceTime_) : vDes_;
+            stance_.update(dt, stanceBodyVel, currentTip, xDes, zDes);
             vxDes = 0.0f;
             vzDes = 0.0f;
 
@@ -214,7 +226,8 @@ namespace Dog8Dof {
                             parameters_.minReplanTime,
                             xStart,
                             vxStart,
-                            axStart);
+                            axStart,
+                            stepLength_);
 
                 gaitPhase_ = SWING;
 
@@ -227,7 +240,8 @@ namespace Dog8Dof {
                               xDes,
                               zDes,
                               vxDes,
-                              vzDes);
+                              vzDes,
+                              stepLength_);
             }
         } break;
         }
@@ -259,12 +273,14 @@ namespace Dog8Dof {
                                                float minReplan,
                                                float xStart,
                                                float vxStart,
-                                               float axStart) {
+                                               float axStart,
+                                               float stepLength) {
         H_ = stepH;
         T_swing_nominal_ = swingT;
         T_min_ = minReplan;
         alpha_ = alpha;
         t_elapsed_ = 0.0f;
+        step_length_ = stepLength;
 
         z_start_ = zStart;
         z_target_ = zTarget;
@@ -273,7 +289,7 @@ namespace Dog8Dof {
 
         // 初始 X 系数：从起点到初始目标（Raibert 在 update 中第一次计算前，
         // 先用期望步长的一半作为初始落脚点）
-        p_target_x_ = xStart + 0.0f; // 首次滤波由 update 填充
+        p_target_x_ = xStart; // 首次滤波由 update 填充
 
         // 初始多项式：匀速延伸至当前 p_target_x_（或保持原速）
         // 为安全起见，构建一个初始的常速/零加速多项式
@@ -292,7 +308,8 @@ namespace Dog8Dof {
                                                  float &xDes,
                                                  float &zDes,
                                                  float &vxDes,
-                                                 float &vzDes) {
+                                                 float &vzDes,
+                                                 float stepLength) {
         constexpr float eps = 1e-6f;
 
         // 1. 更新时间
@@ -314,18 +331,11 @@ namespace Dog8Dof {
             if (T_rem < T_min_) {
                 foothold_locked_ = true; // 接近落地，锁定落脚点
             } else {
-                // Raibert 公式：p_raw = v_des * T_stance/2 + k*(v_des - v_act)
-                //
-                // 注意：此处 T_stance 是下一支撑相时间，简化为当前名义支撑时间。
-                // 在支撑相中可通过步频调整更新此值。
-                const float T_stance =
-                    T_swing_nominal_ * (1.0f / 0.5f - 1.0f); // duty=0.5 → T_st=T_sw
-                const float p_raw_x = vDes * T_stance * 0.5f + pushGain * (vDes - vAct);
+                // Raibert 公式：p_raw = stepLength/2 + k*(v_des - v_act)
+                const float p_raw_x = stepLength * 0.5f + pushGain * (vDes - vAct);
 
                 // 一阶低通滤波
-                if (alpha_ > eps) {
-                    p_target_x_ += alpha_ * (p_raw_x - p_target_x_);
-                }
+                p_target_x_ += alpha_ * (p_raw_x - p_target_x_);
             }
         }
 
@@ -444,12 +454,12 @@ namespace Dog8Dof {
             return;
         }
 
-        // 条件 3：超过最小支撑时间且满足提前离地条件
-        //         （有传感器反馈时，检测实际足端与期望位置的跟踪误差是否过大）
-        if (t_stance_ > T_stance_min_ && currentTip) {
+        // 条件 3：超过最小支撑+静默期，且跟踪误差过大时提前离地
+        //  静默期(30ms)让 PD 控制器在落地瞬间有足够时间收敛，避免误触离地
+        if (t_stance_ > T_stance_min_ + early_lift_grace_s_ && currentTip) {
             const float dx = currentTip->pos[0] - xDes;
             const float dz = currentTip->pos[2] - zDes;
-            constexpr float earlyLiftErrorSQ = 100.0f; // 10mm 跟踪误差触发提前离地
+            constexpr float earlyLiftErrorSQ = 400.0f; // 20mm 跟踪误差触发提前离地
             if (dx * dx + dz * dz > earlyLiftErrorSQ) {
                 lifted_ = true;
                 return;

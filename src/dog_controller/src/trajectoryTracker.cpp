@@ -323,3 +323,7 @@ namespace Dog8Dof {
     }
 
 } // namespace Dog8Dof
+
+#include <pluginlib/class_list_macros.hpp>
+PLUGINLIB_EXPORT_CLASS(Dog8Dof::TrajectoryTracker,
+                       controller_interface::ControllerInterface)

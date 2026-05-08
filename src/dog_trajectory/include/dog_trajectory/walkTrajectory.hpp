@@ -28,9 +28,7 @@ namespace Dog8Dof {
                        float baseHeight,
                        float totalTime,
                        float phaseOffset = 0.0f);
-        TrajectoryPoint generate(const Body &currentTip,
-                                 const rclcpp::Time now,
-                                 const GaitPhase initGait);
+        TrajectoryPoint generate(const Body &currentTip, const rclcpp::Time now);
         bool reloadParameters() override;
 
         /**
@@ -101,6 +99,7 @@ namespace Dog8Dof {
              * @param xStart      起始 X 位置 (mm)
              * @param vxStart     起始 X 速度 (mm/s)
              * @param axStart     起始 X 加速度 (mm/s²)
+             * @param stepLength 期望步长 (mm)
              */
             void init(float zStart,
                       float zTarget,
@@ -110,7 +109,8 @@ namespace Dog8Dof {
                       float minReplan,
                       float xStart,
                       float vxStart,
-                      float axStart);
+                      float axStart,
+                      float stepLength);
 
             /**
              * @brief 每控制周期更新，在线重规划
@@ -123,6 +123,7 @@ namespace Dog8Dof {
              * @param[out] zDes   期望 Z 位置 (mm)
              * @param[out] vxDes  期望 X 速度 (mm/s)
              * @param[out] vzDes  期望 Z 速度 (mm/s)
+             * @param stepLength 期望步长 (mm)
              */
             void update(float dt,
                         float vDes,
@@ -132,7 +133,8 @@ namespace Dog8Dof {
                         float &xDes,
                         float &zDes,
                         float &vxDes,
-                        float &vzDes);
+                        float &vzDes,
+                        float stepLength);
 
             bool isLanded() const {
                 return landed_;
@@ -149,22 +151,21 @@ namespace Dog8Dof {
 
           private:
             // ---- 参数 ----
-            float H_;               ///< 步高 (mm)
-            float T_swing_nominal_; ///< 名义摆动时间 (s)
-            float T_min_;           ///< 最小重规划时间阈值 (s)
-            float alpha_;           ///< 落脚点低通滤波系数
-            float t_elapsed_;       ///< 已耗时 (s)
+            float H_;                  ///< 步高 (mm)
+            float T_swing_nominal_;    ///< 名义摆动时间 (s)
+            float T_min_;              ///< 最小重规划时间阈值 (s)
+            float alpha_;              ///< 落脚点低通滤波系数
+            float z_start_, z_target_; ///< 离地和目标落地 Z (mm)
+            float step_length_;        ///< 期望步长 (mm)
+            float t_elapsed_;          ///< 已耗时 (s)
 
             // ---- 状态 ----
             Eigen::Matrix<float, 6, 1> last_coeffs_x_; ///< 上一周期 X 轴五次多项式系数
             float p_target_x_; ///< 滤波后的目标落脚点 X (mm)
-            float z_start_;    ///< 离地时记录的 Z (mm)
-            float z_target_;   ///< 目标落地 Z (mm)
-
             bool landed_ = false;
             bool foothold_locked_ = false; ///< 剩余时间 < T_min 时锁定落脚点
 
-            /// Z 轴光滑弧线：phase ∈ [0,1]
+            /// Z 轨迹：phase ∈ [0,1]
             float smoothArcZ(float phase) const;
         };
 
@@ -184,11 +185,11 @@ namespace Dog8Dof {
 
             /**
              * @brief 初始化支撑相
-             * @param xLand    落地 X 位置 (mm, 机体坐标系)
-             * @param zLand    落地 Z 位置 (mm, 机体坐标系)
-             * @param stanceT  名义支撑时间 (s)
-             * @param tMin     最小支撑时间 (s)
-             * @param tMax     最大支撑时间 (s)
+             * @param xLand       落地 X 位置 (mm)
+             * @param zLand       落地 Z 位置 (mm)
+             * @param stanceT     名义支撑时间 (s)
+             * @param tMin        最小支撑时间 (s)
+             * @param tMax        最大支撑时间 (s)
              */
             void init(float xLand, float zLand, float stanceT, float tMin, float tMax);
 
@@ -216,12 +217,15 @@ namespace Dog8Dof {
             }
 
           private:
-            Eigen::Vector2f foot_pos_land_; ///< 落地瞬间的机体系足端坐标 (mm)
-            float body_disp_x_ = 0.0f; ///< 机体从落地起的累积前进位移 (mm)
-            float t_stance_ = 0.0f;    ///< 支撑已耗时 (s)
-            float T_stance_nominal_ = 0.5f; ///< 名义支撑时间 (s)
-            float T_stance_min_ = 0.05f;    ///< 最小支撑时间 (s)
-            float T_stance_max_ = 1.0f;     ///< 最大支撑时间 (s)
+            // 轨迹参数
+            float T_stance_nominal_;
+            float T_stance_min_, T_stance_max_;
+            Eigen::Vector2f foot_pos_land_; // 支撑相开始时的足端位置
+
+            // 状态
+            float t_stance_;
+            float body_disp_x_;                // 机体在支撑相期间的累积位移
+            float early_lift_grace_s_ = 0.03f; // 提前离地静默期 (s)，避免落地瞬间误触
             bool lifted_ = false;
         };
 

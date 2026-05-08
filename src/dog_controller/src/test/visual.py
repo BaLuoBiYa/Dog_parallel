@@ -19,7 +19,7 @@ from matplotlib.animation import FuncAnimation, PillowWriter
 import numpy as np
 
 # ====== 在这里修改 CSV 文件路径 ======
-CSV_PATH = "/tmp/jump_test.csv"
+CSV_PATH = "/tmp/walk_zero.csv"
 # ====================================
 
 JUMP_PHASE_NAMES = {0: "PUSH_OFF", 1: "FLIGHT", 2: "ABSORPTION", 3: "FINISHED"}

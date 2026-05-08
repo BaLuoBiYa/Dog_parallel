@@ -20,9 +20,8 @@ namespace Dog8Dof {
         const float bodyWidth = Const::BODY_WIDTH_LATERAL;
 
         const float stepHeight_ = 100.0f;
-        const float baisHeight_ = 270.0f;
+        const float baisHeight_ = 250.0f;
         const float stepDuration_ = 0.5f;
-        // 假设视觉控制阶段步频固定为该值
 
         float lastXLinearVelosity_ = 0.0f;
         float lastZAngularVelosity_ = 0.0f;

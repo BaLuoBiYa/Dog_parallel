@@ -1,4 +1,4 @@
-walkKp: 3.0
+walkKp: 1.0
 walkKd: 0.05
 swingDutyCycle: 0.5
 minReplanTime: 0.02
@@ -7,6 +7,6 @@ stanceTimeMin: 0.05
 stanceTimeMax: 1.0
 
 pushGain:
-  horizontal: 0.02
-  vertical: 0.02
+  horizontal: 0.0
+  vertical: 0.0
   

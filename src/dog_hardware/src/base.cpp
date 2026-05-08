@@ -115,37 +115,6 @@ namespace Dog8Dof {
             return hardware_interface::CallbackReturn::ERROR;
         }
 
-        // 设置 USB 串口 low_latency 标志，将 USB 事务延迟从 ~16ms 降低到 ~100µs
-        // 同时启用内核 RS485 模式，让内核自动管理 RTS 方向切换
-        // {
-        //     const int fd = ::open(portName_.c_str(), O_RDWR | O_NONBLOCK);
-        //     if (fd >= 0) {
-        //         struct serial_struct serinfo;
-        //         if (::ioctl(fd, TIOCGSERIAL, &serinfo) == 0) {
-        //             serinfo.flags |= ASYNC_LOW_LATENCY;
-        //             ::ioctl(fd, TIOCSSERIAL, &serinfo);
-        //         }
-
-        //         struct serial_rs485 rs485conf;
-        //         memset(&rs485conf, 0, sizeof(rs485conf));
-        //         rs485conf.flags = SER_RS485_ENABLED;
-        //         rs485conf.delay_rts_before_send = 0;
-        //         rs485conf.delay_rts_after_send = 0;
-        //         if (::ioctl(fd, TIOCSRS485, &rs485conf) < 0) {
-        //             RCLCPP_WARN(this->get_logger(),
-        //                         "RS485 mode not supported on %s, "
-        //                         "batch communication may fail",
-        //                         portName_.c_str());
-        //         }
-
-        //         ::close(fd);
-        //     } else {
-        //         RCLCPP_WARN(this->get_logger(),
-        //                     "Cannot open %s to configure low_latency/RS485",
-        //                     portName_.c_str());
-        //     }
-        // }
-        // 缩短超时：电机正常在 300~500µs 内响应，2ms 足够
         port_->resetSerial(16, 4000000, 2000);
         // 创建串口通信指针
 
@@ -162,6 +131,8 @@ namespace Dog8Dof {
             }
         }
         // 创建电机指针
+
+        maxRetry_ = 0;
 
         return hardware_interface::CallbackReturn::SUCCESS;
     }
@@ -218,7 +189,12 @@ namespace Dog8Dof {
                 RCLCPP_ERROR_STREAM(
                     get_logger(),
                     "Motor " << jointNames_[i] << " " << motor_[i].getError());
-                return hardware_interface::return_type::ERROR;
+                maxRetry_++;
+                if (maxRetry_ > 10) {
+                    return hardware_interface::return_type::ERROR;
+                } else {
+                    maxRetry_ = 0;
+                }
             }
         }
         return hardware_interface::return_type::OK;
@@ -229,29 +205,17 @@ namespace Dog8Dof {
         (void)time;
         (void)period;
 
-        // 预构建所有 MotorCmd / MotorData 对象
-        MotorCmd cmds[8];
-        MotorData datas[8];
         for (size_t i = 0; i < 8; ++i) {
-            cmds[i] = motor_[i].makeCmd(static_cast<float>(cmdTau_[i]),
-                                        static_cast<float>(cmdPos_[i]),
-                                        static_cast<float>(cmdVel_[i]),
-                                        static_cast<float>(cmdKp_[i]),
-                                        static_cast<float>(cmdKd_[i]));
-            datas[i].motorType = MotorType::GO_M8010_6;
-        }
+            const float pos = static_cast<float>(cmdPos_[i]);
+            const float vel = static_cast<float>(cmdVel_[i]);
+            const float tor = static_cast<float>(cmdTau_[i]);
+            const float kp = static_cast<float>(cmdKp_[i]);
+            const float kd = static_cast<float>(cmdKd_[i]);
 
-        // 逐电机 send/recv（RS485 半双工，无法流水线并行）
-        for (size_t i = 0; i < 8; ++i) {
-            if (!port_->sendRecv(&cmds[i], &datas[i])) {
-                RCLCPP_WARN_STREAM(get_logger(),
-                                   "Motor " << jointNames_[i] << " timeout");
+            if (!motor_[i].setHybrid(tor, pos, vel, kp, kd)) {
+                RCLCPP_ERROR_STREAM(get_logger(), "Time out on " << jointNames_[i]);
+                return hardware_interface::return_type::ERROR;
             }
-        }
-
-        // 将返回的状态数据写入各电机对象
-        for (size_t i = 0; i < 8; ++i) {
-            motor_[i].applyState(datas[i]);
         }
 
         return hardware_interface::return_type::OK;

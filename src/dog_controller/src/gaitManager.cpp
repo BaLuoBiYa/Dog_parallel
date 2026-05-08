@@ -54,15 +54,7 @@ namespace Dog8Dof {
         }
         currentTrajectory_ = walkTrajectory_;
 
-        // 根据相位偏移和占空比选择起步相位
-        //   phaseOffset < swingDuty  → SWING 起步（跳过已过的部分摆动）
-        //   phaseOffset >= swingDuty → STANCE 起步（跳过已过的部分支撑）
-        const float swingDuty = walkTrajectory_->swingDuty();
-        const float phase = std::fmod(phaseOffset, 1.0f);
-        const WalkTrajectory::GaitPhase initGait =
-            (phase < swingDuty) ? WalkTrajectory::SWING : WalkTrajectory::STANCE;
-
-        walkTrajectory_->generate(currentTip_, clock_->now(), initGait);
+        walkTrajectory_->generate(currentTip_, clock_->now());
         RCLCPP_INFO(logger_,
                     "Walk gait set: stepLen=%.0f stepH=%.0f cycleT=%.3f",
                     static_cast<double>(stepLength),
@@ -126,8 +118,8 @@ namespace Dog8Dof {
             return false;
         }
 
-        // 2. 在线重规划：传入传感器反馈实现闭环
-        targetPoint_ = currentTrajectory_->get(clock_->now(), &currentTip_);
+        // 2. 在线重规划：目前使用开环模式
+        targetPoint_ = currentTrajectory_->get(clock_->now(), nullptr);
 
         // 3. 逆运动学：期望足端 → 期望关节角度
         if (!leg_.setTip(targetPoint_.pos, targetPoint_.vel, targetPoint_.tau)) {
@@ -144,11 +136,9 @@ namespace Dog8Dof {
             return false;
         }
 
-        // 5. Walk 自循环 / Jump 完成后回落 Stand
-        if (currentTrajectory_ == walkTrajectory_ && walkTrajectory_->finished()) {
-            walkTrajectory_->generate(currentTip_, clock_->now(), WalkTrajectory::SWING);
-        } else if (currentTrajectory_ == jumpTrajectory_ &&
-                   jumpTrajectory_->getPhase() == JumpTrajectory::FINISHED) {
+        // Jump 完成后回落 Stand
+        if (currentTrajectory_ == jumpTrajectory_ &&
+            jumpTrajectory_->getPhase() == JumpTrajectory::FINISHED) {
             // 跳跃完成后自动切回站立（以当前足端位置作为站立目标）
             standTrajectory_->setTarget(currentTip_.pos[0], currentTip_.pos[2]);
             standTrajectory_->generate(currentTip_, clock_->now());
