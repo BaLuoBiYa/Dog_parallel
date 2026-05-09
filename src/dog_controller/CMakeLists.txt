@@ -27,6 +27,7 @@ add_library(${PROJECT_NAME} SHARED
   src/trajectoryTracker.cpp
   src/trajectoryTrackerSingle.cpp
   src/gaitManager.cpp
+  src/gaitTwistConverter.cpp
 )
 ament_export_libraries(${PROJECT_NAME})
 ament_target_dependencies(${PROJECT_NAME} 

@@ -3,8 +3,9 @@
 #include <rclcpp/rclcpp.hpp>
 
 #include "dog_controller/gaitManager.hpp"
+#include "dog_controller/gaitTwistConverter.hpp"
 #include "dog_controller/threadSafeMessageBox.hpp"
-#include "dog_msg/msg/trajectory_command.hpp"
+#include "dog_msg/msg/gait_twist.hpp"
 
 namespace Dog8Dof {
 
@@ -67,15 +68,16 @@ namespace Dog8Dof {
         std::array<JointCmdIndex, 2> cmdIdx_{};
 
         // ---- 命令处理 ----
-        ThreadSafeMessageBox<dog_msg::msg::TrajectoryCommand> commandBox_;
-        rclcpp::Subscription<dog_msg::msg::TrajectoryCommand>::SharedPtr commandSub_;
+        ThreadSafeMessageBox<dog_msg::msg::GaitTwist> commandBox_;
+        rclcpp::Subscription<dog_msg::msg::GaitTwist>::SharedPtr commandSub_;
+        GaitTwistConverter converter_;
         std::atomic_bool newCmd_{false};
         ControlMode currentMode_ = ControlMode::STAND;
 
         // ---- 私有方法 ----
         bool cacheInterfaceIndices();
         bool updateAllGaitManagers();
-        bool applyCommand(const dog_msg::msg::TrajectoryCommand &msg);
+        bool applyCommand(const dog_msg::msg::GaitTwist &msg);
         bool switchToStandMode();
         bool setJointCommands(size_t legIndex, const Motor &target);
         bool setAllJointCommands();

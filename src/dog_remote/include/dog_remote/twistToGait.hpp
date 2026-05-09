@@ -1,30 +1,36 @@
 #pragma once
+#include <atomic>
+#include <string>
+
 #include <geometry_msgs/msg/twist.hpp>
 #include <rclcpp/rclcpp.hpp>
 
-#include "dog_msg/msg/trajectory_command.hpp"
-#include "dog_tools/const.hpp"
+#include "dog_msg/msg/gait_twist.hpp"
 
 namespace Dog8Dof {
+    /**
+     * @brief Twist → GaitTwist 转换节点
+     *
+     * 订阅标准 geometry_msgs/Twist，注入默认步态参数，发布 dog_msg/GaitTwist。
+     * 步态模式通过终端命令手动切换（线程安全）。
+     */
     class TwistToGait : public rclcpp::Node {
       public:
         TwistToGait();
 
+        /** 终端切换步态："stand" / "walk" */
+        void switchGait(const std::string &mode);
+        void printStatus() const;
+
       private:
-        std::string topicName_;
-        rclcpp::Publisher<dog_msg::msg::TrajectoryCommand>::SharedPtr pub_;
         rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr sub_;
+        rclcpp::Publisher<dog_msg::msg::GaitTwist>::SharedPtr pub_;
 
-        // 机身长宽，固定数值
-        const float bodyLength = Const::BODY_LENGTH_LONGITUDINAL;
-        const float bodyWidth = Const::BODY_WIDTH_LATERAL;
+        std::atomic<uint8_t> currentGait_{dog_msg::msg::GaitTwist::STAND};
 
-        const float stepHeight_ = 100.0f;
-        const float baisHeight_ = 250.0f;
-        const float stepDuration_ = 0.5f;
-
-        float lastXLinearVelosity_ = 0.0f;
-        float lastZAngularVelosity_ = 0.0f;
+        float stepHeight_ = 100.0f;
+        float baseHeight_ = 250.0f;
+        float stepDuration_ = 0.5f;
 
         void twistCallback(const geometry_msgs::msg::Twist::SharedPtr msg);
     };

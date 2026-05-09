@@ -1,25 +1,8 @@
-port: /dev/ttyUSB0
-
 topic:
   twist: /dog/twist
-  mode: /dog/mode
+  command: /dog/command
 
-channel:
-  move:
-    x: 1
-    y: 2
-  roll: 3
-  pitch: 4
-  height: 5
-  stepDuration: 6
-  gait: 7
-  slopeEnable: 8
-
-controlSetting:
-  maxLinerSpeed: 0.5
-  maxAngularSpeed: 1.0
-  maxHeight: 0.3
-  maxStepDuration: 0.5
-  maxRoll: 0.5
-  maxPitch: 0.5
-  expFactor: 0.5
+gaitSetting:
+  stepHeightFactor: 0.3
+  stepDuration: 0.5
+  baseHeight: 200.0

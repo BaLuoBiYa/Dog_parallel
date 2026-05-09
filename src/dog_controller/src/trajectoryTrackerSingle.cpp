@@ -47,15 +47,14 @@ namespace Dog8Dof {
             return controller_interface::CallbackReturn::ERROR;
         }
 
-        commandSub_ =
-            this->get_node()->create_subscription<dog_msg::msg::TrajectoryCommand>(
-                commandTopic_,
-                1,
-                [this](const dog_msg::msg::TrajectoryCommand::SharedPtr msg) {
-                    if (commandBox_.try_set(*msg)) {
-                        newCmd_ = true;
-                    }
-                });
+        converter_ = GaitTwistConverter();
+
+        commandSub_ = this->get_node()->create_subscription<dog_msg::msg::GaitTwist>(
+            commandTopic_, 1, [this](const dog_msg::msg::GaitTwist::SharedPtr msg) {
+                if (commandBox_.try_set(*msg)) {
+                    newCmd_ = true;
+                }
+            });
 
         return controller_interface::CallbackReturn::SUCCESS;
     }
@@ -167,29 +166,36 @@ namespace Dog8Dof {
     }
 
     // =========================================================================
-    //  applyCommand() — 解析并切换步态
+    //  applyCommand() — GaitTwist → GaitManager 转译（单腿版本）
     // =========================================================================
-    bool
-    TrajectoryTrackerSingle::applyCommand(const dog_msg::msg::TrajectoryCommand &msg) {
-        using TC = dog_msg::msg::TrajectoryCommand;
+    bool TrajectoryTrackerSingle::applyCommand(const dog_msg::msg::GaitTwist &msg) {
+        using GT = dog_msg::msg::GaitTwist;
 
+        GaitParameters params[4];
+        if (!converter_.convert(msg, params)) {
+            RCLCPP_WARN(this->get_node()->get_logger(),
+                        "GaitTwist conversion failed, falling back to stand");
+            return switchToStandMode();
+        }
+
+        // 单腿版本仅使用 params[0]（LF）
         switch (msg.gait) {
-        case TC::STAND: {
-            LF_->setStandGait(msg.par1[0], msg.par2[0]);
+        case GT::STAND: {
+            LF_->setStandGait(params[0].stepLength, params[0].stepHeight);
             currentMode_ = ControlMode::STAND;
             break;
         }
-        case TC::WALK: {
-            LF_->setWalkGait(msg.par1[0],
-                             msg.par2[0],
-                             msg.par3[0],
-                             msg.par4[0],
+        case GT::WALK: {
+            LF_->setWalkGait(params[0].stepLength,
+                             params[0].stepHeight,
+                             params[0].baseHeight,
+                             params[0].stepDuration,
                              0.0f); // 单腿无相位偏移
             currentMode_ = ControlMode::WALK;
             break;
         }
-        case TC::JUMP: {
-            LF_->setJumpGait(msg.par1[0], msg.par2[0]);
+        case GT::JUMP: {
+            LF_->setJumpGait(params[0].stepLength, params[0].stepHeight);
             currentMode_ = ControlMode::JUMP;
             break;
         }

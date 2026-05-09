@@ -67,14 +67,14 @@ ROS2 `ControllerInterface` 实现，管理四条腿的实时控制。
 
 **相位偏移配置**（对角小跑步态）：
 ```
-LF: phaseOffset=0.5  (STANCE 起步，对侧 RF 在 SWING)
-LR: phaseOffset=0.0  (SWING 起步，对侧 RR 在 STANCE)
-RF: phaseOffset=0.0  (SWING 起步)
-RR: phaseOffset=0.5  (STANCE 起步)
+LF: phaseOffset=0.5
+LR: phaseOffset=0.0
+RF: phaseOffset=0.0
+RR: phaseOffset=0.5
 ```
 
 ### dog_hardware — 硬件接口层
-提供 ROS2 `HardwareInterface`，将关节命令转为 RS485/CAN 电机指令。
+提供 ROS2 `HardwareInterface`，将关节命令转为 RS485 电机指令。
 
 
 ## 测试

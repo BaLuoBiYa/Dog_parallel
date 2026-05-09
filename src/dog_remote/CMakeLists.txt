@@ -24,7 +24,6 @@ add_library(${PROJECT_NAME} SHARED
     src/sbusReader.cpp
     src/sbusReader.cpp
     src/serialConfig.cpp
-    src/commandManager.cpp
 )
 ament_target_dependencies(${PROJECT_NAME}
   "rclcpp"
@@ -56,22 +55,10 @@ target_link_libraries(twistToGaitTester
     ${PROJECT_NAME}
 )
 
-add_executable(commandManager
-    src/commandManager.cpp)
-ament_target_dependencies(commandManager
-    rclcpp
-    std_srvs
-    dog_msg
-)
-target_link_libraries(commandManager
-    ${PROJECT_NAME}
-)
-
 install(
   TARGETS ${PROJECT_NAME}
     subsTester
     twistToGaitTester
-    commandManager
   DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )

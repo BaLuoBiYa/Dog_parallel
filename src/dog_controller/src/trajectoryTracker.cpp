@@ -52,15 +52,14 @@ namespace Dog8Dof {
             return controller_interface::CallbackReturn::ERROR;
         }
 
-        commandSub_ =
-            this->get_node()->create_subscription<dog_msg::msg::TrajectoryCommand>(
-                commandTopic_,
-                1,
-                [this](const dog_msg::msg::TrajectoryCommand::SharedPtr msg) {
-                    if (commandBox_.try_set(*msg)) {
-                        newCmd_ = true;
-                    }
-                });
+        converter_ = GaitTwistConverter();
+
+        commandSub_ = this->get_node()->create_subscription<dog_msg::msg::GaitTwist>(
+            commandTopic_, 1, [this](const dog_msg::msg::GaitTwist::SharedPtr msg) {
+                if (commandBox_.try_set(*msg)) {
+                    newCmd_ = true;
+                }
+            });
 
         return controller_interface::CallbackReturn::SUCCESS;
     }
@@ -175,38 +174,58 @@ namespace Dog8Dof {
     }
 
     // =========================================================================
-    //  applyCommand() — 解析并切换步态
+    //  applyCommand() — GaitTwist → GaitManager 转译
     // =========================================================================
-    bool TrajectoryTracker::applyCommand(const dog_msg::msg::TrajectoryCommand &msg) {
-        using TC = dog_msg::msg::TrajectoryCommand;
+    bool TrajectoryTracker::applyCommand(const dog_msg::msg::GaitTwist &msg) {
+        using GT = dog_msg::msg::GaitTwist;
+
+        GaitParameters params[4];
+        if (!converter_.convert(msg, params)) {
+            RCLCPP_WARN(this->get_node()->get_logger(),
+                        "GaitTwist conversion failed, falling back to stand");
+            return switchToStandMode();
+        }
 
         switch (msg.gait) {
-        case TC::STAND: {
-            LF_->setStandGait(msg.par1[0], msg.par2[0]);
-            LR_->setStandGait(msg.par1[1], msg.par2[1]);
-            RF_->setStandGait(msg.par1[2], msg.par2[2]);
-            RR_->setStandGait(msg.par1[3], msg.par2[3]);
+        case GT::STAND: {
+            LF_->setStandGait(params[0].stepLength, params[0].baseHeight);
+            LR_->setStandGait(params[1].stepLength, params[1].baseHeight);
+            RF_->setStandGait(params[2].stepLength, params[2].baseHeight);
+            RR_->setStandGait(params[3].stepLength, params[3].baseHeight);
             currentMode_ = ControlMode::STAND;
             break;
         }
-        case TC::WALK: {
-            LF_->setWalkGait(
-                msg.par1[0], msg.par2[0], msg.par3[0], msg.par4[0], kWalkPhaseOffset[0]);
-            LR_->setWalkGait(
-                msg.par1[1], msg.par2[1], msg.par3[1], msg.par4[1], kWalkPhaseOffset[1]);
-            RF_->setWalkGait(
-                msg.par1[2], msg.par2[2], msg.par3[2], msg.par4[2], kWalkPhaseOffset[2]);
-            RR_->setWalkGait(
-                msg.par1[3], msg.par2[3], msg.par3[3], msg.par4[3], kWalkPhaseOffset[3]);
+        case GT::WALK: {
+            LF_->setWalkGait(params[0].stepLength,
+                             params[0].stepHeight,
+                             params[0].baseHeight,
+                             params[0].stepDuration,
+                             kWalkPhaseOffset[0]);
+            LR_->setWalkGait(params[1].stepLength,
+                             params[1].stepHeight,
+                             params[1].baseHeight,
+                             params[1].stepDuration,
+                             kWalkPhaseOffset[1]);
+            RF_->setWalkGait(params[2].stepLength,
+                             params[2].stepHeight,
+                             params[2].baseHeight,
+                             params[2].stepDuration,
+                             kWalkPhaseOffset[2]);
+            RR_->setWalkGait(params[3].stepLength,
+                             params[3].stepHeight,
+                             params[3].baseHeight,
+                             params[3].stepDuration,
+                             kWalkPhaseOffset[3]);
             currentMode_ = ControlMode::WALK;
             break;
         }
-        case TC::JUMP: {
-            // par1[i] = jumpLength, par2[i] = jumpHeight
-            LF_->setJumpGait(msg.par1[0], msg.par2[0]);
-            LR_->setJumpGait(msg.par1[1], msg.par2[1]);
-            RF_->setJumpGait(msg.par1[2], msg.par2[2]);
-            RR_->setJumpGait(msg.par1[3], msg.par2[3]);
+        case GT::JUMP: {
+            RCLCPP_WARN(this->get_node()->get_logger(), "Jump not implemented, skip");
+            break; // 尚未实现跳跃步态，跳过
+            LF_->setJumpGait(params[0].stepLength, params[0].stepHeight);
+            LR_->setJumpGait(params[1].stepLength, params[1].stepHeight);
+            RF_->setJumpGait(params[2].stepLength, params[2].stepHeight);
+            RR_->setJumpGait(params[3].stepLength, params[3].stepHeight);
             currentMode_ = ControlMode::JUMP;
             break;
         }
