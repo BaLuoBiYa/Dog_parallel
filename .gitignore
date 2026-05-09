@@ -6,3 +6,4 @@ log/
 .vscode/
 *.csv
 model/
+target/
