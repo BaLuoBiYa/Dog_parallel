@@ -2,7 +2,11 @@
 删除slcan命令
 sudo killall slcand 2>/dev/null
 通过slcan设置can
-sudo slcand -o -c -s6 /dev/ttyUSB0 can1
+sudo slcand -o -c -s8 /dev/ttyACM0 can0
+开启指令
+sudo ip link set can0 up
+发送指令
+cansend can1 123#11223344
 
 RDK 板载can
 关闭can

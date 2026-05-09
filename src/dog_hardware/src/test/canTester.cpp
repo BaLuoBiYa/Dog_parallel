@@ -1,7 +1,7 @@
-#include "dog_remote/CanManager.hpp"
 #include <atomic>
 #include <chrono>
 #include <csignal>
+#include <dog_hardware/CanManager.hpp>
 #include <iomanip>
 #include <iostream>
 #include <thread>

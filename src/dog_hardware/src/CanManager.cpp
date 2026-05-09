@@ -1,5 +1,9 @@
-#include "dog_remote/CanManager.hpp"
+#include <dog_hardware/CanManager.hpp>
 
+/**
+ * @param interface_name 交互接口,如 "can0"
+ *
+ */
 CanManager::CanManager(const std::string &interface_name) {
     if (interface_name.size() > IFNAMSIZ) {
         throw std::invalid_argument("CAN interface name is too long!");
@@ -25,7 +29,10 @@ CanManager::CanManager(const std::string &interface_name) {
     addr.can_ifindex = ifr.ifr_ifindex;
     bind(sock, (struct sockaddr *)&addr, sizeof(addr));
 }
-
+/**
+ * @param out_frame 外部can帧
+ *
+ */
 bool CanManager::CanRead(struct can_frame &out_frame) {
     // 接收消息
     int nbytes = read(sock, &frame, sizeof(struct can_frame));

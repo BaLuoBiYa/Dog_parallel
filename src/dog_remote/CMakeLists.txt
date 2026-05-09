@@ -22,7 +22,6 @@ include_directories(include)
 
 add_library(${PROJECT_NAME} SHARED
     src/sbusReader.cpp
-    src/sbusReader.cpp
     src/serialConfig.cpp
     src/commandManager.cpp
 )
@@ -57,13 +56,6 @@ target_link_libraries(twistToGaitTester
     ${PROJECT_NAME}
 )
 
-add_executable(canTester src/test/canTester.cpp src/CanManager.cpp)
-
-
-target_link_libraries(canTester
-    ${PROJECT_NAME}
-)
-
 # add_executable(commandManager
 #     src/commandManager.cpp)
 # ament_target_dependencies(commandManager
@@ -79,12 +71,13 @@ install(
   TARGETS ${PROJECT_NAME}
     sbusTester
     twistToGaitTester
-    canTester
     # commandManager
   DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 
+ament_export_include_directories(include)
+ament_export_libraries(${PROJECT_NAME})
 ament_export_dependencies(
     rclcpp
     dog_tools
@@ -92,3 +85,8 @@ ament_export_dependencies(
 )
 
 ament_package()
+
+install(
+  DIRECTORY include/
+  DESTINATION include
+)
