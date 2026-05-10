@@ -1,0 +1,3 @@
+[submodule "remoteClient"]
+	path = remoteClient
+	url = https://github.com/BaLuoBiYa/remoteClient.git
