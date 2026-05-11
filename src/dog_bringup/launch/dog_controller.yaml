@@ -1,6 +1,6 @@
 controller_manager:
   ros__parameters:
-    update_rate: 200
+    update_rate: 150
 
     base_controller:
       type: dog8Dof/baseController

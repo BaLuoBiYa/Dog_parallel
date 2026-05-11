@@ -39,20 +39,7 @@ namespace Dog8Dof {
             const float linearVel_mm = msg.linear_x * 1000.0f;
             const float stepLength = linearVel_mm / msg.step_duration;
 
-            // 角速度 → 转弯步幅偏置（参考 twistToGait 正弦定理）
-            const float expectedAngle = msg.yaw_rate / msg.step_duration;
-            const float anotherAngle =
-                M_PI - std::atan2(bodyWidth_, bodyLength_) - std::abs(expectedAngle);
-
-            float bias = 0.0f;
-            if (anotherAngle > 0.0f) {
-                bias = std::sin(std::abs(expectedAngle)) *
-                       (std::sqrt(bodyLength_ * bodyLength_ + bodyWidth_ * bodyWidth_) /
-                        2.0f) /
-                       std::sin(anotherAngle);
-                if (expectedAngle < 0.0f)
-                    bias = -bias;
-            }
+            const float bias = bodyWidth_ * 0.5f * msg.linear_y / msg.step_duration;
 
             // 四腿步长（含转弯偏置）
             const std::array<float, 4> stepLengths = {

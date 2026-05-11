@@ -47,7 +47,6 @@ namespace Dog8Dof {
         // 从 Twist 提取速度
         out.linear_x = static_cast<float>(msg->linear.x);
         out.linear_y = static_cast<float>(msg->linear.y);
-        out.yaw_rate = static_cast<float>(msg->angular.z);
 
         // 注入默认步态参数
         out.step_height = stepHeight_;
@@ -57,9 +56,9 @@ namespace Dog8Dof {
         pub_->publish(out);
 
         RCLCPP_INFO_STREAM(this->get_logger(),
-                           "Twist->GaitTwist: gait="
-                               << static_cast<int>(out.gait) << " vx=" << out.linear_x
-                               << " vy=" << out.linear_y << " wz=" << out.yaw_rate);
+                           "Twist->GaitTwist: gait=" << static_cast<int>(out.gait)
+                                                     << " vx=" << out.linear_x
+                                                     << " vy=" << out.linear_y);
     }
 } // namespace Dog8Dof
 
