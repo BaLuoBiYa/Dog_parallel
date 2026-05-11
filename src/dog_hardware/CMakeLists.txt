@@ -24,6 +24,7 @@ find_package(rclcpp REQUIRED)
 find_package(hardware_interface REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(yaml-cpp REQUIRED)
+find_package(ament_index_cpp REQUIRED)
 find_package(std_msgs REQUIRED)
 
 include_directories(include)
@@ -55,6 +56,7 @@ add_executable(zeroSetter
 ament_target_dependencies(zeroSetter
     rclcpp
     yaml-cpp
+    ament_index_cpp
 )
 target_link_libraries(zeroSetter
     yaml-cpp::yaml-cpp
@@ -63,7 +65,7 @@ target_link_libraries(zeroSetter
 
 add_executable(motorTester
     src/motorTester.cpp)
-ament_target_dependencies(zeroSetter
+ament_target_dependencies(motorTester
     rclcpp
     std_msgs
 )

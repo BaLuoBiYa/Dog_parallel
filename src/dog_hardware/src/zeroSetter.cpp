@@ -1,4 +1,6 @@
 #include "dog_hardware/zeroSetter.hpp"
+
+#include <ament_index_cpp/get_package_share_directory.hpp>
 #include <fstream>
 
 namespace Dog8Dof {
@@ -278,8 +280,9 @@ namespace Dog8Dof {
 
 int main(int argc, char **argv) {
 
-    const std::string configPath = "/home/luo/Project/Horse/Dog_parallel/src/dog_bringup/"
-                                   "parameters/motors.yaml";
+    const std::string configPath =
+        ament_index_cpp::get_package_share_directory("dog_bringup") +
+        "/parameters/motors.yaml";
     rclcpp::init(argc, argv);
 
     bool interactive = isatty(fileno(stdin));

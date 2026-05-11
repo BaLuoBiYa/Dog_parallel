@@ -47,7 +47,16 @@ def generate_launch_description():
     controler_manager = Node(
         package="controller_manager",
         executable="ros2_control_node",
-        parameters=[manager_path],
+        parameters=[
+            manager_path,
+            {
+                "base_controller": {
+                    "standProfile": get_package_share_directory("dog_bringup") + "/parameters/stand.yaml",
+                    "walkProfile": get_package_share_directory("dog_bringup") + "/parameters/walk.yaml",
+                    "jumpProfile": get_package_share_directory("dog_bringup") + "/parameters/jumpLegacy.yaml",
+                }
+            }
+        ],
     )
     # 加载控制管理器
 
