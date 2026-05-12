@@ -8,9 +8,9 @@ controller_manager:
 base_controller:
   ros__parameters:
     robotName: dog
-    standProfile: ""
-    walkProfile: ""
-    jumpProfile: ""
+    standProfile: $(find dog_bringup)/parameters/stand.yaml
+    walkProfile: $(find dog_bringup)/parameters/walk.yaml
+    jumpProfile: $(find dog_bringup)/parameters/jumpLegacy.yaml
 
     idleTipX: 0.0
     idleTipZ: 250.0

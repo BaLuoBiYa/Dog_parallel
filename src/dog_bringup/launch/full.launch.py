@@ -1,5 +1,6 @@
 # 导入库
 import os
+import tempfile
 from launch import LaunchDescription
 from launch_ros.actions import Node
 from launch.actions import RegisterEventHandler
@@ -11,19 +12,29 @@ from launch.event_handlers import OnProcessExit,OnProcessStart
 from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
+    pkg_share = get_package_share_directory("dog_bringup")
     prefix = "xterm -hold -e"
 
     declare_xacro = DeclareLaunchArgument(
         name = 'xacro_path',
-        default_value=get_package_share_directory("dog_bringup") + "/resource/model/dog.xacro"
+        default_value=pkg_share + "/resource/model/dog.xacro"
     )
     xacro_path = LaunchConfiguration("xacro_path")
 
+    # 生成带正确路径的 controller 参数 YAML
+    manager_template = os.path.join(pkg_share, "launch", "dog_controller.yaml")
+    with open(manager_template, 'r') as f:
+        raw = f.read()
+    raw = raw.replace('$(find dog_bringup)', pkg_share)
+    tmp = tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False)
+    tmp.write(raw)
+    tmp.close()
+    manager_path = tmp.name
+
     declare_manager = DeclareLaunchArgument(
         name = 'manager_path',
-        default_value=get_package_share_directory("dog_bringup") + "/launch/dog_controller.yaml"
+        default_value=manager_path
     )
-    manager_path = LaunchConfiguration("manager_path")
 
     robot_description_content = ParameterValue(
                 Command(["xacro ", xacro_path]),
@@ -33,6 +44,13 @@ def generate_launch_description():
     zeroSetter_node = Node(
         package="dog_hardware",
         executable="zeroSetter",
+        output = "screen"
+    )
+
+
+    web_bridge_node = Node(
+        package="rosbridge_server",
+        executable="rosbridge_websocket",
         output = "screen"
     )
 
@@ -47,16 +65,7 @@ def generate_launch_description():
     controler_manager = Node(
         package="controller_manager",
         executable="ros2_control_node",
-        parameters=[
-            manager_path,
-            {
-                "base_controller": {
-                    "standProfile": get_package_share_directory("dog_bringup") + "/parameters/stand.yaml",
-                    "walkProfile": get_package_share_directory("dog_bringup") + "/parameters/walk.yaml",
-                    "jumpProfile": get_package_share_directory("dog_bringup") + "/parameters/jumpLegacy.yaml",
-                }
-            }
-        ],
+        parameters=[manager_path],
     )
     # 加载控制管理器
 
@@ -87,6 +96,7 @@ def generate_launch_description():
 
             statepub_node,
             zeroSetter_node,
+            web_bridge_node,
             event_handler0,
             event_handler1,
         ])
