@@ -188,10 +188,10 @@ namespace Dog8Dof {
 
         switch (msg.gait) {
         case GT::STAND: {
-            LF_->setStandGait(params[0].stepLength, params[0].baseHeight);
-            LR_->setStandGait(params[1].stepLength, params[1].baseHeight);
-            RF_->setStandGait(params[2].stepLength, params[2].baseHeight);
-            RR_->setStandGait(params[3].stepLength, params[3].baseHeight);
+            LF_->setStandGait(0.0f, params[0].baseHeight);
+            LR_->setStandGait(0.0f, params[1].baseHeight);
+            RF_->setStandGait(0.0f, params[2].baseHeight);
+            RR_->setStandGait(0.0f, params[3].baseHeight);
             currentMode_ = ControlMode::STAND;
             break;
         }

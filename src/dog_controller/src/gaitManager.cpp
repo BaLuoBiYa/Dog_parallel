@@ -94,14 +94,19 @@ namespace Dog8Dof {
             throw std::invalid_argument(
                 "StandTrajectory::setTarget failed (invalid tip coordinates)");
         }
+        const bool isNewMode = (currentTrajectory_ != standTrajectory_);
         currentTrajectory_ = standTrajectory_;
 
+        // generate() 仅在首次切换到 STAND 模式时调用，避免高频重置轨迹导致抖动
+        if (isNewMode) {
+            standTrajectory_->generate(currentTip_, clock_->now());
+            RCLCPP_INFO(logger_,
+                        "Stand gait set: target=(%.0f, %.0f)",
+                        static_cast<double>(tipX),
+                        static_cast<double>(tipZ));
+        }
         // 以当前足端为起点初始化过渡（TRANSITION）
-        standTrajectory_->generate(currentTip_, clock_->now());
-        RCLCPP_INFO(logger_,
-                    "Stand gait set: target=(%.0f, %.0f)",
-                    static_cast<double>(tipX),
-                    static_cast<double>(tipZ));
+
         return true;
     }
 
