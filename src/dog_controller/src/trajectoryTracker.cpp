@@ -188,12 +188,22 @@ namespace Dog8Dof {
 
         switch (msg.gait) {
         case GT::STAND: {
-            LF_->setStandGait(params[0].stepLength, params[0].baseHeight);
-            LR_->setStandGait(params[1].stepLength, params[1].baseHeight);
-            RF_->setStandGait(params[2].stepLength, params[2].baseHeight);
-            RR_->setStandGait(params[3].stepLength, params[3].baseHeight);
-            currentMode_ = ControlMode::STAND;
-            break;
+            bool finishLF = LF_->isFinished();
+            bool finishLR = LR_->isFinished();
+            bool finishRF = RF_->isFinished();
+            bool finishRR = RR_->isFinished();
+            bool allFinished = finishLF && finishLR && finishRF && finishRR;
+            if (currentMode_ == ControlMode::STAND && allFinished) {
+                LF_->setStandGait(0.0f, params[0].baseHeight);
+                LR_->setStandGait(0.0f, params[1].baseHeight);
+                RF_->setStandGait(0.0f, params[2].baseHeight);
+                RR_->setStandGait(0.0f, params[3].baseHeight);
+                currentMode_ = ControlMode::STAND;
+                break;
+            } else {
+                break;
+            }
+            // 仅在当前已是站立模式且所有腿都完成当前动作时，才更新站立步态参数，否则保持现有步态继续执行（避免频繁切换导致不稳定）
         }
         case GT::WALK: {
             LF_->setWalkGait(params[0].stepLength,
