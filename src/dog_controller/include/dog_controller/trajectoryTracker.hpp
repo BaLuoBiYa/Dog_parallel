@@ -1,5 +1,6 @@
 #pragma once
 #include <controller_interface/controller_interface.hpp>
+#include <cstddef>
 #include <rclcpp/rclcpp.hpp>
 
 #include "dog_controller/gaitManager.hpp"
@@ -76,6 +77,7 @@ namespace Dog8Dof {
             size_t pos;
             size_t vel;
             size_t eff;
+            size_t tmp;
         };
         struct JointCmdIndex {
             size_t pos;
@@ -113,6 +115,7 @@ namespace Dog8Dof {
         float getPos(size_t i);
         float getVel(size_t i);
         float getTau(size_t i);
+        float getTemp(size_t i);
     };
 
 } // namespace Dog8Dof

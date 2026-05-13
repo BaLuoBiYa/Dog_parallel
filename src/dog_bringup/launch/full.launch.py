@@ -89,6 +89,13 @@ def generate_launch_description():
             on_start=[controler_spawner]
         )
     )
+
+    event_handler2 = RegisterEventHandler(
+        event_handler=OnProcessExit(
+            target_action=controler_spawner,
+            on_exit=[web_bridge_node]
+        )
+    )
     
     ld = LaunchDescription([
             declare_xacro,
@@ -96,9 +103,9 @@ def generate_launch_description():
 
             statepub_node,
             zeroSetter_node,
-            web_bridge_node,
             event_handler0,
             event_handler1,
+            event_handler2,
         ])
     
     return ld

@@ -7,6 +7,7 @@
 #include <linux/serial.h>
 #include <memory>
 #include <rclcpp/logging.hpp>
+#include <string>
 #include <sys/ioctl.h>
 #include <unistd.h>
 #include <yaml-cpp/yaml.h>
@@ -79,6 +80,7 @@ namespace Dog8Dof {
                 jointNames_[i], hardware_interface::HW_IF_VELOCITY, &stVel_[i]);
             state_interfaces.emplace_back(
                 jointNames_[i], hardware_interface::HW_IF_EFFORT, &stTau_[i]);
+            state_interfaces.emplace_back(jointNames_[i], "temperature", &stTemp_[i]);
         }
 
         return state_interfaces;
@@ -132,8 +134,8 @@ namespace Dog8Dof {
         }
         // 创建电机指针
 
-        // 电机初始化完成后，切换到 2ms 超时供 write() 热路径使用
-        port_->resetSerial(16, 4000000, 2000, BlockYN::YES);
+        // 电机初始化完成后，切换到 0.2ms 超时供 write() 热路径使用
+        port_->resetSerial(16, 4000000, 200, BlockYN::YES);
 
         maxRetry_ = 0;
 
@@ -188,11 +190,41 @@ namespace Dog8Dof {
             stPos_[i] = static_cast<double>(motor_[i].getPos());
             stVel_[i] = static_cast<double>(motor_[i].getVel());
             stTau_[i] = static_cast<double>(motor_[i].getTor());
+            stTemp_[i] = static_cast<double>(motor_[i].getTemp());
 
-            if (motor_[i].getError() != "OK") {
-                RCLCPP_ERROR_STREAM(
-                    get_logger(),
-                    "Motor " << jointNames_[i] << " " << motor_[i].getError());
+            goM8010Interface::ErrorCode err = motor_[i].getError();
+            if (err == goM8010Interface::ErrorCode::OK) {
+                continue;
+            } else {
+                std::string errStr;
+                switch (err) {
+                case goM8010Interface::ErrorCode::OK:
+                    errStr = "OK";
+                    break;
+                case goM8010Interface::ErrorCode::OVER_HEAT:
+                    errStr = "Over Heat";
+                    break;
+                case goM8010Interface::ErrorCode::OVER_CURRENT:
+                    errStr = "Over Current";
+                    break;
+                case goM8010Interface::ErrorCode::OVER_VOLTAGE:
+                    errStr = "Over Voltage";
+                    break;
+                case goM8010Interface::ErrorCode::ENCODER_ERROR:
+                    errStr = "Encoder Error";
+                    break;
+                case goM8010Interface::ErrorCode::UNDER_VOLTAGE:
+                    errStr = "Under Voltage";
+                    break;
+                case goM8010Interface::ErrorCode::OVER_HEAT_COIL:
+                    errStr = "Over Heat Coil";
+                    break;
+                default:
+                    errStr = "Unknown Error";
+                    break;
+                }
+                RCLCPP_ERROR_STREAM(get_logger(),
+                                    "Motor " << jointNames_[i] << " " << errStr);
                 maxRetry_++;
                 if (maxRetry_ > 10) {
                     return hardware_interface::return_type::ERROR;

@@ -22,18 +22,6 @@ namespace Dog8Dof {
         }
     }
 
-    bool goM8010Interface::sendRecvRaw() {
-        command_.modify_data(&command_);
-        uint8_t *sendData = command_.get_motor_send_data();
-        uint8_t *recvData = state_.get_motor_recv_data();
-        bool ok =
-            port_->sendRecv(sendData, recvData, static_cast<size_t>(command_.hex_len));
-        if (ok) {
-            state_.extract_data(&state_);
-        }
-        return ok;
-    }
-
     bool
     goM8010Interface::setHybrid(float torque, float pos, float vel, float kp, float kd) {
         command_.tau = torque / gearRatio_;
@@ -41,7 +29,7 @@ namespace Dog8Dof {
         command_.dq = vel * gearRatio_;
         command_.kp = kp;
         command_.kd = kd;
-        return sendRecvRaw();
+        return port_->sendRecv(&command_, &state_);
     }
 
     bool goM8010Interface::setPos(float target, float kp, float kd) {
@@ -50,7 +38,7 @@ namespace Dog8Dof {
         command_.dq = 0.0;
         command_.kp = kp;
         command_.kd = kd;
-        return sendRecvRaw();
+        return port_->sendRecv(&command_, &state_);
     }
 
     bool goM8010Interface::setVel(float target, float kd) {
@@ -59,7 +47,7 @@ namespace Dog8Dof {
         command_.dq = target * gearRatio_;
         command_.kp = 0.0;
         command_.kd = kd;
-        return sendRecvRaw();
+        return port_->sendRecv(&command_, &state_);
     }
 
     bool goM8010Interface::setTor(float target) {
@@ -68,26 +56,7 @@ namespace Dog8Dof {
         command_.dq = 0.0;
         command_.kp = 0.0;
         command_.kd = 0.0;
-        return sendRecvRaw();
-    }
-
-    MotorCmd goM8010Interface::makeCmd(
-        float torque, float pos, float vel, float kp, float kd) const {
-        MotorCmd cmd;
-        cmd.motorType = MotorType::GO_M8010_6;
-        cmd.hex_len = 0;
-        cmd.id = command_.id;
-        cmd.mode = command_.mode;
-        cmd.tau = torque / gearRatio_;
-        cmd.q = (pos + posOffset_) * gearRatio_;
-        cmd.dq = vel * gearRatio_;
-        cmd.kp = kp;
-        cmd.kd = kd;
-        return cmd;
-    }
-
-    void goM8010Interface::applyState(const MotorData &data) {
-        state_ = data;
+        return port_->sendRecv(&command_, &state_);
     }
 
     void goM8010Interface::setZero(float offset) {
@@ -142,24 +111,24 @@ namespace Dog8Dof {
         return state_.motor_id;
     }
 
-    std::string goM8010Interface::getError() {
+    goM8010Interface::ErrorCode goM8010Interface::getError() {
         switch (state_.merror) {
         case 0:
-            return "OK";
+            return ErrorCode::OK;
         case 1:
-            return "Over Heat";
+            return ErrorCode::OVER_HEAT;
         case 2:
-            return "Over Current";
+            return ErrorCode::OVER_CURRENT;
         case 3:
-            return "Over Voltage";
+            return ErrorCode::OVER_VOLTAGE;
         case 4:
-            return "Encoder Error";
+            return ErrorCode::ENCODER_ERROR;
         case 5:
-            return "Under Voltage";
+            return ErrorCode::UNDER_VOLTAGE;
         case 6:
-            return "Over Heat on Coil";
+            return ErrorCode::OVER_HEAT_COIL;
         default:
-            return "OK";
+            return ErrorCode::OK; // SDK 目前未定义其他错误码，未知错误当作 OK 处理
         }
     }
 

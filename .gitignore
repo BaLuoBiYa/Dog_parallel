@@ -5,5 +5,4 @@ log/
 .cache/
 .vscode/
 *.csv
-model/
 target/

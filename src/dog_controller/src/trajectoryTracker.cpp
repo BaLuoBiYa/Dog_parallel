@@ -1,7 +1,6 @@
 /**
  * @file trajectoryTracker.cpp
  * @brief ROS2 Controller — 在线重规划步态追踪
- *
  */
 
 #include "dog_controller/trajectoryTracker.hpp"
@@ -91,6 +90,7 @@ namespace Dog8Dof {
             config.names.push_back(std::string(name) + "/position");
             config.names.push_back(std::string(name) + "/velocity");
             config.names.push_back(std::string(name) + "/effort");
+            config.names.push_back(std::string(name) + "/temperature");
         }
         return config;
     }
@@ -161,7 +161,7 @@ namespace Dog8Dof {
             std::array<float, 8> velocities;
             std::array<float, 8> torques;
             for (size_t i = 0; i < 8; ++i) {
-                temps[i] = 0;
+                temps[i] = getTemp(i);
                 positions[i] = getPos(i);
                 velocities[i] = getVel(i);
                 torques[i] = getTau(i);
@@ -307,6 +307,7 @@ namespace Dog8Dof {
             const auto stPos = stMap.find(jointNames_[i] + "/position");
             const auto stVel = stMap.find(jointNames_[i] + "/velocity");
             const auto stEff = stMap.find(jointNames_[i] + "/effort");
+            const auto stTmp = stMap.find(jointNames_[i] + "/temperature");
             const auto cmdPos = cmdMap.find(jointNames_[i] + "/position");
             const auto cmdVel = cmdMap.find(jointNames_[i] + "/velocity");
             const auto cmdEff = cmdMap.find(jointNames_[i] + "/effort");
@@ -316,13 +317,13 @@ namespace Dog8Dof {
             if (stPos == stMap.end() || stVel == stMap.end() || stEff == stMap.end() ||
                 cmdPos == cmdMap.end() || cmdVel == cmdMap.end() ||
                 cmdEff == cmdMap.end() || cmdKp == cmdMap.end() ||
-                cmdKd == cmdMap.end()) {
+                cmdKd == cmdMap.end() || stTmp == stMap.end()) {
                 RCLCPP_ERROR(this->get_node()->get_logger(),
                              "Missing interface for %s",
                              jointNames_[i].c_str());
                 return false;
             }
-            stateIdx_[i] = {stPos->second, stVel->second, stEff->second};
+            stateIdx_[i] = {stPos->second, stVel->second, stEff->second, stTmp->second};
             cmdIdx_[i] = {cmdPos->second,
                           cmdVel->second,
                           cmdEff->second,
@@ -364,6 +365,10 @@ namespace Dog8Dof {
         return static_cast<float>(
             state_interfaces_[stateIdx_[i].eff].get_optional<double>().value());
     }
+    float TrajectoryTracker::getTemp(size_t i) {
+        return static_cast<float>(
+            state_interfaces_[stateIdx_[i].tmp].get_optional<double>().value());
+    };
 
     // =========================================================================
     //  监控发布

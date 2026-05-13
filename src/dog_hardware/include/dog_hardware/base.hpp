@@ -57,6 +57,7 @@ namespace Dog8Dof {
         std::array<double, 8> stPos_{};
         std::array<double, 8> stVel_{};
         std::array<double, 8> stTau_{};
+        std::array<double, 8> stTemp_{};
 
         std::array<double, 8> cmdPos_{};
         std::array<double, 8> cmdVel_{};

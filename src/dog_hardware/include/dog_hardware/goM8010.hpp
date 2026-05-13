@@ -12,6 +12,16 @@ namespace Dog8Dof {
      */
     class goM8010Interface {
       public:
+        enum ErrorCode {
+            OK = 0,
+            OVER_HEAT = 1,
+            OVER_CURRENT = 2,
+            OVER_VOLTAGE = 3,
+            ENCODER_ERROR = 4,
+            UNDER_VOLTAGE = 5,
+            OVER_HEAT_COIL = 6
+        };
+
         /**
          * @brief 构造函数，设定电机的 ID
          * @param ID 电机的唯一标识
@@ -105,22 +115,12 @@ namespace Dog8Dof {
         /**
          * @brief 获得当前电机问题
          */
-        std::string getError();
+        ErrorCode getError();
 
         /**
          * @brief 紧急停止所有电机
          */
         void emergencyStop();
-
-        /**
-         * @brief 构造用于批量发送的 `MotorCmd` 对象
-         */
-        MotorCmd makeCmd(float torque, float pos, float vel, float kp, float kd) const;
-
-        /**
-         * @brief 从 `MotorData` 更新内部状态（批量接收后调用）
-         */
-        void applyState(const MotorData &data);
 
       private:
         MotorCmd command_;
@@ -128,12 +128,6 @@ namespace Dog8Dof {
         std::shared_ptr<SerialPort> port_;
         float posOffset_;
         float gearRatio_ = queryGearRatio(MotorType::GO_M8010_6);
-
-        /**
-         * @brief 使用原始 sendRecv 进行通信，
-         *        绕过单电机 sendRecv(MotorCmd*, MotorData*) 中的 resetSerial 开销
-         */
-        bool sendRecvRaw();
     };
 
 } // namespace Dog8Dof

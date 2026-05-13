@@ -188,6 +188,15 @@ namespace Dog8Dof {
         }
 
       private:
+        /**
+         * @brief 解析求解 3×3 线性系统 A·x = b（Cramer 法则）
+         *
+         * 矩阵 A = [[T³, T⁴, T⁵],
+         *           [3T², 4T³, 5T⁴],
+         *           [6T, 12T², 20T³]]
+         *
+         * det(A) = 2·T⁹ (常量因子)，直接展开避免 Eigen QR 开销。
+         */
         static Eigen::Matrix<float, 6, 1> solveQuinticCoeff1D(
             float p0, float v0, float a0, float pT, float vT, float aT, float T) {
             const float T2 = T * T;
@@ -195,22 +204,65 @@ namespace Dog8Dof {
             const float T4 = T3 * T;
             const float T5 = T4 * T;
 
-            Eigen::Matrix3f A;
-            A << T3, T4, T5, 3.0f * T2, 4.0f * T3, 5.0f * T4, 6.0f * T, 12.0f * T2,
-                20.0f * T3;
-
+            // 齐次项 c0, c1, c2
             const float c0 = p0;
             const float c1 = v0;
             const float c2 = 0.5f * a0;
 
-            Eigen::Vector3f b;
-            b << pT - (c0 + c1 * T + c2 * T2), vT - (c1 + 2.0f * c2 * T),
-                aT - (2.0f * c2);
+            // 右端向量 b = [Δp, Δv, Δa]^T
+            const float b0 = pT - (c0 + c1 * T + c2 * T2);
+            const float b1 = vT - (c1 + 2.0f * c2 * T);
+            const float b2 = aT - (2.0f * c2);
 
-            const Eigen::Vector3f x = A.colPivHouseholderQr().solve(b);
+            // ---- Cramer 法则解析求解 A·[c3,c4,c5]^T = b ----
+            // A = [[ T³,  T⁴,  T⁵ ],
+            //      [3T², 4T³, 5T⁴],
+            //      [ 6T,12T²,20T³]]
+            //
+            // det(A) = T³(4T³·20T³ - 5T⁴·12T²)
+            //         - T⁴(3T²·20T³ - 5T⁴·6T)
+            //         + T⁵(3T²·12T² - 4T³·6T)
+            //        = T³(80T⁶-60T⁶) - T⁴(60T⁵-30T⁵) + T⁵(36T⁴-24T⁴)
+            //        = 20T⁹ - 30T⁹ + 12T⁹ = 2T⁹
+
+            const float T6 = T3 * T3;
+            const float T9 = T6 * T3;
+            const float invDet = 0.5f / T9; // 1/(2T⁹)
+
+            // 伴随矩阵 × b（手动展开 3×3）
+            // adj(A)[0,:] = [ (80-60)T⁶,  -(20-30)T⁵,  (48-60)T⁴ ] 的余子式转置
+            // 实际用 Cramer 逐分量算更清晰：
+
+            // c3 = det([b0, T⁴, T⁵; b1, 4T³, 5T⁴; b2, 12T², 20T³]) / det(A)
+            const float num3 = b0 * (4.0f * T3 * 20.0f * T3 - 5.0f * T4 * 12.0f * T2) -
+                               T4 * (b1 * 20.0f * T3 - 5.0f * T4 * b2) +
+                               T5 * (b1 * 12.0f * T2 - 4.0f * T3 * b2);
+            // = b0*(80T⁶-60T⁶) - T⁴*(20b1T³-5b2T⁴) + T⁵*(12b1T²-4b2T³)
+            // = 20b0T⁶ - 20b1T⁷ + 5b2T⁸ + 12b1T⁷ - 4b2T⁸
+            // = 20b0T⁶ - 8b1T⁷ + b2T⁸
+
+            // c4 = det([T³, b0, T⁵; 3T², b1, 5T⁴; 6T, b2, 20T³]) / det(A)
+            const float num4 = T3 * (b1 * 20.0f * T3 - 5.0f * T4 * b2) -
+                               b0 * (3.0f * T2 * 20.0f * T3 - 5.0f * T4 * 6.0f * T) +
+                               T5 * (3.0f * T2 * b2 - b1 * 6.0f * T);
+            // = T³(20b1T³-5b2T⁴) - b0(60T⁵-30T⁵) + T⁵(3b2T²-6b1T)
+            // = 20b1T⁶ - 5b2T⁷ - 30b0T⁵ + 3b2T⁷ - 6b1T⁶
+            // = -30b0T⁵ + 14b1T⁶ - 2b2T⁷
+
+            // c5 = det([T³, T⁴, b0; 3T², 4T³, b1; 6T, 12T², b2]) / det(A)
+            const float num5 = T3 * (4.0f * T3 * b2 - b1 * 12.0f * T2) -
+                               T4 * (3.0f * T2 * b2 - b1 * 6.0f * T) +
+                               b0 * (3.0f * T2 * 12.0f * T2 - 4.0f * T3 * 6.0f * T);
+            // = T³(4b2T³-12b1T²) - T⁴(3b2T²-6b1T) + b0(36T⁴-24T⁴)
+            // = 4b2T⁶ - 12b1T⁵ - 3b2T⁶ + 6b1T⁵ + 12b0T⁴
+            // = 12b0T⁴ - 6b1T⁵ + b2T⁶
+
+            const float c3 = num3 * invDet;
+            const float c4 = num4 * invDet;
+            const float c5 = num5 * invDet;
 
             Eigen::Matrix<float, 6, 1> c;
-            c << c0, c1, c2, x[0], x[1], x[2];
+            c << c0, c1, c2, c3, c4, c5;
             return c;
         }
 
