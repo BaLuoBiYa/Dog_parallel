@@ -128,6 +128,12 @@ namespace Dog8Dof {
         std::shared_ptr<SerialPort> port_;
         float posOffset_;
         float gearRatio_ = queryGearRatio(MotorType::GO_M8010_6);
+
+        /**
+         * @brief 使用原始 sendRecv 进行通信，
+         *        绕过单电机 sendRecv(MotorCmd*, MotorData*) 中的 resetSerial 开销
+         */
+        bool sendRecvRaw();
     };
 
 } // namespace Dog8Dof

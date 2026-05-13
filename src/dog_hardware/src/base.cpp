@@ -115,8 +115,8 @@ namespace Dog8Dof {
             return hardware_interface::CallbackReturn::ERROR;
         }
 
-        port_->resetSerial(16, 4000000, 2000);
-        // 创建串口通信指针
+        port_->resetSerial(16, 4000000, 2000, BlockYN::YES);
+        // 使用非阻塞模式接收，配合 select() 超时，避免 SDK sendRecv 内部重复配置串口
 
         for (size_t i = 0; i < 8; ++i) {
             try {

@@ -22,6 +22,18 @@ namespace Dog8Dof {
         }
     }
 
+    bool goM8010Interface::sendRecvRaw() {
+        command_.modify_data(&command_);
+        uint8_t *sendData = command_.get_motor_send_data();
+        uint8_t *recvData = state_.get_motor_recv_data();
+        bool ok =
+            port_->sendRecv(sendData, recvData, static_cast<size_t>(command_.hex_len));
+        if (ok) {
+            state_.extract_data(&state_);
+        }
+        return ok;
+    }
+
     bool
     goM8010Interface::setHybrid(float torque, float pos, float vel, float kp, float kd) {
         command_.tau = torque / gearRatio_;
@@ -29,7 +41,7 @@ namespace Dog8Dof {
         command_.dq = vel * gearRatio_;
         command_.kp = kp;
         command_.kd = kd;
-        return port_->sendRecv(&command_, &state_);
+        return sendRecvRaw();
     }
 
     bool goM8010Interface::setPos(float target, float kp, float kd) {
@@ -38,7 +50,7 @@ namespace Dog8Dof {
         command_.dq = 0.0;
         command_.kp = kp;
         command_.kd = kd;
-        return port_->sendRecv(&command_, &state_);
+        return sendRecvRaw();
     }
 
     bool goM8010Interface::setVel(float target, float kd) {
@@ -47,7 +59,7 @@ namespace Dog8Dof {
         command_.dq = target * gearRatio_;
         command_.kp = 0.0;
         command_.kd = kd;
-        return port_->sendRecv(&command_, &state_);
+        return sendRecvRaw();
     }
 
     bool goM8010Interface::setTor(float target) {
@@ -56,7 +68,7 @@ namespace Dog8Dof {
         command_.dq = 0.0;
         command_.kp = 0.0;
         command_.kd = 0.0;
-        return port_->sendRecv(&command_, &state_);
+        return sendRecvRaw();
     }
 
     MotorCmd goM8010Interface::makeCmd(
@@ -88,7 +100,7 @@ namespace Dog8Dof {
         command_.dq = 0.0;
         command_.kp = 0.0;
         command_.kd = 0.0;
-        return port_->sendRecv(&command_, &state_);
+        return sendRecvRaw();
     }
 
     bool goM8010Interface::damp(float kd) {
@@ -97,12 +109,12 @@ namespace Dog8Dof {
         command_.dq = 0.0;
         command_.kp = 0.0;
         command_.kd = kd;
-        return port_->sendRecv(&command_, &state_);
+        return sendRecvRaw();
     }
 
     bool goM8010Interface::lock() {
         command_.mode = queryMotorMode(MotorType::GO_M8010_6, MotorMode::BRAKE);
-        return port_->sendRecv(&command_, &state_);
+        return sendRecvRaw();
     }
 
     bool goM8010Interface::release() {
@@ -154,7 +166,7 @@ namespace Dog8Dof {
     void goM8010Interface::emergencyStop() {
         command_.mode = queryMotorMode(MotorType::GO_M8010_6, MotorMode::BRAKE);
         command_.id = 15;
-        port_->sendRecv(&command_, &state_);
+        sendRecvRaw();
     }
 
 } // namespace Dog8Dof
