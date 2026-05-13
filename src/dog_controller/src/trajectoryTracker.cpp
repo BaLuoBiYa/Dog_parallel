@@ -20,6 +20,7 @@ namespace Dog8Dof {
         idleTipX_ = auto_declare<float>("idleTipX", 0.0f);
         idleTipZ_ = auto_declare<float>("idleTipZ", 180.0f);
         commandTopic_ = auto_declare<std::string>("commandTopic", "/dog/command");
+        monitorTopic_ = auto_declare<std::string>("monitorTopic", "/dog/monitor");
         return controller_interface::CallbackReturn::SUCCESS;
     }
 
@@ -60,6 +61,8 @@ namespace Dog8Dof {
                     newCmd_ = true;
                 }
             });
+
+        registerMonitorPublisher();
 
         return controller_interface::CallbackReturn::SUCCESS;
     }
@@ -150,6 +153,27 @@ namespace Dog8Dof {
     TrajectoryTracker::update(const rclcpp::Time &time, const rclcpp::Duration &period) {
         (void)time;
         (void)period;
+
+        // ---- 监控采样（测量 update() 真实调用频率）----
+        {
+            std::array<int8_t, 8> temps{};
+            std::array<float, 8> positions;
+            std::array<float, 8> velocities;
+            std::array<float, 8> torques;
+            for (size_t i = 0; i < 8; ++i) {
+                temps[i] = 0;
+                positions[i] = getPos(i);
+                velocities[i] = getVel(i);
+                torques[i] = getTau(i);
+            }
+            monitor_.update(temps, positions, velocities, torques);
+        }
+
+        // ---- 监控发布（1/10 降频）----
+        if (monitorPub_ && ++monitorPubCounter_ >= kMonitorPubDecimation) {
+            monitorPubCounter_ = 0;
+            publishMonitorState();
+        }
 
         // 1. 处理新命令（立即应用，generate 已基于当前状态重规划）
         if (newCmd_) {
@@ -339,6 +363,38 @@ namespace Dog8Dof {
     float TrajectoryTracker::getTau(size_t i) {
         return static_cast<float>(
             state_interfaces_[stateIdx_[i].eff].get_optional<double>().value());
+    }
+
+    // =========================================================================
+    //  监控发布
+    // =========================================================================
+    void TrajectoryTracker::registerMonitorPublisher() {
+        monitorPub_ = this->get_node()->create_publisher<dog_msg::msg::SystemState>(
+            monitorTopic_, 10);
+        RCLCPP_INFO(this->get_node()->get_logger(),
+                    "Monitor publisher registered on %s (1/%zu rate)",
+                    monitorTopic_.c_str(),
+                    kMonitorPubDecimation);
+    }
+
+    void TrajectoryTracker::publishMonitorState() {
+        const SystemState &s = monitor_.getState();
+
+        dog_msg::msg::SystemState msg;
+        msg.cpu_usage = s.cpu_usage;
+        msg.cpu_temperature = s.cpu_temperature;
+        msg.control_frequency = s.control_frequency;
+        msg.timestamp = this->get_node()->now();
+
+        for (size_t i = 0; i < 8; ++i) {
+            msg.motors[i].name = s.motors[i].name;
+            msg.motors[i].position = s.motors[i].position;
+            msg.motors[i].velocity = s.motors[i].velocity;
+            msg.motors[i].torque = s.motors[i].torque;
+            msg.motors[i].temperature = s.motors[i].temperature;
+        }
+
+        monitorPub_->publish(msg);
     }
 
 } // namespace Dog8Dof

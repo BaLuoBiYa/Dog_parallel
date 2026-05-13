@@ -4,8 +4,10 @@
 
 #include "dog_controller/gaitManager.hpp"
 #include "dog_controller/gaitTwistConverter.hpp"
+#include "dog_controller/stateMonitor.hpp"
 #include "dog_controller/threadSafeMessageBox.hpp"
 #include "dog_msg/msg/gait_twist.hpp"
+#include "dog_msg/msg/system_state.hpp"
 
 namespace Dog8Dof {
 
@@ -60,14 +62,14 @@ namespace Dog8Dof {
         std::unique_ptr<GaitManager> LF_, LR_, RF_, RR_;
 
         // ---- 关节名 ----
-        std::string jointNames_[8] = {"LF_Front",
-                                      "LF_Rear",
-                                      "RF_Front",
-                                      "RF_Rear",
-                                      "LR_Front",
-                                      "LR_Rear",
-                                      "RR_Front",
-                                      "RR_Rear"};
+        std::array<std::string, 8> jointNames_{"LF_Front",
+                                               "LF_Rear",
+                                               "RF_Front",
+                                               "RF_Rear",
+                                               "LR_Front",
+                                               "LR_Rear",
+                                               "RR_Front",
+                                               "RR_Rear"};
 
         // ---- 硬件接口索引 ----
         struct JointStateIndex {
@@ -85,6 +87,13 @@ namespace Dog8Dof {
         std::array<JointStateIndex, 8> stateIdx_{};
         std::array<JointCmdIndex, 8> cmdIdx_{};
 
+        // ---- 系统监控 ----
+        StateMonitor monitor_{jointNames_};
+        std::string monitorTopic_;
+        rclcpp::Publisher<dog_msg::msg::SystemState>::SharedPtr monitorPub_;
+        size_t monitorPubCounter_ = 0;
+        static constexpr size_t kMonitorPubDecimation = 10;
+
         // ---- 命令处理 ----
         ThreadSafeMessageBox<dog_msg::msg::GaitTwist> commandBox_;
         rclcpp::Subscription<dog_msg::msg::GaitTwist>::SharedPtr commandSub_;
@@ -97,6 +106,8 @@ namespace Dog8Dof {
         bool updateAllGaitManagers();
         bool applyCommand(const dog_msg::msg::GaitTwist &msg);
         bool switchToStandMode();
+        void registerMonitorPublisher();
+        void publishMonitorState();
         bool setJointCommands(size_t legIndex, const Motor &target);
         bool setAllJointCommands();
         float getPos(size_t i);

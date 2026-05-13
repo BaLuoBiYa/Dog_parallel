@@ -115,8 +115,8 @@ namespace Dog8Dof {
             return hardware_interface::CallbackReturn::ERROR;
         }
 
-        port_->resetSerial(16, 4000000, 2000, BlockYN::YES);
-        // 使用非阻塞模式接收，配合 select() 超时，避免 SDK sendRecv 内部重复配置串口
+        // 不在此处 resetSerial — 让电机构造阶段通过 SDK sendRecv 自动配置
+        // （BlockYN::YES + 20ms 超时，确保电机初始化可靠）
 
         for (size_t i = 0; i < 8; ++i) {
             try {
@@ -132,6 +132,9 @@ namespace Dog8Dof {
         }
         // 创建电机指针
 
+        // 电机初始化完成后，切换到 2ms 超时供 write() 热路径使用
+        port_->resetSerial(16, 4000000, 2000, BlockYN::YES);
+
         maxRetry_ = 0;
 
         return hardware_interface::CallbackReturn::SUCCESS;
@@ -142,13 +145,14 @@ namespace Dog8Dof {
         (void)pre;
 
         for (size_t i = 0; i < 8; ++i) {
-            bool res;
-            res = motor_[i].release();
-            if (!res) {
+            if (!motor_[i].release()) {
                 return hardware_interface::CallbackReturn::ERROR;
             }
         }
-        // 解除电机锁定
+        // 解除电机锁定（release 内部走 SDK sendRecv，自动配 20ms 超时）
+
+        // 切回 2ms 超时，供 write() 热路径使用
+        port_->resetSerial(16, 4000000, 2000, BlockYN::YES);
 
         return hardware_interface::CallbackReturn::SUCCESS;
     }

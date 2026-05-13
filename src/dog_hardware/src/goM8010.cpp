@@ -100,7 +100,7 @@ namespace Dog8Dof {
         command_.dq = 0.0;
         command_.kp = 0.0;
         command_.kd = 0.0;
-        return sendRecvRaw();
+        return port_->sendRecv(&command_, &state_);
     }
 
     bool goM8010Interface::damp(float kd) {
@@ -109,12 +109,12 @@ namespace Dog8Dof {
         command_.dq = 0.0;
         command_.kp = 0.0;
         command_.kd = kd;
-        return sendRecvRaw();
+        return port_->sendRecv(&command_, &state_);
     }
 
     bool goM8010Interface::lock() {
         command_.mode = queryMotorMode(MotorType::GO_M8010_6, MotorMode::BRAKE);
-        return sendRecvRaw();
+        return port_->sendRecv(&command_, &state_);
     }
 
     bool goM8010Interface::release() {
@@ -166,7 +166,7 @@ namespace Dog8Dof {
     void goM8010Interface::emergencyStop() {
         command_.mode = queryMotorMode(MotorType::GO_M8010_6, MotorMode::BRAKE);
         command_.id = 15;
-        sendRecvRaw();
+        port_->sendRecv(&command_, &state_);
     }
 
 } // namespace Dog8Dof
