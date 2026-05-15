@@ -58,6 +58,7 @@ namespace Dog8Dof {
         float updateDuration_;
         float idleTipX_, idleTipZ_;
         std::string commandTopic_;
+        uint8_t maxfailure_, failureCounter_ = 0;
 
         // ---- 步态管理器（每条腿独立） ----
         std::unique_ptr<GaitManager> LF_, LR_, RF_, RR_;

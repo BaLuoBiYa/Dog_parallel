@@ -35,6 +35,8 @@ namespace Dog8Dof {
                               .base(),
                           configPath_.end());
 
+        retryCount_ = 0;
+
         try {
             const YAML::Node root = YAML::LoadFile(configPath_);
 
@@ -117,9 +119,6 @@ namespace Dog8Dof {
             return hardware_interface::CallbackReturn::ERROR;
         }
 
-        // 不在此处 resetSerial — 让电机构造阶段通过 SDK sendRecv 自动配置
-        // （BlockYN::YES + 20ms 超时，确保电机初始化可靠）
-
         for (size_t i = 0; i < 8; ++i) {
             try {
                 motor_.push_back(goM8010Interface(jointMapping_[jointNames_[i]], port_));
@@ -132,13 +131,6 @@ namespace Dog8Dof {
                 return hardware_interface::CallbackReturn::ERROR;
             }
         }
-        // 创建电机指针
-
-        // 电机初始化完成后，切换到 0.2ms 超时供 write() 热路径使用
-        port_->resetSerial(16, 4000000, 200, BlockYN::YES);
-
-        maxRetry_ = 0;
-
         return hardware_interface::CallbackReturn::SUCCESS;
     }
 
@@ -151,10 +143,6 @@ namespace Dog8Dof {
                 return hardware_interface::CallbackReturn::ERROR;
             }
         }
-        // 解除电机锁定（release 内部走 SDK sendRecv，自动配 20ms 超时）
-
-        // 切回 2ms 超时，供 write() 热路径使用
-        port_->resetSerial(16, 4000000, 2000, BlockYN::YES);
 
         return hardware_interface::CallbackReturn::SUCCESS;
     }
@@ -185,6 +173,7 @@ namespace Dog8Dof {
                                                         const rclcpp::Duration &period) {
         (void)time;
         (void)period;
+        bool hasError = false;
 
         for (size_t i = 0; i < 8; ++i) {
             stPos_[i] = static_cast<double>(motor_[i].getPos());
@@ -225,13 +214,17 @@ namespace Dog8Dof {
                 }
                 RCLCPP_ERROR_STREAM(get_logger(),
                                     "Motor " << jointNames_[i] << " " << errStr);
-                maxRetry_++;
-                if (maxRetry_ > 10) {
-                    return hardware_interface::return_type::ERROR;
-                } else {
-                    maxRetry_ = 0;
-                }
+                retryCount_++;
+                hasError = true;
             }
+        }
+
+        if (retryCount_ > maxRetry_) {
+            return hardware_interface::return_type::ERROR;
+        }
+
+        if (!hasError) {
+            retryCount_ = 0;
         }
         return hardware_interface::return_type::OK;
     }

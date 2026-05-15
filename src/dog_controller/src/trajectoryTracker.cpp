@@ -20,6 +20,7 @@ namespace Dog8Dof {
         idleTipZ_ = auto_declare<float>("idleTipZ", 180.0f);
         commandTopic_ = auto_declare<std::string>("commandTopic", "/dog/command");
         monitorTopic_ = auto_declare<std::string>("monitorTopic", "/dog/monitor");
+        maxfailure_ = auto_declare<uint8_t>("maxFailure", 5);
         return controller_interface::CallbackReturn::SUCCESS;
     }
 
@@ -153,6 +154,7 @@ namespace Dog8Dof {
     TrajectoryTracker::update(const rclcpp::Time &time, const rclcpp::Duration &period) {
         (void)time;
         (void)period;
+        bool hasFaliure = false;
 
         // ---- 监控采样（测量 update() 真实调用频率）----
         {
@@ -186,14 +188,24 @@ namespace Dog8Dof {
 
         // 2. 每周期更新所有步态管理器（传感器反馈闭环在线重规划）
         if (!updateAllGaitManagers()) {
-            return controller_interface::return_type::ERROR;
+            failureCounter_++;
+            hasFaliure = true;
         }
 
         // 3. 逆运动学结果下发到关节命令接口
         if (!setAllJointCommands()) {
-            return controller_interface::return_type::ERROR;
+            failureCounter_++;
+            hasFaliure = true;
         }
 
+        if (failureCounter_ > maxfailure_) {
+            return controller_interface::return_type::ERROR;
+        }
+        if (!hasFaliure) {
+            failureCounter_ = 0;
+        }
+        // 连续多周期失败才进入
+        // on_error，偶尔失败可能是通信抖动或机械抖动引起的瞬态问题，不必过于敏感
         return controller_interface::return_type::OK;
     }
 

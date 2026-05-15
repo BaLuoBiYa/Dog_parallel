@@ -168,12 +168,9 @@ namespace Dog8Dof {
         const float l2_sq = lowerSQ_;
         const float l2_proj_sq = l2_sq - l1_sin_theta * l1_sin_theta;
 
-        if (l2_proj_sq < 0) {
-            targetMotors_[FRONT].vel = 0.0f;
-            targetMotors_[REAR].vel = 0.0f;
-            return false;
-        }
-        const float l2_proj = std::sqrt(l2_proj_sq);
+        // 容忍浮点误差在边界处产生的微小负数，clamp 到 0
+        const float l2_proj_sq_clamped = std::max(0.0f, l2_proj_sq);
+        const float l2_proj = std::sqrt(l2_proj_sq_clamped);
         const float R = upperLength_ * cos_theta + l2_proj;
 
         // Jacobian components
@@ -220,12 +217,9 @@ namespace Dog8Dof {
         const float l2_sq = L2 * L2;
         const float l2_proj_sq = l2_sq - l1_sin_theta * l1_sin_theta;
 
-        if (l2_proj_sq < 0) {
-            targetMotors_[FRONT].tau = 0.0f;
-            targetMotors_[REAR].tau = 0.0f;
-            return false;
-        }
-        const float l2_proj = std::sqrt(l2_proj_sq);
+        // 容忍浮点误差在边界处产生的微小负数，clamp 到 0
+        const float l2_proj_sq_clamped = std::max(0.0f, l2_proj_sq);
+        const float l2_proj = std::sqrt(l2_proj_sq_clamped);
         const float R = L1 * cos_theta + l2_proj;
 
         float dR_dtheta;
@@ -263,11 +257,9 @@ namespace Dog8Dof {
         const float l1_sin = upperLength_ * cur_kin_.sin_theta;
         const float l2_proj_sq = lowerSQ_ - l1_sin * l1_sin;
 
-        if (l2_proj_sq < 0) {
-            return false;
-        }
-
-        const float l2_proj = std::sqrt(l2_proj_sq);
+        // 容忍浮点误差在边界处产生的微小负数，clamp 到 0
+        const float l2_proj_sq_clamped = std::max(0.0f, l2_proj_sq);
+        const float l2_proj = std::sqrt(l2_proj_sq_clamped);
         const float now_R = upperLength_ * cur_kin_.cos_theta + l2_proj;
 
         currentTip_.pos[0] = now_R * cur_kin_.sin_gamma;
@@ -284,12 +276,9 @@ namespace Dog8Dof {
         const float l1_sin_theta = upperLength_ * sin_theta;
         const float l2_proj_sq = lowerSQ_ - l1_sin_theta * l1_sin_theta;
 
-        if (l2_proj_sq < 0) {
-            targetTip_.linerVel[0] = 0.0f;
-            targetTip_.linerVel[2] = 0.0f;
-            return false;
-        }
-        const float l2_proj = std::sqrt(l2_proj_sq);
+        // 容忍浮点误差在边界处产生的微小负数，clamp 到 0
+        const float l2_proj_sq_clamped = std::max(0.0f, l2_proj_sq);
+        const float l2_proj = std::sqrt(l2_proj_sq_clamped);
         const float R = upperLength_ * cos_theta + l2_proj;
 
         float dR_dtheta;
@@ -327,12 +316,9 @@ namespace Dog8Dof {
         const float l2_sq = L2 * L2;
         const float l2_proj_sq = l2_sq - l1_sin_theta * l1_sin_theta;
 
-        if (l2_proj_sq < 0) {
-            currentTip_.tau[0] = 0.0f;
-            currentTip_.tau[2] = 0.0f;
-            return false;
-        }
-        const float l2_proj = std::sqrt(l2_proj_sq);
+        // 容忍浮点误差在边界处产生的微小负数，clamp 到 0
+        const float l2_proj_sq_clamped = std::max(0.0f, l2_proj_sq);
+        const float l2_proj = std::sqrt(l2_proj_sq_clamped);
         const float R = L1 * cos_theta + l2_proj;
 
         float dR_dtheta;

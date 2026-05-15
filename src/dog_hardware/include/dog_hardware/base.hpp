@@ -50,7 +50,7 @@ namespace Dog8Dof {
         std::string configPath_;
         std::array<float, 8> zeroOffsetByIndex_{};
 
-        size_t maxRetry_;
+        uint8_t maxRetry_, retryCount_;
         float deactiveDamp_;
         long deactiveDampTime_;
 

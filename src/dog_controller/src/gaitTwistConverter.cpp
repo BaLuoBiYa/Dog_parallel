@@ -37,7 +37,7 @@ namespace Dog8Dof {
         case GT::WALK: {
             // 线速度 → 步长 (m/s → mm, /频率)
             const float linearVel_mm = msg.linear_x * 1000.0f;
-            const float stepLength = linearVel_mm / msg.step_duration;
+            const float stepLength = linearVel_mm * msg.step_duration;
 
             const float bias = bodyWidth_ * 0.5f * msg.linear_y / msg.step_duration;
 

@@ -2,7 +2,6 @@
 #include "unitree_actuator_sdk/unitreeMotor/unitreeMotor.h"
 #include <cstdint>
 #include <memory>
-#include <string>
 
 namespace Dog8Dof {
 
@@ -89,33 +88,62 @@ namespace Dog8Dof {
         /**
          * @brief 获得当前电机位置
          */
-        float getPos();
+        float getPos() const {
+            return state_.q / gearRatio_ - posOffset_;
+        }
 
         /**
          * @brief 获得当前电机速度
          */
-        float getVel();
+        float getVel() const {
+            return state_.dq / gearRatio_;
+        }
 
         /**
          * @brief 获得当前电机扭矩
          */
-        float getTor();
+        float getTor() const {
+            return state_.tau * gearRatio_;
+        }
 
         /**
-         * @brief 获得当前电机扭矩
+         * @brief 获得当前电机ID
          */
-        uint8_t getID();
+        uint8_t getID() const {
+            return state_.motor_id;
+        }
 
         /**
          * @brief 获得当前电机温度
          * @note 温度高于90度会触发保护无法控制
          */
-        int8_t getTemp();
+        int8_t getTemp() const {
+            return state_.temp;
+        }
 
         /**
-         * @brief 获得当前电机问题
+         * @brief 获得当前电机错误码
          */
-        ErrorCode getError();
+        ErrorCode getError() const {
+            switch (state_.merror) {
+            case 0:
+                return ErrorCode::OK;
+            case 1:
+                return ErrorCode::OVER_HEAT;
+            case 2:
+                return ErrorCode::OVER_CURRENT;
+            case 3:
+                return ErrorCode::OVER_VOLTAGE;
+            case 4:
+                return ErrorCode::ENCODER_ERROR;
+            case 5:
+                return ErrorCode::UNDER_VOLTAGE;
+            case 6:
+                return ErrorCode::OVER_HEAT_COIL;
+            default:
+                return ErrorCode::OK;
+            }
+        }
 
         /**
          * @brief 紧急停止所有电机

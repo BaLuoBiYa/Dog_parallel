@@ -91,47 +91,6 @@ namespace Dog8Dof {
         return this->zeroTor();
     }
 
-    float goM8010Interface::getPos() {
-        return state_.q / gearRatio_ - posOffset_;
-    }
-
-    float goM8010Interface::getVel() {
-        return state_.dq / gearRatio_;
-    }
-
-    float goM8010Interface::getTor() {
-        return state_.tau * gearRatio_;
-    }
-
-    int8_t goM8010Interface::getTemp() {
-        return state_.temp;
-    }
-
-    uint8_t goM8010Interface::getID() {
-        return state_.motor_id;
-    }
-
-    goM8010Interface::ErrorCode goM8010Interface::getError() {
-        switch (state_.merror) {
-        case 0:
-            return ErrorCode::OK;
-        case 1:
-            return ErrorCode::OVER_HEAT;
-        case 2:
-            return ErrorCode::OVER_CURRENT;
-        case 3:
-            return ErrorCode::OVER_VOLTAGE;
-        case 4:
-            return ErrorCode::ENCODER_ERROR;
-        case 5:
-            return ErrorCode::UNDER_VOLTAGE;
-        case 6:
-            return ErrorCode::OVER_HEAT_COIL;
-        default:
-            return ErrorCode::OK; // SDK 目前未定义其他错误码，未知错误当作 OK 处理
-        }
-    }
-
     void goM8010Interface::emergencyStop() {
         command_.mode = queryMotorMode(MotorType::GO_M8010_6, MotorMode::BRAKE);
         command_.id = 15;
