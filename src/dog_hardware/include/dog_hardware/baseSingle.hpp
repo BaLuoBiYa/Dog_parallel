@@ -1,7 +1,7 @@
 #pragma once
 
+#include "dog_hardware/serial.hpp"
 #include "goM8010.hpp"
-#include "unitree_actuator_sdk/serialPort/SerialPort.h"
 #include <array>
 #include <cstdint>
 #include <hardware_interface/system_interface.hpp>

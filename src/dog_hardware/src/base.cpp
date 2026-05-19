@@ -1,5 +1,5 @@
 #include "dog_hardware/base.hpp"
-#include "unitree_actuator_sdk/serialPort/SerialPort.h"
+#include "dog_hardware/serial.hpp"
 
 #include <cstddef>
 #include <fcntl.h>

@@ -26,6 +26,7 @@ find_package(pluginlib REQUIRED)
 find_package(yaml-cpp REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(Boost REQUIRED COMPONENTS system)
 
 include_directories(include)
 
@@ -33,6 +34,7 @@ add_library(${PROJECT_NAME} SHARED
     src/base.cpp
     src/baseSingle.cpp
     src/goM8010.cpp
+    src/serial.cpp
 )
 ament_target_dependencies(${PROJECT_NAME}
   "rclcpp"
@@ -42,6 +44,7 @@ ament_target_dependencies(${PROJECT_NAME}
 target_link_libraries(${PROJECT_NAME}
   ${ARCH_LIB}
   yaml-cpp::yaml-cpp
+  Boost::system
 )
 
 add_executable(example_goM8010_6_motor

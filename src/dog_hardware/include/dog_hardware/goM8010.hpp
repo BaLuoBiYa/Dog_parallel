@@ -1,4 +1,4 @@
-#include "unitree_actuator_sdk/serialPort/SerialPort.h"
+#include "dog_hardware/serial.hpp"
 #include "unitree_actuator_sdk/unitreeMotor/unitreeMotor.h"
 #include <cstdint>
 #include <memory>
