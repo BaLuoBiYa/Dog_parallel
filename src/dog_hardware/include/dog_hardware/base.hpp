@@ -1,6 +1,6 @@
 #pragma once
-#include "goM8010.hpp"
 #include "dog_hardware/serial.hpp"
+#include "goM8010.hpp"
 #include <array>
 #include <cstdint>
 #include <hardware_interface/system_interface.hpp>
@@ -44,7 +44,7 @@ namespace Dog8Dof {
                                       "RR_Front",
                                       "RR_Rear"};
         std::string portName_;
-        std::shared_ptr<SerialPort> port_;
+        std::shared_ptr<Dog8Dof::SerialPort> port_;
 
         std::vector<goM8010Interface> motor_;
         std::string configPath_;

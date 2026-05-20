@@ -22,7 +22,7 @@ namespace Dog8Dof {
                                             "RR_Front",
                                             "RR_Rear"};
         std::string portName_;
-        std::shared_ptr<SerialPort> port_;
+        std::shared_ptr<Dog8Dof::SerialPort> port_;
 
         YAML::Node node_;
         std::string configPath_;

@@ -26,7 +26,7 @@ namespace Dog8Dof {
          * @param ID 电机的唯一标识
          * @param port 串口实例的共享指针
          */
-        goM8010Interface(uint8_t ID, std::shared_ptr<SerialPort> port);
+        goM8010Interface(uint8_t ID, std::shared_ptr<Dog8Dof::SerialPort> port);
 
         /**
          * @brief 混合控制模式
@@ -153,7 +153,7 @@ namespace Dog8Dof {
       private:
         MotorCmd command_;
         MotorData state_;
-        std::shared_ptr<SerialPort> port_;
+        std::shared_ptr<Dog8Dof::SerialPort> port_;
         float posOffset_;
         float gearRatio_ = queryGearRatio(MotorType::GO_M8010_6);
     };

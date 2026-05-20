@@ -67,7 +67,7 @@ namespace Dog8Dof {
         while (rclcpp::ok()) {
             ++attempt;
             try {
-                port_ = std::make_shared<SerialPort>(portName_);
+                port_ = std::make_shared<Dog8Dof::SerialPort>(portName_);
                 RCLCPP_INFO_STREAM(
                     logger_,
                     "Opened serial port " << portName_ << " on attempt " << attempt);

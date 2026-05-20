@@ -113,7 +113,7 @@ namespace Dog8Dof {
         // 清空智能指针
 
         try {
-            port_ = std::make_shared<SerialPort>(portName_);
+            port_ = std::make_shared<Dog8Dof::SerialPort>(portName_);
         } catch (const std::exception &e) {
             RCLCPP_ERROR(this->get_logger(), "RS485 connection failed: %s", e.what());
             return hardware_interface::CallbackReturn::ERROR;

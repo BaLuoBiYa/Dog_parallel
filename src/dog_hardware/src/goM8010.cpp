@@ -8,7 +8,8 @@
 
 namespace Dog8Dof {
 
-    goM8010Interface::goM8010Interface(uint8_t ID, std::shared_ptr<SerialPort> port) {
+    goM8010Interface::goM8010Interface(uint8_t ID,
+                                       std::shared_ptr<Dog8Dof::SerialPort> port) {
         command_.motorType = MotorType::GO_M8010_6;
         state_.motorType = MotorType::GO_M8010_6;
         command_.mode = queryMotorMode(MotorType::GO_M8010_6, MotorMode::FOC);

@@ -113,7 +113,7 @@ class MotorTesterApp {
     }
 
   private:
-    std::shared_ptr<SerialPort> port_;
+    std::shared_ptr<Dog8Dof::SerialPort> port_;
     std::vector<MotorPtr> motors_;
     std::mutex motors_mtx_;
     std::atomic<bool> running_{false};
@@ -235,7 +235,7 @@ class MotorTesterApp {
             return false;
         }
 
-        port_ = std::make_shared<SerialPort>("/dev/ttyACM0");
+        port_ = std::make_shared<Dog8Dof::SerialPort>("/dev/ttyACM0");
         for (uint8_t id : ids) {
             motors_.push_back(std::make_shared<Dog8Dof::goM8010Interface>(id, port_));
         }

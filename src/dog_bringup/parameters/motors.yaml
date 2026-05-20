@@ -1,4 +1,4 @@
-RS485_Port: /dev/ttyACM0
+RS485_Port: /dev/ttyCH343USB0
 maxRetry: 5
 deactiveDamp: 0.1
 deactiveDampTime: 5

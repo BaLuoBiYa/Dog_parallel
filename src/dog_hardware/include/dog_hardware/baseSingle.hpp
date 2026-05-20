@@ -40,7 +40,7 @@ namespace Dog8Dof {
         // 默认使用左前腿的两个关节，必要时替换为目标关节名
         std::string jointNames_[2] = {"LF_Front", "LF_Rear"};
         std::string portName_;
-        std::shared_ptr<SerialPort> port_;
+        std::shared_ptr<Dog8Dof::SerialPort> port_;
 
         std::vector<goM8010Interface> motor_;
         std::string configPath_;
