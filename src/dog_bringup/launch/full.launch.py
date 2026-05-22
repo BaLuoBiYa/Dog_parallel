@@ -47,7 +47,6 @@ def generate_launch_description():
         output = "screen"
     )
 
-
     web_bridge_node = Node(
         package="rosbridge_server",
         executable="rosbridge_websocket",

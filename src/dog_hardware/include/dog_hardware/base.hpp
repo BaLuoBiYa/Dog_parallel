@@ -1,6 +1,7 @@
 #pragma once
 #include "dog_hardware/serial.hpp"
 #include "goM8010.hpp"
+
 #include <array>
 #include <cstdint>
 #include <hardware_interface/system_interface.hpp>
@@ -34,6 +35,9 @@ namespace Dog8Dof {
                                               const rclcpp::Duration &period) override;
 
       private:
+        static constexpr std::array<size_t, 4> LEFT_MOTOR_INDICES{0, 1, 4, 5};
+        static constexpr std::array<size_t, 4> RIGHT_MOTOR_INDICES{2, 3, 6, 7};
+
         std::map<std::string, uint8_t> jointMapping_;
         std::string jointNames_[8] = {"LF_Front",
                                       "LF_Rear",
@@ -43,14 +47,18 @@ namespace Dog8Dof {
                                       "LR_Rear",
                                       "RR_Front",
                                       "RR_Rear"};
-        std::string portName_;
-        std::shared_ptr<Dog8Dof::SerialPort> port_;
+
+        // 两路独立 485 端口
+        std::string portNameLeft_;
+        std::string portNameRight_;
+        std::shared_ptr<Dog8Dof::SerialPort> portLeft_;
+        std::shared_ptr<Dog8Dof::SerialPort> portRight_;
 
         std::vector<goM8010Interface> motor_;
         std::string configPath_;
         std::array<float, 8> zeroOffsetByIndex_{};
 
-        uint8_t maxRetry_, retryCount_;
+        uint8_t maxRetry_, retryCountL_, retryCountR_;
         float deactiveDamp_;
         long deactiveDampTime_;
 

@@ -13,7 +13,7 @@
 // ============================================================================
 // Debug 耗时分析开关
 // ============================================================================
-#define SERIAL_TIMING_DEBUG 1
+#define SERIAL_TIMING_DEBUG 0
 
 #if SERIAL_TIMING_DEBUG
 #include <algorithm>
