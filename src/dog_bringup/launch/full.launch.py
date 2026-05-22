@@ -3,7 +3,7 @@ import os
 import tempfile
 from launch import LaunchDescription
 from launch_ros.actions import Node
-from launch.actions import RegisterEventHandler
+from launch.actions import RegisterEventHandler, ExecuteProcess
 from launch.actions import DeclareLaunchArgument,TimerAction,IncludeLaunchDescription
 from launch.substitutions import LaunchConfiguration
 from launch.substitutions import LaunchConfiguration, Command
@@ -89,6 +89,27 @@ def generate_launch_description():
         )
     )
 
+    # ZeroSetter 写入的是 install 空间的 motors.yaml，
+    # 此处回调将其同步回 src 源目录，避免 colcon build 后丢失校准结果
+    install_motors = os.path.join(pkg_share, "parameters", "motors.yaml")
+    src_motors = os.path.join(
+        os.path.dirname(__file__), "..", "parameters", "motors.yaml"
+    )
+    src_motors = os.path.abspath(src_motors)
+
+    sync_motors_yaml = ExecuteProcess(
+        cmd=["cp", install_motors, src_motors],
+        name="sync_motors_yaml",
+        output="screen"
+    )
+
+    event_handler_sync = RegisterEventHandler(
+        event_handler=OnProcessExit(
+            target_action=zeroSetter_node,
+            on_exit=[sync_motors_yaml]
+        )
+    )
+
     event_handler2 = RegisterEventHandler(
         event_handler=OnProcessExit(
             target_action=controler_spawner,
@@ -102,6 +123,7 @@ def generate_launch_description():
 
             statepub_node,
             zeroSetter_node,
+            event_handler_sync,
             event_handler0,
             event_handler1,
             event_handler2,
