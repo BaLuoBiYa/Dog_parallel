@@ -56,10 +56,15 @@ namespace Dog8Dof {
 
         /**
          * @brief 切换到跳跃步态
-         * @param jumpLength  期望跳跃水平距离 (mm)
-         * @param jumpHeight  期望相对地面最大跳跃高度 (mm)
+         * @param parID 跳跃配置参数索引（对应 YAML 中的 key，由上位机通过 GaitTwist.step_height 传入）
+         * @note 跳跃步态一旦进入不可打断，直到完成才回落 Stand
          */
-        bool setJumpGait(float jumpLength, float jumpHeight);
+        bool setJumpGait(uint8_t parID);
+
+        /**
+         * @brief 查询是否正在执行跳跃（用于上层阻止打断）
+         */
+        bool isJumping() const;
 
         // ================================================================
         //  初始化 & 周期更新

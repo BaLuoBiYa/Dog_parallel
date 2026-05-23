@@ -171,6 +171,14 @@ namespace Dog8Dof {
     bool TrajectoryTrackerSingle::applyCommand(const dog_msg::msg::GaitTwist &msg) {
         using GT = dog_msg::msg::GaitTwist;
 
+        // ---- 跳跃保护：任何非 JUMP 命令在跳跃未完成时直接忽略 ----
+        if (msg.gait != GT::JUMP && LF_->isJumping()) {
+            RCLCPP_WARN(this->get_node()->get_logger(),
+                        "Jump in progress, ignoring non-jump command (gait=%d)",
+                        msg.gait);
+            return true;
+        }
+
         GaitParameters params[4];
         if (!converter_.convert(msg, params)) {
             RCLCPP_WARN(this->get_node()->get_logger(),
@@ -195,7 +203,14 @@ namespace Dog8Dof {
             break;
         }
         case GT::JUMP: {
-            LF_->setJumpGait(params[0].stepLength, params[0].stepHeight);
+            const uint8_t parID = static_cast<uint8_t>(msg.step_height);
+            if (!LF_->setJumpGait(parID)) {
+                RCLCPP_WARN(this->get_node()->get_logger(),
+                            "Jump gait activation failed (parID=%d), falling to "
+                            "stand",
+                            parID);
+                return switchToStandMode();
+            }
             currentMode_ = ControlMode::JUMP;
             break;
         }

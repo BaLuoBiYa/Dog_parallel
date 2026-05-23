@@ -1,4 +1,6 @@
 #include "dog_trajectory/jumpTrajectory.hpp"
+#include "dog_tools/quinticPolynomial.hpp"
+#include <cmath>
 
 namespace Dog8Dof {
 
@@ -109,10 +111,21 @@ namespace Dog8Dof {
                     "CROUCH phase should be initialized in generate(), not get()!");
                 // CROUCH从generate()开始，不可能在get()中切换进入，若切换到CROUCH说明generate()未正确调用，抛出异常
                 break;
-            case PUSH:
+            case PUSH: {
                 phase_ = PUSH;
-                // 进入 PUSH：TODO --- IGNORE ---
+                Body startState = *currentTip;
+                Body endState =
+                    getFlightTarget(*currentTip, param.launchAngle, param.launchSpeed);
+                pushPlanner_ = std::make_unique<PushPlanner>(startState,
+                                                             endState,
+                                                             currentTime.seconds(),
+                                                             param.pushDuration,
+                                                             Const::BODY_MASS,
+                                                             param.pushKp,
+                                                             param.pushKd);
+                target_ = pushPlanner_->get(currentTime);
                 break;
+            }
             case FLIGHT:
                 smooth_->configure(jumpToStandParams(param, param.flightDuration),
                                    -currentTip->pos[0],
@@ -129,6 +142,7 @@ namespace Dog8Dof {
                 break;
             case ABSORPTION:
                 idelTipState_ = *currentTip;
+                target_ = getAbsorptionTarget(param.absorbDamp);
                 phase_ = ABSORPTION;
                 break;
             case RECOVER:
@@ -165,7 +179,8 @@ namespace Dog8Dof {
             // 这三个阶段都使用 smooth_ 生成轨迹，且以理想状态
             // 的输出作为状态追踪锚点，确保平滑过渡
         case PUSH:
-            // PUSH阶段轨迹生成：TODO --- IGNORE ---
+            target_ = pushPlanner_->get(currentTime);
+            idelTipState_ = Body(target_.pos, target_.vel, target_.tau);
             break;
         case ABSORPTION:
             target_ = getAbsorptionTarget(param.absorbDamp);
@@ -221,23 +236,109 @@ namespace Dog8Dof {
         return absorptionTarget;
     }
 
+    Body JumpTrajectory::getFlightTarget(const Body &currentTip,
+                                         float launchAngle,
+                                         float launchSpeed) {
+        Body flightTarget;
+        const float tanA = std::tan(launchAngle);
+        // 水平分量（防止 tan → 0 导致除零）
+        if (std::abs(tanA) > 1e-6f) {
+            flightTarget.pos[0] =
+                currentTip.pos[0] + parameters_[currentParID_].finishZ / tanA;
+        } else {
+            flightTarget.pos[0] = currentTip.pos[0];
+        }
+        // 垂直分量
+        flightTarget.pos[2] = parameters_[currentParID_].finishZ;
+        flightTarget.linerVel[0] = launchSpeed * std::cos(launchAngle);
+        flightTarget.linerVel[2] = launchSpeed * std::sin(launchAngle);
+        flightTarget.tau.setZero();
+        return flightTarget;
+    }
+
+    // =========================================================================
+    //  PushPlanner —— 基于 QuinticPolynomial 的五次多项式轨迹规划
+    //  边界条件：a(0)=0, a(T)=0 → 足端始终力为零
+    //  足端力：F_perLeg(t) = massPerLeg · a(t)，四足均分，满足 ∫₀ᵀ 4F dt = M·ΔV
+    // =========================================================================
+    JumpTrajectory::PushPlanner::PushPlanner(const Body &startState,
+                                             const Body &targetState,
+                                             const float &startTime,
+                                             float duration,
+                                             float mass,
+                                             float kp,
+                                             float kd)
+        : startState_(startState), startTime_(startTime), duration_(duration),
+          massPerLeg_(mass / 4.0f) {
+        target_.kp[0] = kp;
+        target_.kp[1] = kp;
+        target_.kd[0] = kd;
+        target_.kd[1] = kd;
+
+        // 边界条件：[pos, vel, acc] → a(0)=0, a(T)=0 保证始终力为零
+        // X 轴
+        coeff_[0] = QuinticPolynomial::computeCoefficients(
+            {startState_.pos[0], startState_.linerVel[0], 0.0f},
+            {targetState.pos[0], targetState.linerVel[0], 0.0f},
+            duration_);
+        // Z 轴
+        coeff_[1] = QuinticPolynomial::computeCoefficients(
+            {startState_.pos[2], startState_.linerVel[2], 0.0f},
+            {targetState.pos[2], targetState.linerVel[2], 0.0f},
+            duration_);
+    }
+
+    TrajectoryPoint JumpTrajectory::PushPlanner::get(const rclcpp::Time &currentTime) {
+        float t = static_cast<float>(currentTime.seconds() - startTime_);
+        t = std::clamp(t, 0.0f, duration_);
+
+        TrajectoryPoint out;
+
+        // X 轴
+        out.pos[0] = QuinticPolynomial::evaluatePos(coeff_[0], t);
+        out.vel[0] = QuinticPolynomial::evaluateVel(coeff_[0], t);
+        out.tau[0] = massPerLeg_ * QuinticPolynomial::evaluateAcc(coeff_[0], t);
+        if (!std::isfinite(out.tau[0])) {
+            out.tau[0] = 0.0f;
+        }
+
+        // Z 轴
+        out.pos[2] = QuinticPolynomial::evaluatePos(coeff_[1], t);
+        out.vel[2] = QuinticPolynomial::evaluateVel(coeff_[1], t);
+        out.tau[2] = massPerLeg_ * QuinticPolynomial::evaluateAcc(coeff_[1], t);
+        if (!std::isfinite(out.tau[2])) {
+            out.tau[2] = 0.0f;
+        }
+
+        // Y 轴保持不动
+        out.pos[1] = startState_.pos[1];
+        out.vel[1] = 0.0f;
+        out.tau[1] = 0.0f;
+
+        out.kp = target_.kp;
+        out.kd = target_.kd;
+
+        return out;
+    }
+
 } // namespace Dog8Dof
 
 namespace YAML {
     template <> struct convert<Dog8Dof::JumpTrajectory::parameters_t> {
         static Node encode(const Dog8Dof::JumpTrajectory::parameters_t &rhs) {
             Node node;
-            node["launchSpeed"] = rhs.launchSpeed;
-            node["launchAngle"] = rhs.launchAngle;
             node["smoothKp"] = rhs.smoothKp;
             node["smoothKd"] = rhs.smoothKd;
 
             node["crouchDuration"] = rhs.crouchDuration;
 
+            node["launchSpeed"] = rhs.launchSpeed;
+            node["launchAngle"] = rhs.launchAngle;
             node["pushDuration"] = rhs.pushDuration;
             node["pushKp"] = rhs.pushKp;
             node["pushKd"] = rhs.pushKd;
             node["startZ"] = rhs.startZ;
+            node["finishZ"] = rhs.finishZ;
 
             node["flightDuration"] = rhs.flightDuration;
 
@@ -250,17 +351,18 @@ namespace YAML {
         }
 
         static bool decode(const Node &node, Dog8Dof::JumpTrajectory::parameters_t &rhs) {
-            rhs.launchSpeed = node["launchSpeed"].as<float>(0.0f);
-            rhs.launchAngle = node["launchAngle"].as<float>(3.0f);
             rhs.smoothKp = node["smoothKp"].as<float>(2.0f);
             rhs.smoothKd = node["smoothKd"].as<float>(0.02f);
 
             rhs.crouchDuration = node["crouchDuration"].as<float>(0.20f);
 
+            rhs.launchSpeed = node["launchSpeed"].as<float>(0.0f);
+            rhs.launchAngle = node["launchAngle"].as<float>(3.0f);
             rhs.pushDuration = node["pushDuration"].as<float>(0.15f);
             rhs.pushKp = node["pushKp"].as<float>(3.0f);
             rhs.pushKd = node["pushKd"].as<float>(0.05f);
             rhs.startZ = node["startZ"].as<float>(30.0f);
+            rhs.finishZ = node["finishZ"].as<float>(100.0f);
 
             rhs.flightDuration = node["flightDuration"].as<float>(0.30f);
 
