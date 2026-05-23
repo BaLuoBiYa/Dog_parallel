@@ -36,6 +36,14 @@ namespace Dog8Dof {
               linerVel(Eigen::Vector3f::Zero()), angularVel(Eigen::Vector3f::Zero()),
               tau(Eigen::Vector3f::Zero()) {
         }
+
+        Body(const Eigen::Vector3f &pos,
+             const Eigen::Vector3f &linerVel,
+             const Eigen::Vector3f &tau,
+             std::string parent = "base")
+            : parent(parent), pos(pos), rot(Eigen::Matrix3f::Zero()), linerVel(linerVel),
+              angularVel(Eigen::Vector3f::Zero()), tau(tau) {
+        }
     };
 
     enum Gait {

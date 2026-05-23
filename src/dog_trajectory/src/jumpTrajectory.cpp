@@ -1,350 +1,273 @@
-/**
- * @file jumpTrajectory.cpp
- * @brief JumpTrajectory — 三段式跳跃步态，全髋坐标系输出
- *
- * 坐标系：Z=0 为髋部，正 Z 向下。
- *
- * 公式：
- *   起跳垂直速度： v_z_to = sqrt(2*g*H_max)
- *   飞行时间：T_flight = 2*v_z_to/g
- *   水平蹬地距离：L_push = min(jumpLength * 0.8, 100)
- *   水平蹬地速度：v_x = -L_push / T_push
- *
- * 各阶段（髋系坐标）：
- *   PUSH_OFF  X: 五次多项式，x0 → x0-L_push，v=0→-v_x
- *             Z: 下蹲段(z0→z0+Δz,零速) + 伸展段(→z0-ε, v=-v_z_to)
- *   FLIGHT    X: 五次多项式，从push_end_x → x0（对称回落点），v=-v_x→0
- *             Z: 基线五次 + 拱形叠加
- *   ABSORPTION 世界锁定 → 髋系补偿 + 腿长压缩恢复曲线
- */
-
 #include "dog_trajectory/jumpTrajectory.hpp"
-#include "dog_tools/quinticPolynomial.hpp"
-#include <cmath>
 
 namespace Dog8Dof {
 
-    // =========================================================================
-    //  quinticFromTo6 — 便捷五次多项式系数求解
-    // =========================================================================
-    Eigen::Matrix<float, 6, 1> JumpTrajectory::quinticFromTo6(
-        float p0, float v0, float a0, float pT, float vT, float aT, float T) {
-        return QuinticPolynomial::computeCoefficients({p0, v0, a0}, {pT, vT, aT}, T);
-    }
-
-    // =========================================================================
-    //  构造 & 参数
-    // =========================================================================
     JumpTrajectory::JumpTrajectory(const std::string &configPath, rclcpp::Duration period)
         : BaseTrajectory(configPath, period) {
-        if (!reloadParameters())
-            throw std::invalid_argument("JumpTrajectory: YAML load failed");
+        reloadParameters();
     }
 
     bool JumpTrajectory::reloadParameters() {
         configFile_ = YAML::LoadFile(configPath_);
-        try {
-            parameters_ = configFile_.as<parameters_t>();
-        } catch (const YAML::Exception &e) {
-            RCLCPP_ERROR(logger_, "YAML: %s", e.what());
-            return false;
+        for (const auto &node : configFile_) {
+            uint8_t parID = node.first.as<uint8_t>();
+            try {
+                parameters_[parID] = node.second.as<parameters_t>();
+            } catch (const YAML::Exception &e) {
+                RCLCPP_ERROR(
+                    logger_, "YAML Error in parameter ID %d: %s", parID, e.what());
+                return false;
+            }
         }
+
+        // 构造内部 StandTrajectory（同路径 YAML 可能不是 Stand 格式，忽略异常即可）
+        try {
+            smooth_ = std::make_unique<StandTrajectory>(
+                configPath_, rclcpp::Duration::from_nanoseconds(controlDurationNanoSec_));
+        } catch (const std::invalid_argument &) {
+            // Jump YAML 不支持 StandTrajectory 直接反序列化，后续通过 configure() 设置
+        }
+
         return true;
     }
 
-    bool JumpTrajectory::setTarget(float jumpLength, float jumpHeight) {
-        jumpLength_ = jumpLength;
-        jumpHeight_ = jumpHeight;
+    bool JumpTrajectory::setTarget(uint8_t parID) {
+        if (phase_ != FINISHED) {
+            RCLCPP_WARN(logger_, "Cannot set new target while trajectory is active.");
+            return false;
+        }
+        phase_ = CROUCH; // 从蹲伏开始
+        isInit_ = false;
+        targetSet_ = true;
+        currentParID_ = parID;
         return true;
+    }
+
+    // ---- 参数映射：Jump → Stand -------
+    static StandTrajectory::parameters_t
+    jumpToStandParams(const JumpTrajectory::parameters_t &jp, float duration) {
+        StandTrajectory::parameters_t sp;
+        sp.transitionTime = duration;
+        sp.transitionKp = jp.smoothKp;
+        sp.transitionKd = jp.smoothKd;
+        sp.standKp = jp.smoothKp;
+        sp.standKd = jp.smoothKd;
+        sp.transitionVelMax = 500.0f;
+        sp.reachThresholdSQ = 0.0001f;
+        sp.stepHeightFactor = 0.0f; // 纯 Z 轴运动，无需拱形
+        sp.minReplanTime = 0.02f;
+        return sp;
     }
 
     // =========================================================================
-    //  generate() — 初始化跳跃
+    //  generate 跳跃步态必然从 CROUCH 阶段开始，委托 StandTrajectory 生成过渡轨迹
     // =========================================================================
     TrajectoryPoint JumpTrajectory::generate(const Body &currentTip,
                                              const rclcpp::Time now) {
-        finished_ = false;
-        lastUpdateTime_ = now;
-        phase_ = PUSH_OFF;
-        t_push_ = 0.0f;
-        t_flight_ = 0.0f;
-        t_absorb_ = 0.0f;
 
-        constexpr float g = 9.81f * 1000.0f; // mm/s²
-        const float pushDur = parameters_.pushDuration;
-        const float crouchFrac = parameters_.crouchFraction;
-
-        // ---- 时间参数 ----
-        const float vZTakeoff = std::sqrt(2.0f * g * jumpHeight_);
-        const float TFlight = 2.0f * vZTakeoff / g;
-
-        // ---- 水平蹬地参数 ----
-        const float lPush = std::min(jumpLength_ * 0.8f, 100.0f);
-        const float vX = lPush / pushDur; // 大小（正）
-        const float xEnd = currentTip.pos[0] - lPush;
-
-        // ---- 蹬地 Z 参数 ----
-        // Z=0 为髋部，正 Z 向下。下蹲=腿折叠=Z减小（靠近髋）
-        const float xStart = currentTip.pos[0];
-        const float zStart = currentTip.pos[2];
-        const float zBottom = zStart - parameters_.compressDepth; // 下蹲压缩 (Z↓)
-        const float zPushEnd = zStart; // 伸展回到站立腿长
-
-        T_push_ = pushDur;
-        T_crouch_ = pushDur * crouchFrac;
-        T_extend_ = pushDur - T_crouch_;
-        x_rel_0_ = currentTip.pos[0];
-        z_rel_0_ = zStart;
-        push_end_x_ = xEnd;
-        push_end_vel_x_ = -vX;
-        push_end_vel_z_ = vZTakeoff; // 蹬地向下伸展 = 正 Z 速度
-
-        // ---- 蹬地多项式系数 ----
-        // X: 静止 → 向后加速
-        coeff_push_x_ = quinticFromTo6(xStart, 0, 0, xEnd, -vX, 0, T_push_);
-        // Z 下蹲: 零速 → 零速
-        coeff_push_z1_ = quinticFromTo6(zStart, 0, 0, zBottom, 0, 0, T_crouch_);
-        // Z 伸展: 零速 → 向下蹬地速度
-        coeff_push_z2_ = quinticFromTo6(zBottom, 0, 0, zPushEnd, vZTakeoff, 0, T_extend_);
-
-        // ---- 空中阶段参数 ----
-        T_flight_ = TFlight;
-        x_flight_target_ = xStart;   // 对称回落，髋系 X 回到初始位置
-        z_flight_launch_ = zPushEnd; // 蹬地结束 Z
-        z_flight_land_ = parameters_.legLengthStand;
-        L_stand_ = parameters_.legLengthStand;
-
-        // 空中 X 固定多项式（回放用）：push_end → target
-        coeff_flight_x_ = quinticFromTo6(xEnd, -vX, 0, x_flight_target_, 0, 0, T_flight_);
-
-        // ---- 返回初始点 ----
-        target_.pos.setZero();
-        target_.pos[0] = xStart;
-        target_.pos[2] = zStart;
-        target_.vel.setZero();
-        target_.tau.setZero();
-        target_.kp[0] = parameters_.pushKp;
-        target_.kp[1] = parameters_.pushKp;
-        target_.kd[0] = parameters_.pushKd;
-        target_.kd[1] = parameters_.pushKd;
-
-        RCLCPP_INFO(logger_,
-                    "Jump: L=%.0f H=%.0f T_push=%.3f T_flight=%.3f vZ=%.0f lPush=%.0f",
-                    static_cast<double>(jumpLength_),
-                    static_cast<double>(jumpHeight_),
-                    static_cast<double>(T_push_),
-                    static_cast<double>(T_flight_),
-                    static_cast<double>(vZTakeoff),
-                    static_cast<double>(lPush));
+        if (!targetSet_) {
+            throw std::logic_error("Target not set. Call setTarget() with valid "
+                                   "ID before generate().");
+        }
+        launchTime_ = now; // 记录绝对起点
+        smooth_->configure(jumpToStandParams(parameters_[currentParID_],
+                                             parameters_[currentParID_].crouchDuration),
+                           0.0f,
+                           parameters_[currentParID_].startZ);
+        idelTipState_ = currentTip; // 以当前状态为锚点，生成下蹲过渡;
+        isInit_ = true;
+        target_ = smooth_->generate(currentTip, now);
         return target_;
     }
 
-    // =========================================================================
-    //  get() — 每控制周期入口
-    // =========================================================================
     TrajectoryPoint JumpTrajectory::get(const rclcpp::Time &currentTime,
-                                        const Body * /*currentTip*/) {
+                                        const Body *currentTip) {
+        if (!isInit_) {
+            throw std::logic_error("not init yet. Call generate() before get().");
+        }
+
         const float dt = (currentTime - lastUpdateTime_).seconds();
-        if (dt <= 0.0f)
+        const auto &param = parameters_[currentParID_];
+        if (dt <= 0.0f) {
+            // 同一时刻多次调用，直接返回上次结果
             return target_;
+        }
         lastUpdateTime_ = currentTime;
-        constexpr float eps = 1e-6f;
 
-        float xDes = target_.pos[0], zDes = target_.pos[2];
-        float vxDes = 0.0f, vzDes = 0.0f;
+        if (currentTip == nullptr) {
+            throw std::invalid_argument(
+                "Current tip state is required for JumpTrajectory.");
+        }
 
-        switch (phase_) {
-        // ================================================================
-        case PUSH_OFF: {
-            t_push_ += dt;
-            if (t_push_ >= T_push_ || T_push_ <= eps) {
-                // → FLIGHT
-                xDes = push_end_x_;
-                zDes = z_flight_launch_;
-                vxDes = push_end_vel_x_;
-                vzDes = push_end_vel_z_;
-                t_flight_ = 0.0f;
+        Phase currentPhase = getCurrentPhase(currentTime);
+
+        // 状态切换时的初始化
+        if (currentPhase != phase_) {
+            switch (currentPhase) {
+            case CROUCH:
+                throw std::logic_error(
+                    "CROUCH phase should be initialized in generate(), not get()!");
+                // CROUCH从generate()开始，不可能在get()中切换进入，若切换到CROUCH说明generate()未正确调用，抛出异常
+                break;
+            case PUSH:
+                phase_ = PUSH;
+                // 进入 PUSH：TODO --- IGNORE ---
+                break;
+            case FLIGHT:
+                smooth_->configure(jumpToStandParams(param, param.flightDuration),
+                                   -currentTip->pos[0],
+                                   currentTip->pos[2]);
+                // 进入
+                // FLIGHT：以当前状态为起点，水平位置反向，高度保持不变，过渡到冲击吸收
+
+                target_ = smooth_->generate(*currentTip, currentTime);
+                idelTipState_ = Body(target_.pos,
+                                     target_.vel,
+                                     target_.tau); // 以站立过渡的初始点为新状态锚点
+
                 phase_ = FLIGHT;
-            } else if (t_push_ <= T_crouch_) {
-                xDes = QuinticPolynomial::evaluatePos(coeff_push_x_, t_push_);
-                vxDes = QuinticPolynomial::evaluateVel(coeff_push_x_, t_push_);
-                zDes = QuinticPolynomial::evaluatePos(coeff_push_z1_, t_push_);
-                vzDes = QuinticPolynomial::evaluateVel(coeff_push_z1_, t_push_);
-            } else {
-                const float tL = t_push_ - T_crouch_;
-                xDes = QuinticPolynomial::evaluatePos(coeff_push_x_, t_push_);
-                vxDes = QuinticPolynomial::evaluateVel(coeff_push_x_, t_push_);
-                zDes = QuinticPolynomial::evaluatePos(coeff_push_z2_, tL);
-                vzDes = QuinticPolynomial::evaluateVel(coeff_push_z2_, tL);
-            }
-            target_.kp[0] = parameters_.pushKp;
-            target_.kp[1] = parameters_.pushKp;
-            target_.kd[0] = parameters_.pushKd;
-            target_.kd[1] = parameters_.pushKd;
-        } break;
-
-        // ================================================================
-        case FLIGHT: {
-            t_flight_ += dt;
-            if (t_flight_ >= T_flight_ || T_flight_ <= eps) {
-                // → ABSORPTION
-                xDes = x_flight_target_;
-                zDes = z_flight_land_;
-                vxDes = 0.0f;
-                vzDes = 0.0f;
-                L_land_ = z_flight_land_;
-                t_absorb_ = 0.0f;
-                T_absorb_ = parameters_.absorbDuration;
+                break;
+            case ABSORPTION:
+                idelTipState_ = *currentTip;
                 phase_ = ABSORPTION;
-            } else {
-                xDes = QuinticPolynomial::evaluatePos(coeff_flight_x_, t_flight_);
-                vxDes = QuinticPolynomial::evaluateVel(coeff_flight_x_, t_flight_);
-                zDes = flightZ(t_flight_,
-                               T_flight_,
-                               z_flight_launch_,
-                               z_flight_land_,
-                               parameters_.flightClearance);
-                // Z 速度数值微分
-                const float zp = flightZ(std::max(0.0f, t_flight_ - dt),
-                                         T_flight_,
-                                         z_flight_launch_,
-                                         z_flight_land_,
-                                         parameters_.flightClearance);
-                vzDes = (zDes - zp) / std::max(dt, eps);
-            }
-            target_.kp[0] = parameters_.flightKp;
-            target_.kp[1] = parameters_.flightKp;
-            target_.kd[0] = parameters_.flightKd;
-            target_.kd[1] = parameters_.flightKd;
-        } break;
+                break;
+            case RECOVER:
+                smooth_->configure(jumpToStandParams(param, param.recoverDuration),
+                                   0.0f,
+                                   param.legLengthStand);
+                // 进入 RECOVER：以当前状态为起点，水平位置回到目标，高度过渡到正常站立
+                target_ = smooth_->generate(*currentTip, currentTime);
+                idelTipState_ = Body(target_.pos,
+                                     target_.vel,
+                                     target_.tau); // 以飞行过渡的初始点为新状态
 
-        // ================================================================
-        case ABSORPTION: {
-            t_absorb_ += dt;
-            if (t_absorb_ >= T_absorb_ || T_absorb_ <= eps) {
-                // 完成
-                xDes = x_flight_target_;
-                zDes = parameters_.legLengthStand;
-                vxDes = 0.0f;
-                vzDes = 0.0f;
-                phase_ = FINISHED;
+                phase_ = RECOVER;
+                break;
+            case FINISHED:
                 finished_ = true;
-            } else {
-                // 髋系 X 恒定 = 落地时髋系坐标（世界锁定 → 髋系不变）
-                xDes = x_flight_target_;
-                vxDes = 0.0f;
-
-                // Z: 腿长压缩恢复曲线
-                zDes = absorbLegLength(t_absorb_,
-                                       T_absorb_,
-                                       L_land_,
-                                       parameters_.legLengthStand,
-                                       parameters_.absorbCompress);
-                const float zp = absorbLegLength(std::max(0.0f, t_absorb_ - dt),
-                                                 T_absorb_,
-                                                 L_land_,
-                                                 parameters_.legLengthStand,
-                                                 parameters_.absorbCompress);
-                vzDes = (zDes - zp) / std::max(dt, eps);
+                targetSet_ = false;
+                isInit_ = false;
+                // 进入 FINISHED：保持最后状态不变
+                break;
             }
-            target_.kp[0] = parameters_.absorbKp;
-            target_.kp[1] = parameters_.absorbKp;
-            target_.kd[0] = parameters_.absorbKd;
-            target_.kd[1] = parameters_.absorbKd;
-        } break;
 
+            return target_;
+            // 处理完状态切换后直接返回，等待下一周期根据新状态生成轨迹
+        }
+
+        switch (currentPhase) {
+        case CROUCH:
+        case FLIGHT:
+        case RECOVER:
+            target_ = smooth_->get(currentTime, &idelTipState_);
+            idelTipState_ = Body(target_.pos, target_.vel, target_.tau);
+            break;
+            // 这三个阶段都使用 smooth_ 生成轨迹，且以理想状态
+            // 的输出作为状态追踪锚点，确保平滑过渡
+        case PUSH:
+            // PUSH阶段轨迹生成：TODO --- IGNORE ---
+            break;
+        case ABSORPTION:
+            target_ = getAbsorptionTarget(param.absorbDamp);
+            idelTipState_ = *currentTip;
+            // 被动阻尼，没有明确目标位置
+            break;
         case FINISHED:
+            isInit_ = false;
+            targetSet_ = false;
+            RCLCPP_INFO(logger_, "Jump Finished");
             break;
         }
-
-        target_.pos[0] = xDes;
-        target_.pos[1] = 0.0f;
-        target_.pos[2] = zDes;
-        target_.vel[0] = vxDes;
-        target_.vel[1] = 0.0f;
-        target_.vel[2] = vzDes;
-        target_.tau.setZero();
         return target_;
     }
 
-    // =========================================================================
-    //  flightZ — 空中 Z 轨迹：五次基线(保留起跳速度) + 拱形叠加
-    //
-    //  基线: 起点(起点z, 起跳速度vzLauch, 0)→终点(zLand, 0, 0)
-    //  拱形: arch(t) = H * 16*(t/T)²*(1-t/T)², peak=H at φ=0.5
-    //  抬腿 = Z 减小（靠近髋部）→ z = base(t) - arch(t)
-    // =========================================================================
-    float JumpTrajectory::flightZ(
-        float t, float T, float zStart, float zLand, float H_air) const {
-        if (T < 1e-6f)
-            return zLand;
+    JumpTrajectory::Phase
+    JumpTrajectory::getCurrentPhase(const rclcpp::Time &currentTime) {
+        const float elapsed = (currentTime - launchTime_).seconds();
+        const auto &param = parameters_[currentParID_];
 
-        // 基线：起跳速度 → 零速落地
-        const Eigen::Matrix<float, 6, 1> baseCoeff =
-            quinticFromTo6(zStart, push_end_vel_z_, 0, zLand, 0, 0, T);
-        const float baseZ = QuinticPolynomial::evaluatePos(baseCoeff, t);
+        // 预计算累计边界
+        const float t_crouch = param.crouchDuration;
+        const float t_push = t_crouch + param.pushDuration;
+        const float t_flight = t_push + param.flightDuration;
+        const float t_absorb = t_flight + param.absorbDuration;
+        const float t_recover = t_absorb + param.recoverDuration;
 
-        const float frac = t / T;
-        const float arch = H_air * 16.0f * frac * frac * (1.0f - frac) * (1.0f - frac);
-
-        return baseZ - arch;
+        if (elapsed <= t_crouch) {
+            return CROUCH;
+        } else if (elapsed <= t_push) {
+            return PUSH;
+        } else if (elapsed <= t_flight) {
+            return FLIGHT;
+        } else if (elapsed <= t_absorb) {
+            return ABSORPTION;
+        } else if (elapsed <= t_recover) {
+            return RECOVER;
+        } else {
+            return FINISHED;
+        }
     }
 
-    // =========================================================================
-    //  absorbLegLength — 缓冲阶段腿长曲线
-    //  前半段 L0→(L_stand-deltaL)，后半段 →L_stand，零点速边界，C² 拼接
-    // =========================================================================
-    float JumpTrajectory::absorbLegLength(
-        float t, float T, float L0, float L_stand, float deltaL) const {
-        const float halfT = T * 0.5f;
-        const float L_mid = L_stand - deltaL;
-        if (t <= halfT) {
-            return QuinticPolynomial::evaluatePos(
-                quinticFromTo6(L0, 0, 0, L_mid, 0, 0, halfT), t);
-        }
-        return QuinticPolynomial::evaluatePos(
-            quinticFromTo6(L_mid, 0, 0, L_stand, 0, 0, halfT), t - halfT);
+    TrajectoryPoint JumpTrajectory::getAbsorptionTarget(float absorbDamp) {
+        TrajectoryPoint absorptionTarget;
+        absorptionTarget.pos = idelTipState_.pos;
+        absorptionTarget.vel.setZero();
+        absorptionTarget.tau.setZero();
+        absorptionTarget.kp[0] = 0.0f;
+        absorptionTarget.kp[1] = 0.0f;
+        absorptionTarget.kd[0] = absorbDamp;
+        absorptionTarget.kd[1] = absorbDamp;
+        // 生成一个以当前状态为锚点，零速度，零力矩，纯阻尼控制的吸收目标
+        return absorptionTarget;
     }
 
 } // namespace Dog8Dof
 
-// =========================================================================
-//  YAML 转换
-// =========================================================================
 namespace YAML {
     template <> struct convert<Dog8Dof::JumpTrajectory::parameters_t> {
         static Node encode(const Dog8Dof::JumpTrajectory::parameters_t &rhs) {
             Node node;
+            node["launchSpeed"] = rhs.launchSpeed;
+            node["launchAngle"] = rhs.launchAngle;
+            node["smoothKp"] = rhs.smoothKp;
+            node["smoothKd"] = rhs.smoothKd;
+
+            node["crouchDuration"] = rhs.crouchDuration;
+
             node["pushDuration"] = rhs.pushDuration;
-            node["crouchFraction"] = rhs.crouchFraction;
             node["pushKp"] = rhs.pushKp;
             node["pushKd"] = rhs.pushKd;
-            node["compressDepth"] = rhs.compressDepth;
-            node["toeOffLift"] = rhs.toeOffLift;
-            node["flightKp"] = rhs.flightKp;
-            node["flightKd"] = rhs.flightKd;
-            node["flightClearance"] = rhs.flightClearance;
+            node["startZ"] = rhs.startZ;
+
+            node["flightDuration"] = rhs.flightDuration;
+
             node["absorbDuration"] = rhs.absorbDuration;
-            node["absorbKp"] = rhs.absorbKp;
-            node["absorbKd"] = rhs.absorbKd;
-            node["absorbCompress"] = rhs.absorbCompress;
+            node["absorbDamp"] = rhs.absorbDamp;
+
+            node["recoverDuration"] = rhs.recoverDuration;
             node["legLengthStand"] = rhs.legLengthStand;
             return node;
         }
+
         static bool decode(const Node &node, Dog8Dof::JumpTrajectory::parameters_t &rhs) {
+            rhs.launchSpeed = node["launchSpeed"].as<float>(0.0f);
+            rhs.launchAngle = node["launchAngle"].as<float>(3.0f);
+            rhs.smoothKp = node["smoothKp"].as<float>(2.0f);
+            rhs.smoothKd = node["smoothKd"].as<float>(0.02f);
+
+            rhs.crouchDuration = node["crouchDuration"].as<float>(0.20f);
+
             rhs.pushDuration = node["pushDuration"].as<float>(0.15f);
-            rhs.crouchFraction = node["crouchFraction"].as<float>(0.30f);
             rhs.pushKp = node["pushKp"].as<float>(3.0f);
             rhs.pushKd = node["pushKd"].as<float>(0.05f);
-            rhs.compressDepth = node["compressDepth"].as<float>(30.0f);
-            rhs.toeOffLift = node["toeOffLift"].as<float>(3.0f);
-            rhs.flightKp = node["flightKp"].as<float>(1.5f);
-            rhs.flightKd = node["flightKd"].as<float>(0.03f);
-            rhs.flightClearance = node["flightClearance"].as<float>(20.0f);
+            rhs.startZ = node["startZ"].as<float>(30.0f);
+
+            rhs.flightDuration = node["flightDuration"].as<float>(0.30f);
+
             rhs.absorbDuration = node["absorbDuration"].as<float>(0.10f);
-            rhs.absorbKp = node["absorbKp"].as<float>(4.0f);
-            rhs.absorbKd = node["absorbKd"].as<float>(0.08f);
-            rhs.absorbCompress = node["absorbCompress"].as<float>(25.0f);
+            rhs.absorbDamp = node["absorbDamp"].as<float>(4.0f);
+
+            rhs.recoverDuration = node["recoverDuration"].as<float>(0.25f);
             rhs.legLengthStand = node["legLengthStand"].as<float>(270.0f);
             return true;
         }
