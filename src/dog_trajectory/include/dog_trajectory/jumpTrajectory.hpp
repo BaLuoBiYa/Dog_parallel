@@ -63,8 +63,8 @@ namespace Dog8Dof {
         };
 
       private:
-        uint8_t currentParID_ = 0;
-        std::map<uint8_t, parameters_t> parameters_;
+        parameters_t currentPar_;
+        std::vector<std::optional<parameters_t>> parameters_;
         Phase phase_ = FINISHED;
         TrajectoryPoint target_;
         rclcpp::Time lastUpdateTime_;

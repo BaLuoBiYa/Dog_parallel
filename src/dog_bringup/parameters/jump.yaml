@@ -1,6 +1,6 @@
 0:
-  launchSpeed : 0.0
-  launchAngle : 1.0
+  launchSpeed : 1.5
+  launchAngle : -1.0
   smoothKp : 0.5
   smoothKd : 0.01
   crouchDuration: 1.0

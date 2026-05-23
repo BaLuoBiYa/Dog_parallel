@@ -117,7 +117,7 @@ int main(int argc, char **argv) {
     const int64_t dtNs = period.nanoseconds();
 
     // 运行足够长时间覆盖全部阶段（crouch + push + flight + absorb + recover + 额外余量）
-    const double totalSimTime = 2.0;
+    const double totalSimTime = 5.0;
     unsigned int step = 0;
 
     JumpTrajectory::Phase prevPhase = JumpTrajectory::CROUCH;

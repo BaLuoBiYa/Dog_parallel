@@ -11,13 +11,15 @@ namespace Dog8Dof {
 
     bool JumpTrajectory::reloadParameters() {
         configFile_ = YAML::LoadFile(configPath_);
+        parameters_.clear();
+        parameters_.resize(256); // 预分配足够空间，ID 范围 0-255
         for (const auto &node : configFile_) {
             uint8_t parID = node.first.as<uint8_t>();
             try {
                 parameters_[parID] = node.second.as<parameters_t>();
             } catch (const YAML::Exception &e) {
                 RCLCPP_ERROR(
-                    logger_, "YAML Error in parameter ID %d: %s", parID, e.what());
+                    logger_, "YAML Error in currentPar_eter ID %d: %s", parID, e.what());
                 return false;
             }
         }
@@ -38,16 +40,37 @@ namespace Dog8Dof {
             RCLCPP_WARN(logger_, "Cannot set new target while trajectory is active.");
             return false;
         }
+        if (parameters_[parID].has_value()) {
+            currentPar_ = parameters_[parID].value();
+        } else {
+            RCLCPP_ERROR(logger_, "parameter ID %d not found in config.", parID);
+            return false;
+        }
+        // 参数合法性校验
+        if (currentPar_.launchSpeed < 0.0f) {
+            RCLCPP_WARN(logger_,
+                        "launchSpeed (%.2f) < 0, clamping to 0. This will result in "
+                        "a vertical-only jump.",
+                        static_cast<double>(currentPar_.launchSpeed));
+            currentPar_.launchSpeed = 0.0f;
+        }
+        if (currentPar_.finishZ <= currentPar_.startZ) {
+            RCLCPP_ERROR(logger_,
+                         "finishZ (%.1f) must be > startZ (%.1f) for a valid jump.",
+                         static_cast<double>(currentPar_.finishZ),
+                         static_cast<double>(currentPar_.startZ));
+            return false;
+        }
+
         phase_ = CROUCH; // 从蹲伏开始
         isInit_ = false;
         targetSet_ = true;
-        currentParID_ = parID;
         return true;
     }
 
     // ---- 参数映射：Jump → Stand -------
     static StandTrajectory::parameters_t
-    jumpToStandParams(const JumpTrajectory::parameters_t &jp, float duration) {
+    jumpToStandcurrentPar_s(const JumpTrajectory::parameters_t &jp, float duration) {
         StandTrajectory::parameters_t sp;
         sp.transitionTime = duration;
         sp.transitionKp = jp.smoothKp;
@@ -55,8 +78,8 @@ namespace Dog8Dof {
         sp.standKp = jp.smoothKp;
         sp.standKd = jp.smoothKd;
         sp.transitionVelMax = 500.0f;
-        sp.reachThresholdSQ = 0.0001f;
-        sp.stepHeightFactor = 0.0f; // 纯 Z 轴运动，无需拱形
+        sp.reachThresholdSQ = 1.0f;
+        sp.stepHeightFactor = jp.airTipLevelFactor;
         sp.minReplanTime = 0.02f;
         return sp;
     }
@@ -72,10 +95,10 @@ namespace Dog8Dof {
                                    "ID before generate().");
         }
         launchTime_ = now; // 记录绝对起点
-        smooth_->configure(jumpToStandParams(parameters_[currentParID_],
-                                             parameters_[currentParID_].crouchDuration),
-                           0.0f,
-                           parameters_[currentParID_].startZ);
+        smooth_->configure(
+            jumpToStandcurrentPar_s(currentPar_, currentPar_.crouchDuration),
+            0.0f,
+            currentPar_.startZ);
         idelTipState_ = currentTip; // 以当前状态为锚点，生成下蹲过渡;
         isInit_ = true;
         target_ = smooth_->generate(currentTip, now);
@@ -89,7 +112,6 @@ namespace Dog8Dof {
         }
 
         const float dt = (currentTime - lastUpdateTime_).seconds();
-        const auto &param = parameters_[currentParID_];
         if (dt <= 0.0f) {
             // 同一时刻多次调用，直接返回上次结果
             return target_;
@@ -114,22 +136,23 @@ namespace Dog8Dof {
             case PUSH: {
                 phase_ = PUSH;
                 Body startState = *currentTip;
-                Body endState =
-                    getFlightTarget(*currentTip, param.launchAngle, param.launchSpeed);
+                Body endState = getFlightTarget(
+                    *currentTip, currentPar_.launchAngle, currentPar_.launchSpeed);
                 pushPlanner_ = std::make_unique<PushPlanner>(startState,
                                                              endState,
                                                              currentTime.seconds(),
-                                                             param.pushDuration,
+                                                             currentPar_.pushDuration,
                                                              Const::BODY_MASS,
-                                                             param.pushKp,
-                                                             param.pushKd);
+                                                             currentPar_.pushKp,
+                                                             currentPar_.pushKd);
                 target_ = pushPlanner_->get(currentTime);
                 break;
             }
             case FLIGHT:
-                smooth_->configure(jumpToStandParams(param, param.flightDuration),
-                                   -currentTip->pos[0],
-                                   currentTip->pos[2]);
+                smooth_->configure(
+                    jumpToStandcurrentPar_s(currentPar_, currentPar_.flightDuration),
+                    -currentTip->pos[0],
+                    currentTip->pos[2]);
                 // 进入
                 // FLIGHT：以当前状态为起点，水平位置反向，高度保持不变，过渡到冲击吸收
 
@@ -142,13 +165,14 @@ namespace Dog8Dof {
                 break;
             case ABSORPTION:
                 idelTipState_ = *currentTip;
-                target_ = getAbsorptionTarget(param.absorbDamp);
+                target_ = getAbsorptionTarget(currentPar_.absorbDamp);
                 phase_ = ABSORPTION;
                 break;
             case RECOVER:
-                smooth_->configure(jumpToStandParams(param, param.recoverDuration),
-                                   0.0f,
-                                   param.legLengthStand);
+                smooth_->configure(
+                    jumpToStandcurrentPar_s(currentPar_, currentPar_.recoverDuration),
+                    0.0f,
+                    currentPar_.legLengthStand);
                 // 进入 RECOVER：以当前状态为起点，水平位置回到目标，高度过渡到正常站立
                 target_ = smooth_->generate(*currentTip, currentTime);
                 idelTipState_ = Body(target_.pos,
@@ -183,7 +207,7 @@ namespace Dog8Dof {
             idelTipState_ = Body(target_.pos, target_.vel, target_.tau);
             break;
         case ABSORPTION:
-            target_ = getAbsorptionTarget(param.absorbDamp);
+            target_ = getAbsorptionTarget(currentPar_.absorbDamp);
             idelTipState_ = *currentTip;
             // 被动阻尼，没有明确目标位置
             break;
@@ -199,14 +223,13 @@ namespace Dog8Dof {
     JumpTrajectory::Phase
     JumpTrajectory::getCurrentPhase(const rclcpp::Time &currentTime) {
         const float elapsed = (currentTime - launchTime_).seconds();
-        const auto &param = parameters_[currentParID_];
 
         // 预计算累计边界
-        const float t_crouch = param.crouchDuration;
-        const float t_push = t_crouch + param.pushDuration;
-        const float t_flight = t_push + param.flightDuration;
-        const float t_absorb = t_flight + param.absorbDuration;
-        const float t_recover = t_absorb + param.recoverDuration;
+        const float t_crouch = currentPar_.crouchDuration;
+        const float t_push = t_crouch + currentPar_.pushDuration;
+        const float t_flight = t_push + currentPar_.flightDuration;
+        const float t_absorb = t_flight + currentPar_.absorbDuration;
+        const float t_recover = t_absorb + currentPar_.recoverDuration;
 
         if (elapsed <= t_crouch) {
             return CROUCH;
@@ -243,13 +266,12 @@ namespace Dog8Dof {
         const float tanA = std::tan(launchAngle);
         // 水平分量（防止 tan → 0 导致除零）
         if (std::abs(tanA) > 1e-6f) {
-            flightTarget.pos[0] =
-                currentTip.pos[0] + parameters_[currentParID_].finishZ / tanA;
+            flightTarget.pos[0] = currentTip.pos[0] + currentPar_.finishZ / tanA;
         } else {
             flightTarget.pos[0] = currentTip.pos[0];
         }
         // 垂直分量
-        flightTarget.pos[2] = parameters_[currentParID_].finishZ;
+        flightTarget.pos[2] = currentPar_.finishZ;
         flightTarget.linerVel[0] = launchSpeed * std::cos(launchAngle);
         flightTarget.linerVel[2] = launchSpeed * std::sin(launchAngle);
         flightTarget.tau.setZero();
