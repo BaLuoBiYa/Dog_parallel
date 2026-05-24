@@ -16,10 +16,30 @@ namespace Dog8Dof {
      */
     class StandTrajectory : public BaseTrajectory {
       public:
+        // 步态参数（从 YAML 加载）
+        struct parameters_t {
+            float standKp = 2.0f;
+            float standKd = 0.01f;
+            float transitionKp = 2.0f;
+            float transitionKd = 0.01f;
+            float transitionVelMax = 500.0f;
+            float reachThresholdSQ = 0.0001f; ///< 到达判定阈值² (mm²)
+            float stepHeightFactor = 0.1f;    ///< 步高 = 水平位移 × 此因子
+            float transitionTime = 5.0f;      ///< 过渡总时间 (s)
+            float minReplanTime = 0.02f;      ///< 最小重规划时间阈值 (s)
+        };
+
         explicit StandTrajectory(const std::string &configPath, rclcpp::Duration period);
 
         /** @brief 设置站立目标位置（机体坐标系） */
         bool setTarget(float tipX, float tipZ);
+
+        /** @brief 编程式配置参数+目标（供其他轨迹类组合使用） */
+        void configure(const parameters_t &params, float targetX, float targetZ) {
+            parameters_ = params;
+            targetTipPos_[0] = targetX;
+            targetTipPos_[1] = targetZ;
+        }
 
         /**
          * @brief 初始化过渡轨迹（以当前足端为起点）
@@ -44,19 +64,6 @@ namespace Dog8Dof {
         bool isHolding() const {
             return phase_ == HOLD;
         }
-
-        /// 步态参数（从 YAML 加载）
-        struct parameters_t {
-            float standKp = 2.0f;
-            float standKd = 0.01f;
-            float transitionKp = 2.0f;
-            float transitionKd = 0.01f;
-            float transitionVelMax = 500.0f;
-            float reachThresholdSQ = 0.0001f; ///< 到达判定阈值² (mm²)
-            float stepHeightFactor = 0.1f;    ///< 步高 = 水平位移 × 此因子
-            float transitionTime = 5.0f;      ///< 过渡总时间 (s)
-            float minReplanTime = 0.02f;      ///< 最小重规划时间阈值 (s)
-        };
 
       private:
         enum Phase { TRANSITION, HOLD };

@@ -1,16 +1,20 @@
-pushDuration: 0.15
-crouchFraction: 0.30
-pushKp: 3.0
-pushKd: 0.05
-compressDepth: 30.0
-toeOffLift: 3.0
+0:
+  launchSpeed : 1.5
+  launchAngle : -1.0
+  smoothKp : 0.5
+  smoothKd : 0.01
+  crouchDuration: 1.0
 
-flightKp: 1.5
-flightKd: 0.03
-flightClearance: 20.0
+  pushDuration : 0.15
+  pushKp : 3.0
+  pushKd : 0.05
+  startZ : 30.0
+  finishZ : 270.0
 
-absorbDuration: 0.10
-absorbKp: 4.0
-absorbKd: 0.08
-absorbCompress: 25.0
-legLengthStand: 270.0
+  flightDuration : 0.50
+
+  absorbDuration : 1.0
+  absorbDamp : 0.1
+
+  recoverDuration : 0.20
+  legLengthStand : 270.0

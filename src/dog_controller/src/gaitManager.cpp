@@ -72,18 +72,23 @@ namespace Dog8Dof {
     // =========================================================================
     //  setJumpGait() — 切换到跳跃步态
     // =========================================================================
-    bool GaitManager::setJumpGait(float jumpLength, float jumpHeight) {
-        if (!jumpTrajectory_->setTarget(jumpLength, jumpHeight)) {
-            throw std::invalid_argument(
-                "JumpTrajectory::setTarget failed (invalid jump parameters)");
+    bool GaitManager::setJumpGait(uint8_t parID) {
+        if (!jumpTrajectory_->setTarget(parID)) {
+            RCLCPP_ERROR(logger_,
+                         "JumpTrajectory::setTarget failed (parID=%d) — is a jump "
+                         "already in progress?",
+                         parID);
+            return false;
         }
         currentTrajectory_ = jumpTrajectory_;
         jumpTrajectory_->generate(currentTip_, clock_->now());
-        RCLCPP_INFO(logger_,
-                    "Jump gait set: length=%.0f height=%.0f",
-                    static_cast<double>(jumpLength),
-                    static_cast<double>(jumpHeight));
+        RCLCPP_INFO(logger_, "Jump gait set: parID=%d", parID);
         return true;
+    }
+
+    bool GaitManager::isJumping() const {
+        return currentTrajectory_ == jumpTrajectory_ &&
+               jumpTrajectory_->getPhase() != JumpTrajectory::FINISHED;
     }
 
     // =========================================================================
@@ -129,8 +134,10 @@ namespace Dog8Dof {
             return false;
         }
 
-        // 2. 在线重规划：目前使用开环模式
-        targetPoint_ = currentTrajectory_->get(clock_->now(), nullptr);
+        // 2. 在线重规划：跳跃模式传入当前足端真值做反馈，其余模式开环
+        targetPoint_ = (currentTrajectory_ == jumpTrajectory_)
+                           ? currentTrajectory_->get(clock_->now(), &currentTip_)
+                           : currentTrajectory_->get(clock_->now(), nullptr);
 
         // 3. 逆运动学：期望足端 → 期望关节角度
         if (!leg_.setTip(targetPoint_.pos, targetPoint_.vel, targetPoint_.tau)) {
