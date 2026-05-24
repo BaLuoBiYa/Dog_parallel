@@ -159,16 +159,18 @@ namespace Dog8Dof {
             return target_;
         }
 
-        // 获取当前 X 状态（优先传感器，其次轨迹内推）
+        // 获取当前 X 状态：位置用传感器修正漂移，速度/加速度用轨迹内推保持一致性
+        //    直接使用传感器速度可能导致与目标状态矛盾，使五次多项式产生大幅度偏移，
+        //    超出腿工作空间 → IK 报不可达。
         float x0, vx0, ax0;
+        // 始终从轨迹反算速度和加速度，保证初始条件与多项式连续
+        vx0 = QuinticPolynomial::evaluateVel(coeff_x_, dt);
+        ax0 = QuinticPolynomial::evaluateAcc(coeff_x_, dt);
         if (currentTip) {
+            // 仅位置使用传感器反馈，修正累积漂移
             x0 = currentTip->pos[0];
-            vx0 = currentTip->linerVel[0];
-            ax0 = QuinticPolynomial::evaluateAcc(coeff_x_, dt);
         } else {
             x0 = QuinticPolynomial::evaluatePos(coeff_x_, dt);
-            vx0 = QuinticPolynomial::evaluateVel(coeff_x_, dt);
-            ax0 = QuinticPolynomial::evaluateAcc(coeff_x_, dt);
         }
 
         float xDes, vxDes, zDes, vzDes;

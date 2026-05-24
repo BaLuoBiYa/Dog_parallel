@@ -48,6 +48,7 @@ namespace Dog8Dof {
             maxRetry_ = root["maxRetry"].as<size_t>(3);
             deactiveDamp_ = root["deactiveDamp"].as<float>(0.1);
             deactiveDampTime_ = root["deactiveDampTime"].as<long>(2);
+            alpha_ = root["lowPassFilterAlpha"].as<float>(0.5f);
 
             for (size_t i = 0; i < 8; ++i) {
                 const YAML::Node joint_node = root[jointNames_[i]];
@@ -63,6 +64,11 @@ namespace Dog8Dof {
 
                 jointMapping_[jointNames_[i]] = static_cast<uint8_t>(id);
                 zeroOffsetByIndex_[i] = offset;
+
+                stPosF_[i] = LowPassFilter<double>(alpha_);
+                stVelF_[i] = LowPassFilter<double>(alpha_);
+                stTauF_[i] = LowPassFilter<double>(alpha_);
+                stTempF_[i] = LowPassFilter<double>(alpha_);
             }
             // 从YAML文件读取参数
 
@@ -196,10 +202,10 @@ namespace Dog8Dof {
         bool hasError = false;
 
         for (size_t i = 0; i < 8; ++i) {
-            stPos_[i] = static_cast<double>(motor_[i].getPos());
-            stVel_[i] = static_cast<double>(motor_[i].getVel());
-            stTau_[i] = static_cast<double>(motor_[i].getTor());
-            stTemp_[i] = static_cast<double>(motor_[i].getTemp());
+            stPos_[i] = stPosF_[i].filter(motor_[i].getPos());
+            stVel_[i] = stVelF_[i].filter(motor_[i].getVel());
+            stTau_[i] = stTauF_[i].filter(motor_[i].getTor());
+            stTemp_[i] = stTempF_[i].filter(motor_[i].getTemp());
 
             goM8010Interface::ErrorCode err = motor_[i].getError();
             if (err == goM8010Interface::ErrorCode::OK) {

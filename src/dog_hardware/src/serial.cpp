@@ -49,16 +49,8 @@ namespace Dog8Dof {
                            size_t timeOutUs,
                            bool lowLatency)
         : io_(), serial_(io_), portName_(portName), recvLength_(recvLength),
-          timeOutUs_(timeOutUs), lowLatency_(lowLatency) {
-        try {
-            serial_.open(portName_);
-            configure_port(baudrate);
-            if (lowLatency_)
-                apply_low_latency();
-        } catch (const boost::system::system_error &e) {
-            throw std::ios_base::failure("SerialPort: failed to open " + portName_ +
-                                         " - " + e.what());
-        }
+          timeOutUs_(timeOutUs), lowLatency_(lowLatency), baudrate_(baudrate) {
+        open_port(baudrate);
     }
 
     SerialPort::~SerialPort() {
@@ -75,6 +67,27 @@ namespace Dog8Dof {
     // ============================================================================
     // 串口配置
     // ============================================================================
+
+    void SerialPort::open_port(uint32_t baudrate) {
+        try {
+            serial_.open(portName_);
+            configure_port(baudrate);
+            if (lowLatency_)
+                apply_low_latency();
+        } catch (const boost::system::system_error &e) {
+            throw std::ios_base::failure("SerialPort: failed to open " + portName_ +
+                                         " - " + e.what());
+        }
+    }
+
+    void SerialPort::reopen() {
+        if (serial_.is_open()) {
+            boost::system::error_code ec;
+            ec = serial_.cancel(ec);
+            ec = serial_.close(ec);
+        }
+        open_port(baudrate_);
+    }
 
     void SerialPort::configure_port(uint32_t baudrate) {
         using namespace boost::asio;

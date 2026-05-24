@@ -39,13 +39,18 @@ namespace Dog8Dof {
                          size_t timeOutUs = 20000,
                          bool lowLatency = true);
 
+        /// 关闭再重新打开串口（清空内核缓冲区，用于 CRC 错误后恢复）
+        void reopen();
+
         // ---- 原始字节 I/O ----
         size_t send(uint8_t *sendMsg, size_t sendLength);
         size_t recv(uint8_t *recvMsg, size_t recvLength);
         size_t recv(uint8_t *recvMsg);
 
         // ---- 高层 send/recv ----
+        /// 发送+接收 原始字节，失败时自动 reopen 重试一次
         bool sendRecv(uint8_t *sendMsg, uint8_t *recvMsg, size_t sendLength);
+        /// 发送 MotorCmd + 接收 MotorData，失败时自动 reopen 重试
         bool sendRecv(MotorCmd *sendMsg, MotorData *recvMsg);
         bool sendRecv(std::vector<MotorCmd> &sendVec, std::vector<MotorData> &recvVec);
 
@@ -56,11 +61,15 @@ namespace Dog8Dof {
         // ---- 串口配置 ----
         void configure_port(uint32_t baudrate);
 
+        // ---- 内部打开 ----
+        void open_port(uint32_t baudrate);
+
         boost::asio::io_context io_;
         boost::asio::serial_port serial_;
         std::string portName_;
         size_t recvLength_;
         size_t timeOutUs_;
         bool lowLatency_;
+        uint32_t baudrate_;
     };
 } // namespace Dog8Dof

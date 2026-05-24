@@ -3,6 +3,7 @@ RS485_Port_Right: /dev/ttyDOGR
 maxRetry: 5
 deactiveDamp: 0.1
 deactiveDampTime: 5
+lowPassFilterAlpha: 0.5
 idleAngle:
   front: 1.88625002
   rear: -0.608749998

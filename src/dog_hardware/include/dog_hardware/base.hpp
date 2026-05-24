@@ -38,24 +38,24 @@ namespace Dog8Dof {
         template <typename T> class LowPassFilter {
           public:
             LowPassFilter(float alpha = 0.5f)
-                : alpha_(alpha), initialized_(false), prev_value_(0.0f) {
+                : alpha_(alpha), initialized_(false), preValue_(0.0f) {
             }
 
             T filter(float value) {
                 if (!initialized_) {
-                    prev_value_ = value;
+                    preValue_ = value;
                     initialized_ = true;
                     return value;
                 }
-                float filtered_value = alpha_ * value + (1 - alpha_) * prev_value_;
-                prev_value_ = filtered_value;
-                return filtered_value;
+                float filteredValue = alpha_ * value + (1 - alpha_) * preValue_;
+                preValue_ = filteredValue;
+                return static_cast<T>(filteredValue);
             }
 
           private:
             float alpha_;
             bool initialized_;
-            float prev_value_;
+            float preValue_;
         };
 
         static constexpr std::array<size_t, 4> LEFT_MOTOR_INDICES{0, 1, 4, 5};
@@ -85,15 +85,17 @@ namespace Dog8Dof {
         float deactiveDamp_;
         long deactiveDampTime_;
 
+        float alpha_;
+
         std::array<double, 8> stPos_{};
         std::array<double, 8> stVel_{};
         std::array<double, 8> stTau_{};
         std::array<double, 8> stTemp_{};
 
-        //         std::array<LowPassFilter<double>, 8> stPos_{};
-        // std::array<LowPassFilter<double>, 8> stVel_{};
-        // std::array<LowPassFilter<double>, 8> stTau_{};
-        // std::array<LowPassFilter<double>, 8> stTemp_{};
+        std::array<LowPassFilter<double>, 8> stPosF_{};
+        std::array<LowPassFilter<double>, 8> stVelF_{};
+        std::array<LowPassFilter<double>, 8> stTauF_{};
+        std::array<LowPassFilter<double>, 8> stTempF_{};
 
         std::array<double, 8> cmdPos_{};
         std::array<double, 8> cmdVel_{};

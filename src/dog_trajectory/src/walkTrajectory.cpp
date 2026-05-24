@@ -165,10 +165,11 @@ namespace Dog8Dof {
         }
         lastUpdateTime_ = currentTime;
 
-        // 速度估计：用足端 X 位置差分
-        float vAct = vDes_; // 默认用期望速度
+        // 速度估计：Raibert 落脚点公式仅使用期望速度，保持步态 Z 轴对称
+        //   传感器位置反馈已通过多项式重规划提供误差修正，
+        //   若再引入传感器差分速度会导致落脚点偏移，破坏对称性。
+        const float vAct = vDes_;
         if (currentTip) {
-            vAct = (currentTip->pos[0] - lastTipX_) / dt;
             lastTipX_ = currentTip->pos[0];
         }
 
@@ -200,10 +201,9 @@ namespace Dog8Dof {
                                  parameters_.stanceTimeMin,
                                  parameters_.stanceTimeMax);
                 } else {
-                    // 支撑→摆动：从当前足端状态出发
+                    // 支撑→摆动：位置用传感器修正，速度用 0（支撑相结束时期望静止）
                     const float zs = currentTip ? currentTip->pos[2] : zDes;
                     const float xs = currentTip ? currentTip->pos[0] : xDes;
-                    const float vxs = currentTip ? currentTip->linerVel[0] : 0.0f;
                     swing_.init(zs,
                                 baseHeight_,
                                 stepHeight_,
@@ -211,7 +211,7 @@ namespace Dog8Dof {
                                 parameters_.lowPassAlpha,
                                 parameters_.minReplanTime,
                                 xs,
-                                vxs,
+                                0.0f,
                                 0.0f,
                                 stepLength_);
                 }
@@ -256,9 +256,10 @@ namespace Dog8Dof {
 
             if (stance_.isLifted()) {
                 // 支撑→摆动 切换
+                // 位置用传感器修正，速度用 0（支撑相结束时期望静止）
                 const float zStart = currentTip ? currentTip->pos[2] : zDes;
                 const float xStart = currentTip ? currentTip->pos[0] : xDes;
-                const float vxStart = currentTip ? currentTip->linerVel[0] : 0.0f;
+                const float vxStart = 0.0f;
                 const float axStart = 0.0f;
 
                 swing_.init(zStart,
@@ -382,18 +383,18 @@ namespace Dog8Dof {
             }
         }
 
-        // 4. 获取起点状态（优先传感器，其次轨迹反算）
+        // 4. 获取起点状态：位置用传感器修正漂移，速度/加速度用轨迹内推保持一致性
+        //    直接使用传感器速度可能导致与目标状态矛盾，使五次多项式产生大幅度偏移，
+        //    超出腿工作空间 → IK 报不可达。
         float x0, vx0, ax0;
+        // 始终从轨迹反算速度和加速度，保证初始条件与多项式连续
+        vx0 = QuinticPolynomial::evaluateVel(last_coeffs_x_, dt);
+        ax0 = QuinticPolynomial::evaluateAcc(last_coeffs_x_, dt);
         if (currentTip) {
+            // 仅位置使用传感器反馈，修正累积漂移
             x0 = currentTip->pos[0];
-            vx0 = currentTip->linerVel[0];
-            // 加速度从上一多项式反算以保证连续性
-            ax0 = QuinticPolynomial::evaluateAcc(last_coeffs_x_, dt);
         } else {
-            // 从上一轨迹反算在时刻 dt 的期望状态
             x0 = QuinticPolynomial::evaluatePos(last_coeffs_x_, dt);
-            vx0 = QuinticPolynomial::evaluateVel(last_coeffs_x_, dt);
-            ax0 = QuinticPolynomial::evaluateAcc(last_coeffs_x_, dt);
         }
 
         // 5. X 轴五次多项式重规划

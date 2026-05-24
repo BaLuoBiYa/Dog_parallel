@@ -132,6 +132,14 @@ namespace Dog8Dof {
                 }
             } catch (const std::exception &e) {
                 RCLCPP_WARN_STREAM(logger_, "Connecting to motor failed: " << e.what());
+                // 重建串口，清空 485 总线残留数据
+                try {
+                    portLeft_->reopen();
+                    portRight_->reopen();
+                    RCLCPP_INFO_STREAM(logger_, "Serial ports reopened for retry");
+                } catch (const std::exception &re) {
+                    RCLCPP_WARN_STREAM(logger_, "Reopen failed: " << re.what());
+                }
                 RCLCPP_INFO_STREAM(
                     logger_,
                     "Retrying in " << retryDelay.count() << "s (press Ctrl-C to abort)");
@@ -270,9 +278,8 @@ namespace Dog8Dof {
         node_[jointNames_[jointIdx]]["offset"] = offSet;
 
         RCLCPP_INFO_STREAM(logger_,
-                           "Updating zero offset of "
-                               << jointNames_[jointIdx] << " from " << oldOffset
-                               << " to " << offSet);
+                           "Updating zero offset of " << jointNames_[jointIdx] << " from "
+                                                      << oldOffset << " to " << offSet);
     }
 
     void ZeroSetter::flushToFile() {
