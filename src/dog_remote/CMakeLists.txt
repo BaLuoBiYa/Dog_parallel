@@ -23,7 +23,7 @@ include_directories(include)
 add_library(${PROJECT_NAME} SHARED
     src/sbusReader.cpp
     src/serialConfig.cpp
-    src/joystick/joystick.cc
+    src/joystick.cc
 )
 ament_target_dependencies(${PROJECT_NAME}
   "rclcpp"
