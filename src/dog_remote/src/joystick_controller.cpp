@@ -8,12 +8,27 @@ namespace Dog8Dof {
 
     JoyStickController::JoyStickController(const std::string &devicePath,
                                            const std::string &nodeName,
+                                           const std::string &yamlPath,
                                            double pollRateHz)
-        : rclcpp::Node(nodeName), devicePath_(devicePath),
-          joystick_(devicePath, false) // 非阻塞模式
-    {
+        : rclcpp::Node(nodeName), devicePath_(devicePath), joystick_(devicePath, false),
+          yamlPath_(yamlPath) {
         // ── 参数声明 ──
         declareParameters();
+
+        // ── YAML 配置文件热加载 ──
+        if (!yamlPath_.empty()) {
+            loadYamlConfig();
+            yamlLastMtime_ = file_mtime(yamlPath_);
+
+            int watchMs = static_cast<int>(yamlWatchInterval_ * 1000.0);
+            yamlWatchTimer_ = create_wall_timer(std::chrono::milliseconds(watchMs),
+                                                [this]() { watchYamlCallback(); });
+
+            RCLCPP_INFO(get_logger(),
+                        "YAML 热加载已启动: %s (监听间隔 %.1f s)",
+                        yamlPath_.c_str(),
+                        yamlWatchInterval_);
+        }
 
         // ── 检查手柄是否就绪 ──
         if (!joystick_.isFound()) {
@@ -68,12 +83,14 @@ namespace Dog8Dof {
         declare_parameter("exponent", exponent_);
         declare_parameter("max_linear_vel", maxLinearVel_);
         declare_parameter("max_angular_vel", maxAngularVel_);
+        declare_parameter("yaml_watch_interval", yamlWatchInterval_);
 
         devicePath_ = get_parameter("device_path").as_string();
         deadzone_ = get_parameter("deadzone").as_double();
         exponent_ = get_parameter("exponent").as_double();
         maxLinearVel_ = get_parameter("max_linear_vel").as_double();
         maxAngularVel_ = get_parameter("max_angular_vel").as_double();
+        yamlWatchInterval_ = get_parameter("yaml_watch_interval").as_double();
     }
 
     // ══════════════════════════════════════════════════════════════════════════════
@@ -262,8 +279,8 @@ namespace Dog8Dof {
         msg.step_duration = static_cast<float>(stepDuration_);
         msg.linear_x = static_cast<float>(mapAxis(axisLinX) * maxLinearVel_);
         msg.linear_y = static_cast<float>(mapAxis(axisAngZ) * maxAngularVel_);
-        msg.roll = static_cast<float>(mapAxis(currentAngularRoll_.load()));
-        msg.pitch = static_cast<float>(mapAxis(currentAngularPitch_.load()));
+        // msg.roll = static_cast<float>(mapAxis(currentAngularRoll_.load()));
+        // msg.pitch = static_cast<float>(mapAxis(currentAngularPitch_.load()));
 
         // 记录当前值用于日志打印
         currentLinearX_.store(msg.linear_x);
@@ -302,6 +319,102 @@ namespace Dog8Dof {
             currentLinearX_.load(),
             currentAngularZ_.load(),
             joystick_.isFound() ? "已连接" : "未连接");
+    }
+
+    time_t JoyStickController::file_mtime(const std::string &path) {
+        struct stat st;
+        return stat(path.c_str(), &st) == 0 ? st.st_mtime : 0;
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // YAML 动态热加载 (仿 arm_control.cpp 风格)
+    // ══════════════════════════════════════════════════════════════════════════════
+
+    void JoyStickController::loadYamlConfig() {
+        if (yamlPath_.empty()) {
+            return;
+        }
+
+        try {
+            YAML::Node n = YAML::LoadFile(yamlPath_);
+
+            auto params = n["joystick_controller"]["ros__parameters"];
+            if (!params) {
+                RCLCPP_WARN(get_logger(),
+                            "YAML 中未找到 joystick_controller.ros__parameters 节点");
+                return;
+            }
+
+            // 手柄设备 & 调试
+            if (params["device_path"])
+                devicePath_ = params["device_path"].as<std::string>();
+            if (params["debug_mode"])
+                DebugMode = params["debug_mode"].as<bool>();
+
+            // 摇杆映射
+            if (params["deadzone"])
+                deadzone_ = params["deadzone"].as<double>();
+            if (params["exponent"])
+                exponent_ = params["exponent"].as<double>();
+
+            // 速度限制
+            if (params["max_linear_vel"])
+                maxLinearVel_ = params["max_linear_vel"].as<double>();
+            if (params["max_angular_vel"])
+                maxAngularVel_ = params["max_angular_vel"].as<double>();
+
+            // 身高参数 (mm)
+            if (params["body_height"])
+                bodyHeight_ = params["body_height"].as<double>();
+            if (params["height_step"])
+                heightStep_ = params["height_step"].as<double>();
+            if (params["max_body_height"])
+                MaxbodyHeight_ = params["max_body_height"].as<double>();
+            if (params["min_body_height"])
+                MinbodyHeight_ = params["min_body_height"].as<double>();
+
+            // 步高参数 (mm)
+            if (params["step_height"])
+                stepHeight_ = params["step_height"].as<double>();
+            if (params["step_height_step"])
+                stepHeightStep_ = params["step_height_step"].as<double>();
+            if (params["max_step_height"])
+                MaxstepHeight_ = params["max_step_height"].as<double>();
+            if (params["min_step_height"])
+                MinstepHeight_ = params["min_step_height"].as<double>();
+
+            // 步频参数
+            if (params["step_duration"])
+                stepDuration_ = params["step_duration"].as<double>();
+            if (params["step_duration_step"])
+                stepDurationStep_ = params["step_duration_step"].as<double>();
+
+            // 监听间隔
+            if (params["yaml_watch_interval"])
+                yamlWatchInterval_ = params["yaml_watch_interval"].as<double>();
+
+            RCLCPP_INFO(get_logger(), "YAML 参数热加载完成: %s", yamlPath_.c_str());
+        } catch (const YAML::Exception &e) {
+            RCLCPP_ERROR(
+                get_logger(), "YAML 解析失败 [%s]: %s", yamlPath_.c_str(), e.what());
+        }
+    }
+
+    void JoyStickController::watchYamlCallback() {
+        if (yamlPath_.empty()) {
+            return;
+        }
+
+        time_t mtime = file_mtime(yamlPath_);
+        if (mtime == 0) {
+            return; // 文件不存在
+        }
+
+        if (mtime != yamlLastMtime_) {
+            yamlLastMtime_ = mtime;
+            RCLCPP_INFO(get_logger(), "检测到 YAML 变更, 热重载中...");
+            loadYamlConfig();
+        }
     }
 
 } // namespace Dog8Dof

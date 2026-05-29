@@ -1,8 +1,13 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
+#include <csignal>
+#include <iostream>
 #include <string>
+#include <sys/stat.h>
 #include <thread>
+#include <yaml-cpp/yaml.h>
 
 #include <dog_msg/msg/gait_twist.hpp>
 #include <geometry_msgs/msg/twist.hpp>
@@ -45,9 +50,12 @@ namespace Dog8Dof {
          * @param nodeName    节点名称
          * @param pollRateHz  手柄轮询频率 (Hz)
          */
-        explicit JoyStickController(const std::string &devicePath = "/dev/input/js1",
-                                    const std::string &nodeName = "joystick_controller",
-                                    double pollRateHz = 200.0);
+        explicit JoyStickController(
+            const std::string &devicePath = "/dev/input/js0",
+            const std::string &nodeName = "joystick_controller",
+            const std::string &yamlPath =
+                "src/dog_remote/parameters/JoystickerController.yaml",
+            double pollRateHz = 200.0);
 
         ~JoyStickController() override;
 
@@ -97,6 +105,12 @@ namespace Dog8Dof {
         rclcpp::Publisher<dog_msg::msg::GaitTwist>::SharedPtr commandPub_;
         rclcpp::TimerBase::SharedPtr statusTimer_;
 
+        // ── YAML 动态热加载 ──
+        std::string yamlPath_;                        // YAML 配置文件路径
+        time_t yamlLastMtime_{0};                     // 上次读取时的文件 mtime
+        rclcpp::TimerBase::SharedPtr yamlWatchTimer_; // 文件变化检查定时器
+        double yamlWatchInterval_{1.0};               // 检查间隔 (秒)
+
         // ── 方法 ──
         /** 轮询循环 (在独立线程中运行) */
         void pollLoop();
@@ -109,6 +123,15 @@ namespace Dog8Dof {
 
         /** 声明并初始化 ROS 参数 */
         void declareParameters();
+
+        /** 从 YAML 文件加载所有可调参数 (arm_control 风格) */
+        void loadYamlConfig();
+
+        /** 定时检查 YAML 文件是否被修改，若修改则热重载 */
+        void watchYamlCallback();
+
+        /*检查文件是否被修改*/
+        static time_t file_mtime(const std::string &path);
     };
 
 } // namespace Dog8Dof
