@@ -157,8 +157,8 @@ namespace Dog8Dof {
         // Jump 完成后回落 Stand
         if (currentTrajectory_ == jumpTrajectory_ &&
             jumpTrajectory_->getPhase() == JumpTrajectory::FINISHED) {
-            // 跳跃完成后自动切回站立（以当前足端位置作为站立目标）
-            standTrajectory_->setTarget(currentTip_.pos[0], currentTip_.pos[2]);
+            // 跳跃完成后自动切回站立（以轨迹目标位置为准，避免传感器滞后导致位置错误）
+            standTrajectory_->setTarget(targetPoint_.pos[0], targetPoint_.pos[2]);
             standTrajectory_->generate(currentTip_, clock_->now());
             currentTrajectory_ = standTrajectory_;
             RCLCPP_INFO(logger_, "Jump finished, fallback to stand");

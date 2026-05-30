@@ -95,6 +95,7 @@ namespace Dog8Dof {
                                    "ID before generate().");
         }
         launchTime_ = now; // 记录绝对起点
+        lastUpdateTime_ = now; // 同步时钟源，避免后续减法时报 time source 不一致
         smooth_->configure(
             jumpToStandcurrentPar_s(currentPar_, currentPar_.crouchDuration),
             0.0f,
@@ -182,10 +183,20 @@ namespace Dog8Dof {
                 phase_ = RECOVER;
                 break;
             case FINISHED:
+                phase_ = FINISHED;
                 finished_ = true;
                 targetSet_ = false;
                 isInit_ = false;
-                // 进入 FINISHED：保持最后状态不变
+                // 进入 FINISHED：输出最终站立目标，避免低 KP 导致塌缩
+                target_.pos[0] = 0.0f;
+                target_.pos[1] = 0.0f;
+                target_.pos[2] = currentPar_.legLengthStand;
+                target_.vel.setZero();
+                target_.tau.setZero();
+                target_.kp[0] = currentPar_.smoothKp * 4.0f;
+                target_.kp[1] = currentPar_.smoothKp * 4.0f;
+                target_.kd[0] = currentPar_.smoothKd;
+                target_.kd[1] = currentPar_.smoothKd;
                 break;
             }
 
@@ -212,8 +223,16 @@ namespace Dog8Dof {
             // 被动阻尼，没有明确目标位置
             break;
         case FINISHED:
-            isInit_ = false;
-            targetSet_ = false;
+            // 已处于 FINISHED：持续输出站立目标
+            target_.pos[0] = 0.0f;
+            target_.pos[1] = 0.0f;
+            target_.pos[2] = currentPar_.legLengthStand;
+            target_.vel.setZero();
+            target_.tau.setZero();
+            target_.kp[0] = currentPar_.smoothKp * 4.0f;
+            target_.kp[1] = currentPar_.smoothKp * 4.0f;
+            target_.kd[0] = currentPar_.smoothKd;
+            target_.kd[1] = currentPar_.smoothKd;
             RCLCPP_INFO(logger_, "Jump Finished");
             break;
         }
@@ -263,17 +282,18 @@ namespace Dog8Dof {
                                          float launchAngle,
                                          float launchSpeed) {
         Body flightTarget;
-        const float tanA = std::tan(launchAngle);
-        // 水平分量（防止 tan → 0 导致除零）
-        if (std::abs(tanA) > 1e-6f) {
-            flightTarget.pos[0] = currentTip.pos[0] + currentPar_.finishZ / tanA;
-        } else {
-            flightTarget.pos[0] = currentTip.pos[0];
-        }
-        // 垂直分量
+        const float cosA = std::cos(launchAngle);
+        const float sinA = std::sin(launchAngle);
+
+        // X 位移 ≈ 平均速度 × 时间（五次多项式 a(0)=a(T)=0 下速度单调时位移近似）
+        flightTarget.pos[0] =
+            currentTip.pos[0] + 0.5f * launchSpeed * cosA * currentPar_.pushDuration;
+
+        // Z：蹬地结束 = 完全伸展
         flightTarget.pos[2] = currentPar_.finishZ;
-        flightTarget.linerVel[0] = launchSpeed * std::cos(launchAngle);
-        flightTarget.linerVel[2] = launchSpeed * std::sin(launchAngle);
+
+        flightTarget.linerVel[0] = launchSpeed * cosA;
+        flightTarget.linerVel[2] = launchSpeed * sinA;
         flightTarget.tau.setZero();
         return flightTarget;
     }
@@ -333,7 +353,7 @@ namespace Dog8Dof {
         }
 
         // Y 轴保持不动
-        out.pos[1] = startState_.pos[1];
+        out.pos[1] = 0.0f;
         out.vel[1] = 0.0f;
         out.tau[1] = 0.0f;
 

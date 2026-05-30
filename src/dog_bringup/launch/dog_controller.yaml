@@ -10,7 +10,7 @@ base_controller:
     robotName: dog
     standProfile: $(find dog_bringup)/parameters/stand.yaml
     walkProfile: $(find dog_bringup)/parameters/walk.yaml
-    jumpProfile: $(find dog_bringup)/parameters/jumpLegacy.yaml
+    jumpProfile: $(find dog_bringup)/parameters/jump.yaml
 
     idleTipX: 0.0
     idleTipZ: 250.0
