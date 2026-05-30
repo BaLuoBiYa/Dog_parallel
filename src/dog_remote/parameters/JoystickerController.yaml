@@ -11,7 +11,7 @@ joystick_controller:
     poll_rate: 200.0                  # 轮询频率 (Hz)
 
     # ── 调试 ──
-    debug_mode: true                  # 是否启用状态打印
+    debug_mode: false                  # 是否启用状态打印
 
     # ── 摇杆映射 ──
     deadzone: 0.10                    # 摇杆死区 (归一化后, 0.0~1.0)
@@ -24,7 +24,7 @@ joystick_controller:
     # ── 身高参数 (单位: mm) ──
     body_height: 200                  # 初始身高
     height_step: 10                   # 身高单次调节步长 (十字键)
-    max_body_height: 250              # 身高上限
+    max_body_height: 300              # 身高上限
     min_body_height: 150              # 身高下限
 
     # ── 步高参数 (单位: mm) ──

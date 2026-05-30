@@ -59,14 +59,26 @@ namespace Dog8Dof {
 
                 // 边界检查
                 if (std::abs(out[i].stepLength) > Const::STEP_LENGTH_MAX) {
-                    return false;
+                    if (out[i].stepLength > 0) {
+                        out[i].stepLength = Const::STEP_LENGTH_MAX;
+                    } else {
+                        out[i].stepLength = -Const::STEP_LENGTH_MAX;
+                    }
                 }
-                if (out[i].stepHeight > out[i].baseHeight || out[i].stepHeight < 0.0f) {
-                    return false;
+                if (out[i].stepHeight > out[i].baseHeight || out[i].stepHeight < Const::STEP_HEIGHT_MIN) {
+                    if(out[i].stepHeight < Const::STEP_HEIGHT_MIN) {
+                        out[i].stepHeight = Const::STEP_HEIGHT_MIN;
+                    } else {
+                        out[i].stepHeight = out[i].baseHeight;
+                    }
                 }
                 if (out[i].baseHeight > Const::BODY_HEIGHT_MAX ||
                     out[i].baseHeight < Const::BODY_HEIGHT_MIN) {
-                    return false;
+                    if (out[i].baseHeight > Const::BODY_HEIGHT_MAX) {
+                        out[i].baseHeight = Const::BODY_HEIGHT_MAX;
+                    } else {
+                        out[i].baseHeight = Const::BODY_HEIGHT_MIN;
+                    }
                 }
                 if (out[i].stepDuration < 0.0f) {
                     return false;

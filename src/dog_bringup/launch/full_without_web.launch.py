@@ -142,7 +142,6 @@ def generate_launch_description():
             event_handler_sync,
             event_handler0,
             event_handler1,
-            event_handler2,
         ])
     
     return ld
