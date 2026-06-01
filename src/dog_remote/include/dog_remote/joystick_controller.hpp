@@ -96,6 +96,7 @@ namespace Dog8Dof {
         bool lastBtnX_{false};
         bool lastBtnLB_{false};
         bool lastBtnRB_{false};
+        std::atomic_bool jumpRequested_{false};  // JUMP 一次性命令标志
 
         // ── 十字键边沿检测 ──
         short lastDpadX_{0};

@@ -1,11 +1,13 @@
 #include "dog_trajectory/jumpTrajectory.hpp"
 #include "dog_tools/quinticPolynomial.hpp"
 #include <cmath>
+#include <sys/stat.h>
 
 namespace Dog8Dof {
 
     JumpTrajectory::JumpTrajectory(const std::string &configPath, rclcpp::Duration period)
         : BaseTrajectory(configPath, period) {
+        configPath_ = configPath;
         reloadParameters();
     }
 
@@ -40,6 +42,11 @@ namespace Dog8Dof {
             RCLCPP_WARN(logger_, "Cannot set new target while trajectory is active.");
             return false;
         }
+
+        if (if_file_change()){
+            reloadParameters();
+        }
+
         if (parameters_[parID].has_value()) {
             currentPar_ = parameters_[parID].value();
         } else {
@@ -361,6 +368,30 @@ namespace Dog8Dof {
         out.kd = target_.kd;
 
         return out;
+    }
+
+    time_t JumpTrajectory::file_mtime(const std::string &path) {
+        struct stat st;
+        return stat(path.c_str(), &st) == 0 ? st.st_mtime : 0;
+    }
+
+    bool JumpTrajectory::if_file_change() {
+        if (configPath_.empty()) {
+            return false;
+        }
+
+        time_t mtime = file_mtime(configPath_);
+        if (mtime == 0) {
+            return false; // 文件不存在
+        }
+
+        if (mtime != yamlLastMtime_) {
+            yamlLastMtime_ = mtime;
+            RCLCPP_INFO(logger_, "检测到 YAML 变更, 热重载中...");
+            return true;
+        }
+
+        return false;
     }
 
 } // namespace Dog8Dof

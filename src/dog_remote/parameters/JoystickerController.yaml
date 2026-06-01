@@ -7,7 +7,7 @@ joystick_controller:
   ros__parameters:
 
     # ── 手柄设备 ──
-    device_path: "/dev/input/js0"     # 手柄设备路径
+    device_path: "/dev/input/js1"     # 手柄设备路径
     poll_rate: 200.0                  # 轮询频率 (Hz)
 
     # ── 调试 ──

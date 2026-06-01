@@ -155,10 +155,10 @@ namespace Dog8Dof {
                     }
                     lastBtnB_ = pressed;
                     break;
-                case 2: // X → JUMP
+                case 2: // X → JUMP (一次性命令，原子标志保证只发一条消息)
                     if (pressed && !lastBtnX_) {
-                        currentGait_.store(GaitMode::JUMP);
-                        RCLCPP_INFO(get_logger(), "🕹 步态 → JUMP");
+                        jumpRequested_.store(true);
+                        RCLCPP_INFO(get_logger(), "🕹 步态 → JUMP (单次)");
                     }
                     lastBtnX_ = pressed;
                     break;
@@ -273,7 +273,14 @@ namespace Dog8Dof {
 
         // ── 组装 GaitTwist 消息并发布 ──
         auto msg = dog_msg::msg::GaitTwist();
-        msg.gait = static_cast<uint8_t>(currentGait_.load());
+
+        // JUMP 是一次性命令：用原子 exchange 保证每次按键只发一条 JUMP 消息
+        if (jumpRequested_.exchange(false)) {
+            msg.gait = static_cast<uint8_t>(GaitMode::JUMP);
+        } else {
+            msg.gait = static_cast<uint8_t>(currentGait_.load());
+        }
+
         msg.step_height = static_cast<float>(stepHeight_);
         msg.base_height = static_cast<float>(bodyHeight_);
         msg.step_duration = static_cast<float>(stepDuration_);
@@ -281,6 +288,11 @@ namespace Dog8Dof {
         msg.linear_y = static_cast<float>(mapAxis(axisAngZ) * maxAngularVel_);
         // msg.roll = static_cast<float>(mapAxis(currentAngularRoll_.load()));
         // msg.pitch = static_cast<float>(mapAxis(currentAngularPitch_.load()));
+
+        if (msg.gait == static_cast<uint8_t>(GaitMode::JUMP)) {
+            // JUMP 模式下，linear_y 用于携带跳跃配置索引（上位机约定）
+            msg.step_height = 0.0f;
+        }
 
         // 记录当前值用于日志打印
         currentLinearX_.store(msg.linear_x);

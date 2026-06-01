@@ -53,6 +53,11 @@ namespace Dog8Dof {
                 "WalkTrajectory::setTarget failed (invalid walk parameters)");
         }
 
+        // 从跳跃步态切换走时，强制重置跳跃轨迹状态
+        if (currentTrajectory_ == jumpTrajectory_) {
+            jumpTrajectory_->reset();
+        }
+
         const bool isNewMode = (currentTrajectory_ != walkTrajectory_);
         currentTrajectory_ = walkTrajectory_;
 
@@ -99,6 +104,12 @@ namespace Dog8Dof {
             throw std::invalid_argument(
                 "StandTrajectory::setTarget failed (invalid tip coordinates)");
         }
+
+        // 从跳跃步态切换走时，强制重置跳跃轨迹状态
+        if (currentTrajectory_ == jumpTrajectory_) {
+            jumpTrajectory_->reset();
+        }
+
         const bool isNewMode = (currentTrajectory_ != standTrajectory_);
         currentTrajectory_ = standTrajectory_;
 

@@ -1,4 +1,4 @@
-walkKp: 1.0
+walkKp: 1.5
 walkKd: 0.05
 swingDutyCycle: 0.5
 minReplanTime: 0.02

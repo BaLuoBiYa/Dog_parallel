@@ -215,13 +215,13 @@ namespace Dog8Dof {
     bool TrajectoryTracker::applyCommand(const dog_msg::msg::GaitTwist &msg) {
         using GT = dog_msg::msg::GaitTwist;
 
-        // ---- 跳跃保护：任何非 JUMP 命令在跳跃未完成时直接忽略 ----
-        if (msg.gait != GT::JUMP && (LF_->isJumping() || LR_->isJumping() ||
-                                     RF_->isJumping() || RR_->isJumping())) {
+        // ---- 跳跃保护：跳跃未完成时忽略一切 gait 切换命令 ----
+        if (LF_->isJumping() || LR_->isJumping() ||
+            RF_->isJumping() || RR_->isJumping()) {
             RCLCPP_WARN(this->get_node()->get_logger(),
-                        "Jump in progress, ignoring non-jump command (gait=%d)",
+                        "Jump in progress, ignoring command (gait=%d)",
                         msg.gait);
-            return true; // 不视为错误，但拒绝切换
+            return true; // 不视为错误，但拒绝切换（包括重复 JUMP 命令）
         }
 
         GaitParameters params[4];

@@ -9,7 +9,7 @@
   pushDuration : 0.15
   pushKp : 3.0
   pushKd : 0.05
-  startZ : 30.0
+  startZ : 80.0
   finishZ : 270.0
 
   flightDuration : 0.50

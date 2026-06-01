@@ -32,6 +32,14 @@ namespace Dog8Dof {
             return phase_;
         }
 
+        /** @brief 强制重置轨迹到 FINISHED 状态（用于打断跳跃时清理） */
+        void reset() {
+            phase_ = FINISHED;
+            targetSet_ = false;
+            isInit_ = false;
+            finished_ = true;
+        }
+
         struct parameters_t {
             // 全局参数
             float smoothKp = 2.0f;  // 平滑 PD-Kp (用于 CROUCH/RECOVER/FLIGHT 过渡)
@@ -71,9 +79,10 @@ namespace Dog8Dof {
         Body idelTipState_;
         bool isInit_ = false;
         bool targetSet_ = false;
-
+        time_t yamlLastMtime_{0};
         // 组合 StandTrajectory 实例，用于 CROUCH/RECOVER/FLIGHT 阶段的平滑过渡
         std::unique_ptr<StandTrajectory> smooth_;
+        std::string configPath_;
 
         /**
          * @brief PUSH 阶段五次多项式规划器
@@ -122,6 +131,10 @@ namespace Dog8Dof {
         getFlightTarget(const Body &currentTip, float launchAngle, float launchSpeed);
 
         TrajectoryPoint getAbsorptionTarget(float absorbDamp);
+
+        bool if_file_change();
+        static time_t file_mtime(const std::string &path);
+
     };
 
 } // namespace Dog8Dof
