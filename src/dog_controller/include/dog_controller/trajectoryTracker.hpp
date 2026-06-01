@@ -108,7 +108,7 @@ namespace Dog8Dof {
         bool cacheInterfaceIndices();
         bool updateAllGaitManagers();
         bool applyCommand(const dog_msg::msg::GaitTwist &msg);
-        bool switchToStandMode();
+        bool switchToStandMode(bool useInitTransition = false);
         void registerMonitorPublisher();
         void publishMonitorState();
         bool setJointCommands(size_t legIndex, const Motor &target);

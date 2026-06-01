@@ -7,4 +7,9 @@ transitionVelMax: 500.0
 
 reachThreshold: 0.01
 stepHeightFactor: 0.1
-transitionTime: 1.0
+
+# 步态切换缓冲时间配置
+transitionTime: 1.0              # 默认过渡时间 (s)
+transitionTimeInit: 2.0          # 初始化站起缓冲时间 (s) - 从地上站起来
+transitionTimeWalkToStand: 0.5   # Walk→Stand 缓冲时间 (s) - 从行走切换到站立
+transitionTimeJumpToWalk: 1.0    # Jump→Walk 缓冲时间 (s) - 从跳跃恢复到行走

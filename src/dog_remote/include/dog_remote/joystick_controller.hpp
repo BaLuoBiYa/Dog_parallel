@@ -97,6 +97,8 @@ namespace Dog8Dof {
         bool lastBtnLB_{false};
         bool lastBtnRB_{false};
         std::atomic_bool jumpRequested_{false};  // JUMP 一次性命令标志
+        std::chrono::steady_clock::time_point jumpStartTime_;  // 跳跃开始时间
+        std::atomic_bool isJumping_{false};  // 是否正在跳跃
 
         // ── 十字键边沿检测 ──
         short lastDpadX_{0};

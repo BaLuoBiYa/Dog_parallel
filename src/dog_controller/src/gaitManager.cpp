@@ -59,6 +59,14 @@ namespace Dog8Dof {
         }
 
         const bool isNewMode = (currentTrajectory_ != walkTrajectory_);
+
+        // 记录上一个步态类型
+        if (currentTrajectory_ == standTrajectory_) {
+            previousGaitType_ = GaitType::STAND;
+        } else if (currentTrajectory_ == jumpTrajectory_) {
+            previousGaitType_ = GaitType::JUMP;
+        }
+
         currentTrajectory_ = walkTrajectory_;
 
         // generate() 仅在首次切换到 WALK 模式时调用，避免高频重置轨迹导致抖动
@@ -85,6 +93,14 @@ namespace Dog8Dof {
                          parID);
             return false;
         }
+
+        // 记录上一个步态类型
+        if (currentTrajectory_ == standTrajectory_) {
+            previousGaitType_ = GaitType::STAND;
+        } else if (currentTrajectory_ == walkTrajectory_) {
+            previousGaitType_ = GaitType::WALK;
+        }
+
         currentTrajectory_ = jumpTrajectory_;
         jumpTrajectory_->generate(currentTip_, clock_->now());
         RCLCPP_INFO(logger_, "Jump gait set: parID=%d", parID);
@@ -99,7 +115,7 @@ namespace Dog8Dof {
     // =========================================================================
     //  setStandGait() — 切换到站立步态
     // =========================================================================
-    bool GaitManager::setStandGait(float tipX, float tipZ) {
+    bool GaitManager::setStandGait(float tipX, float tipZ, bool useInitTransition) {
         if (!standTrajectory_->setTarget(tipX, tipZ)) {
             throw std::invalid_argument(
                 "StandTrajectory::setTarget failed (invalid tip coordinates)");
@@ -111,17 +127,48 @@ namespace Dog8Dof {
         }
 
         const bool isNewMode = (currentTrajectory_ != standTrajectory_);
+
+        // 记录上一个步态类型
+        if (currentTrajectory_ == walkTrajectory_) {
+            previousGaitType_ = GaitType::WALK;
+        } else if (currentTrajectory_ == jumpTrajectory_) {
+            previousGaitType_ = GaitType::JUMP;
+        }
+
         currentTrajectory_ = standTrajectory_;
 
         // generate() 仅在首次切换到 STAND 模式时调用，避免高频重置轨迹导致抖动
         if (isNewMode) {
+            // 根据上一个步态和初始化标志选择合适的缓冲时间
+            standTrajectory_->reloadParameters();
+            auto params = standTrajectory_->getParameters();
+
+            float transitionTime = params.transitionTime; // 默认
+
+            if (useInitTransition) {
+                // 初始化站起
+                transitionTime = params.transitionTimeInit;
+                RCLCPP_INFO(logger_, "Using init transition time: %.2f s", transitionTime);
+            } else if (previousGaitType_ == GaitType::WALK) {
+                // Walk → Stand
+                transitionTime = params.transitionTimeWalkToStand;
+                RCLCPP_INFO(logger_, "Using walk-to-stand transition time: %.2f s", transitionTime);
+            } else if (previousGaitType_ == GaitType::JUMP) {
+                // Jump → Stand (通过Walk中转)
+                transitionTime = params.transitionTimeJumpToWalk;
+                RCLCPP_INFO(logger_, "Using jump-to-walk transition time: %.2f s", transitionTime);
+            }
+
+            // 使用自定义过渡时间配置并生成轨迹
+            standTrajectory_->configure(params, tipX, tipZ, transitionTime);
             standTrajectory_->generate(currentTip_, clock_->now());
+
             RCLCPP_INFO(logger_,
-                        "Stand gait set: target=(%.0f, %.0f)",
+                        "Stand gait set: target=(%.0f, %.0f), transition=%.2f s",
                         static_cast<double>(tipX),
-                        static_cast<double>(tipZ));
+                        static_cast<double>(tipZ),
+                        static_cast<double>(transitionTime));
         }
-        // 以当前足端为起点初始化过渡（TRANSITION）
 
         return true;
     }

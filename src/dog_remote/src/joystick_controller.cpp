@@ -158,6 +158,8 @@ namespace Dog8Dof {
                 case 2: // X → JUMP (一次性命令，原子标志保证只发一条消息)
                     if (pressed && !lastBtnX_) {
                         jumpRequested_.store(true);
+                        isJumping_.store(true);
+                        jumpStartTime_ = std::chrono::steady_clock::now();
                         RCLCPP_INFO(get_logger(), "🕹 步态 → JUMP (单次)");
                     }
                     lastBtnX_ = pressed;
@@ -275,8 +277,18 @@ namespace Dog8Dof {
         auto msg = dog_msg::msg::GaitTwist();
 
         // JUMP 是一次性命令：用原子 exchange 保证每次按键只发一条 JUMP 消息
+        // 跳跃开始后，保持JUMP模式3秒钟，确保完整完成跳跃动作
         if (jumpRequested_.exchange(false)) {
             msg.gait = static_cast<uint8_t>(GaitMode::JUMP);
+        } else if (isJumping_.load()) {
+            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - jumpStartTime_).count();
+            if (elapsed < 3000) {  // 保持JUMP模式3秒
+                msg.gait = static_cast<uint8_t>(GaitMode::JUMP);
+            } else {
+                isJumping_.store(false);
+                msg.gait = static_cast<uint8_t>(currentGait_.load());
+            }
         } else {
             msg.gait = static_cast<uint8_t>(currentGait_.load());
         }

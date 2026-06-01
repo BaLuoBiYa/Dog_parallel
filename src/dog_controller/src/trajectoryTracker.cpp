@@ -114,7 +114,7 @@ namespace Dog8Dof {
             return controller_interface::CallbackReturn::ERROR;
         }
 
-        switchToStandMode();
+        switchToStandMode(true); // 初始化时使用初始化站起的缓冲时间
         return controller_interface::CallbackReturn::SUCCESS;
     }
 
@@ -289,11 +289,11 @@ namespace Dog8Dof {
     // =========================================================================
     //  switchToStandMode() — 安全回落站立
     // =========================================================================
-    bool TrajectoryTracker::switchToStandMode() {
-        LF_->setStandGait(idleTipX_, idleTipZ_);
-        LR_->setStandGait(idleTipX_, idleTipZ_);
-        RF_->setStandGait(idleTipX_, idleTipZ_);
-        RR_->setStandGait(idleTipX_, idleTipZ_);
+    bool TrajectoryTracker::switchToStandMode(bool useInitTransition) {
+        LF_->setStandGait(idleTipX_, idleTipZ_, useInitTransition);
+        LR_->setStandGait(idleTipX_, idleTipZ_, useInitTransition);
+        RF_->setStandGait(idleTipX_, idleTipZ_, useInitTransition);
+        RR_->setStandGait(idleTipX_, idleTipZ_, useInitTransition);
         currentMode_ = ControlMode::STAND;
         return updateAllGaitManagers();
     }

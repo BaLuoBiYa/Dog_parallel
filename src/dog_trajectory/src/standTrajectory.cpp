@@ -267,6 +267,9 @@ namespace YAML {
             node["reachThreshold"] = std::sqrt(rhs.reachThresholdSQ);
             node["stepHeightFactor"] = rhs.stepHeightFactor;
             node["transitionTime"] = rhs.transitionTime;
+            node["transitionTimeInit"] = rhs.transitionTimeInit;
+            node["transitionTimeWalkToStand"] = rhs.transitionTimeWalkToStand;
+            node["transitionTimeJumpToWalk"] = rhs.transitionTimeJumpToWalk;
             node["minReplanTime"] = rhs.minReplanTime;
             return node;
         }
@@ -284,6 +287,9 @@ namespace YAML {
 
             rhs.stepHeightFactor = node["stepHeightFactor"].as<float>(0.1f);
             rhs.transitionTime = node["transitionTime"].as<float>(5.0f);
+            rhs.transitionTimeInit = node["transitionTimeInit"].as<float>(2.0f);
+            rhs.transitionTimeWalkToStand = node["transitionTimeWalkToStand"].as<float>(0.5f);
+            rhs.transitionTimeJumpToWalk = node["transitionTimeJumpToWalk"].as<float>(1.0f);
             rhs.minReplanTime = node["minReplanTime"].as<float>(0.02f);
             return true;
         }

@@ -25,7 +25,10 @@ namespace Dog8Dof {
             float transitionVelMax = 500.0f;
             float reachThresholdSQ = 0.0001f; ///< 到达判定阈值² (mm²)
             float stepHeightFactor = 0.1f;    ///< 步高 = 水平位移 × 此因子
-            float transitionTime = 5.0f;      ///< 过渡总时间 (s)
+            float transitionTime = 5.0f;      ///< 过渡总时间 (s) - 默认/通用
+            float transitionTimeInit = 2.0f;  ///< 初始化站起缓冲时间 (s)
+            float transitionTimeWalkToStand = 0.5f; ///< Walk→Stand 缓冲时间 (s)
+            float transitionTimeJumpToWalk = 1.0f;  ///< Jump→Walk 缓冲时间 (s)
             float minReplanTime = 0.02f;      ///< 最小重规划时间阈值 (s)
         };
 
@@ -37,6 +40,14 @@ namespace Dog8Dof {
         /** @brief 编程式配置参数+目标（供其他轨迹类组合使用） */
         void configure(const parameters_t &params, float targetX, float targetZ) {
             parameters_ = params;
+            targetTipPos_[0] = targetX;
+            targetTipPos_[1] = targetZ;
+        }
+
+        /** @brief 编程式配置参数+目标+自定义过渡时间（供其他轨迹类组合使用） */
+        void configure(const parameters_t &params, float targetX, float targetZ, float customTransitionTime) {
+            parameters_ = params;
+            parameters_.transitionTime = customTransitionTime;
             targetTipPos_[0] = targetX;
             targetTipPos_[1] = targetZ;
         }
@@ -63,6 +74,11 @@ namespace Dog8Dof {
         /** @brief 过渡是否已完成（进入 HOLD 阶段） */
         bool isHolding() const {
             return phase_ == HOLD;
+        }
+
+        /** @brief 获取当前参数配置 */
+        const parameters_t& getParameters() const {
+            return parameters_;
         }
 
       private:

@@ -51,8 +51,9 @@ namespace Dog8Dof {
          * @brief 切换到站立步态
          * @param tipX 目标足端 X (mm, 机体系)
          * @param tipZ 目标足端 Z (mm, 机体系)
+         * @param useInitTransition 是否使用初始化站起的缓冲时间（默认false）
          */
-        bool setStandGait(float tipX, float tipZ);
+        bool setStandGait(float tipX, float tipZ, bool useInitTransition = false);
 
         /**
          * @brief 切换到跳跃步态
@@ -99,6 +100,8 @@ namespace Dog8Dof {
         Motor getRearTarget() const;
 
       private:
+        enum class GaitType { STAND, WALK, JUMP };
+
         rclcpp::Clock::SharedPtr clock_;
         Leg2Dof leg_;
         Body currentTip_;
@@ -110,6 +113,9 @@ namespace Dog8Dof {
 
         /// 当前活跃轨迹（Walk / Stand / Jump）
         std::shared_ptr<BaseTrajectory> currentTrajectory_;
+
+        /// 上一个步态类型（用于确定切换时的缓冲时间）
+        GaitType previousGaitType_ = GaitType::STAND;
 
         rclcpp::Logger logger_ = rclcpp::get_logger("GaitManager");
     };
