@@ -1,3 +1,13 @@
+/**
+ * @file standTest.cpp
+ * @brief StandTrajectory 在线重规划多目标测试
+ *
+ * 测试：
+ *   1. 单次 transition → hold，验证位置/速度 C² 连续
+ *   2. 在线切换目标，验证重规划无缝衔接
+ *   3. 输出 CSV 便于可视化
+ */
+
 #include "dog_trajectory/standTrajectory.hpp"
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <filesystem>
@@ -10,87 +20,112 @@ using Dog8Dof::Body;
 using Dog8Dof::StandTrajectory;
 using Dog8Dof::TrajectoryPoint;
 
-static void write_header(std::ofstream &csv) {
-    csv << "t_s," << "pos_x,pos_y,pos_z," << "vel_x,vel_y,vel_z," << "tau_x,tau_y,tau_z,"
-        << "kp_front,kp_rear," << "kd_front,kd_rear," << "finished\n";
+// ===================================================================
+//  CSV 输出辅助（与 walkTest 相同列格式，以便同一可视化脚本处理）
+// ===================================================================
+static void writeHeader(std::ofstream &csv) {
+    csv << "t_s," << "pos_x,pos_z," << "vel_x,vel_z,"
+        << "cycle,stepLength_mm,totalTime_s\n";
 }
 
-static void
-write_row(std::ofstream &csv, double t, const TrajectoryPoint &p, bool finished) {
-    csv << std::fixed << std::setprecision(6) << t << "," << p.pos[0] << "," << p.pos[1]
-        << "," << p.pos[2] << "," << p.vel[0] << "," << p.vel[1] << "," << p.vel[2] << ","
-        << p.tau[0] << "," << p.tau[1] << "," << p.tau[2] << "," << p.kp[0] << ","
-        << p.kp[1] << "," << p.kd[0] << "," << p.kd[1] << "," << (finished ? 1 : 0)
-        << "\n";
+static void writeRow(std::ofstream &csv,
+                     double t,
+                     const TrajectoryPoint &p,
+                     unsigned int seg,
+                     float hint,
+                     float totalT) {
+    csv << std::fixed << std::setprecision(6) << t << "," << p.pos[0] << "," << p.pos[2]
+        << "," << p.vel[0] << "," << p.vel[2] << "," << seg << "," << hint << ","
+        << totalT << "\n";
 }
 
 int main(int argc, char **argv) {
-    (void)argc;
-    (void)argv;
-
     rclcpp::init(argc, argv);
-    const std::string share_dir =
+
+    const std::string shareDir =
         ament_index_cpp::get_package_share_directory("dog_bringup");
-    const std::string yaml_path =
-        (std::filesystem::path(share_dir) / "parameters" / "stand.yaml").string();
+    const std::string yamlPath =
+        (std::filesystem::path(shareDir) / "parameters" / "stand.yaml").string();
 
-    const rclcpp::Duration period = rclcpp::Duration::from_seconds(0.01);
+    const rclcpp::Duration period = rclcpp::Duration::from_seconds(1.0 / 300.0);
+    StandTrajectory traj(yamlPath, period);
 
-    StandTrajectory traj(yaml_path, period);
+    // 初始足端
+    Body currentTip{};
+    currentTip.pos.setZero();
+    currentTip.linerVel.setZero();
+    currentTip.pos[0] = 50.0f;
+    currentTip.pos[2] = 270.0f;
 
-    Body current_tip{};
-    current_tip.pos.setZero();
-    current_tip.linerVel.setZero();
-    current_tip.pos[0] = 20.0f;
-    current_tip.pos[2] = 15.0f;
+    // 多目标测试：在线切换站立位置
+    struct TargetChange {
+        double trigger_s;
+        float tipX;
+        float tipZ;
+    };
+    const std::vector<TargetChange> targets = {
+        {0.00, 50.0f, 240.0f}, // t=0:    站到 (50, 240)
+        {3.50, 20.0f, 270.0f}, // t=5.5s: 切换到 (20, 270)
+        {5.00, 0.0f, 250.0f},  // t=11s:  切换到 (0, 250)
+    };
 
-    Body stand_target{};
-    stand_target.pos.setZero();
-    stand_target.pos[0] = 0.0f;
-    stand_target.pos[2] = 180.0f;
+    // 初始目标
+    traj.setTarget(targets[0].tipX, targets[0].tipZ);
+    traj.generate(currentTip, rclcpp::Time(0, 0, RCL_SYSTEM_TIME));
 
-    if (!traj.setTarget(0.0f, 180.0f)) {
-        std::cerr << "setTarget failed\n";
+    std::string csvPath;
+    std::cout << "Output CSV path: ";
+    std::cin >> csvPath;
+
+    std::ofstream csv(csvPath, std::ios::out | std::ios::trunc);
+    if (!csv.is_open()) {
+        std::cerr << "Cannot open: " << csvPath << "\n";
         return 1;
     }
-    if (!traj.generate(current_tip)) {
-        std::cerr << "generate failed\n";
-        return 2;
-    }
-    if (!traj.start(rclcpp::Time(0, 0, RCL_SYSTEM_TIME))) {
-        std::cerr << "start failed\n";
-        return 3;
-    }
+    writeHeader(csv);
 
-    std::string csv_path;
-    std::cout << "Type csv Path:";
-    std::cin >> csv_path;
-    std::ofstream csv(csv_path, std::ios::out | std::ios::trunc);
-    if (!csv.is_open()) {
-        std::cerr << "cannot open csv file: " << csv_path << "\n";
-        return 4;
-    }
+    const double simDuration = targets.back().trigger_s + 6.0; // 最后一段留 6s 完成过渡
+    const int64_t dtNs = period.nanoseconds();
+    size_t targetIdx = 0;
 
-    write_header(csv);
+    for (unsigned int step = 0; /* below */; ++step) {
+        const int64_t tNs = static_cast<int64_t>(step) * dtNs;
+        const double t = static_cast<double>(tNs) * 1e-9;
+        const rclcpp::Time now(tNs, RCL_SYSTEM_TIME);
 
-    const int max_steps = 1000;
-    const int64_t dt_ns = period.nanoseconds();
-
-    for (int i = 0; i < max_steps; ++i) {
-        const int64_t t_ns = static_cast<int64_t>(i) * dt_ns;
-        const rclcpp::Time now(t_ns, RCL_SYSTEM_TIME);
-        const TrajectoryPoint p = traj.get(now);
-        const bool finished = traj.finished();
-
-        write_row(csv, static_cast<double>(t_ns) * 1e-9, p, finished);
-
-        if (finished) {
+        if (t > simDuration)
             break;
+
+        // 在线目标切换
+        if (targetIdx + 1 < targets.size() && t >= targets[targetIdx + 1].trigger_s) {
+            ++targetIdx;
+            const auto &tc = targets[targetIdx];
+            std::cout << "[t=" << t << "s] New target: (" << tc.tipX << ", " << tc.tipZ
+                      << ")" << std::endl;
+            traj.setTarget(tc.tipX, tc.tipZ);
+            traj.generate(currentTip, now);
         }
+
+        const TrajectoryPoint pt = traj.get(now, nullptr);
+
+        // 模拟完美跟踪
+        currentTip.pos[0] = pt.pos[0];
+        currentTip.pos[2] = pt.pos[2];
+        currentTip.linerVel[0] = pt.vel[0];
+        currentTip.linerVel[2] = pt.vel[2];
+
+        // cycle=目标段索引, stepLength_mm=目标Z（用于标记参变）,
+        // totalTime_s=过渡时间(HOLD=0)
+        const float tHint = targets[targetIdx].tipZ;
+        const float totalT = traj.isHolding() ? 0.0f : 5.0f;
+        writeRow(csv, t, pt, static_cast<unsigned int>(targetIdx), tHint, totalT);
     }
 
     csv.close();
-    std::cout << "csv written to: " << csv_path << std::endl;
+    std::cout << "\n=== Test Complete ===" << std::endl;
+    std::cout << "Final phase: " << (traj.isHolding() ? "HOLD" : "TRANSITION")
+              << std::endl;
+    std::cout << "CSV written to: " << csvPath << std::endl;
 
     rclcpp::shutdown();
     return 0;

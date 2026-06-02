@@ -1,6 +1,9 @@
 #include "dog_hardware/goM8010.hpp"
 
+#include <array>
+#include <memory>
 #include <rclcpp/rclcpp.hpp>
+#include <vector>
 #include <yaml-cpp/yaml.h>
 
 namespace Dog8Dof {
@@ -12,6 +15,9 @@ namespace Dog8Dof {
         bool callibrateMotorNoneInteractive();
 
       private:
+        static constexpr std::array<size_t, 4> LEFT_MOTOR_INDICES{0, 1, 4, 5};
+        static constexpr std::array<size_t, 4> RIGHT_MOTOR_INDICES{2, 3, 6, 7};
+
         std::map<std::string, uint8_t> jointMapping_;
         const std::string jointNames_[8] = {"LF_Front",
                                             "LF_Rear",
@@ -21,13 +27,16 @@ namespace Dog8Dof {
                                             "LR_Rear",
                                             "RR_Front",
                                             "RR_Rear"};
-        std::string portName_;
-        std::shared_ptr<SerialPort> port_;
+
+        std::string portNameLeft_;
+        std::string portNameRight_;
+        std::shared_ptr<Dog8Dof::SerialPort> portLeft_;
+        std::shared_ptr<Dog8Dof::SerialPort> portRight_;
 
         YAML::Node node_;
         std::string configPath_;
 
-        std::unique_ptr<goM8010Interface> motor_[8];
+        std::vector<goM8010Interface> motor_;
         std::array<float, 8> zeroOffsetByIndex_{};
 
         const rclcpp::Logger logger_ = this->get_logger();
@@ -41,7 +50,8 @@ namespace Dog8Dof {
 
         bool getOffsetInteractive(size_t jointIdx);
         bool select(std::string input);
-        void writeFile(float offSet, size_t jointIdx);
+        void updateOffset(float offSet, size_t jointIdx);
+        void flushToFile();
     };
 
 } // namespace Dog8Dof

@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.8)
 project(dog_trajectory)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-  add_compile_options(-Wall -Wextra -Wpedantic)
+  add_compile_options(-Wall -Wextra -Wpedantic -O3 -march=native)
 endif()
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
@@ -17,11 +17,9 @@ find_package(yaml-cpp REQUIRED)
 include_directories(include)
 
 add_library(${PROJECT_NAME}
-  src/base.cpp
   src/standTrajectory.cpp
   src/walkTrajectory.cpp
   src/jumpTrajectory.cpp
-  src/jumpTrajectoryLegacy.cpp
 )
 target_link_libraries(${PROJECT_NAME}
     Eigen3::Eigen
@@ -32,25 +30,12 @@ ament_target_dependencies(${PROJECT_NAME}
     dog_tools
 )
 
-    
-add_executable(bezierTest
-  src/test/bezierTest.cpp
-)
-ament_target_dependencies(bezierTest
-    rclcpp
-    dog_tools
-    Eigen3)
-target_link_libraries(bezierTest
-  Eigen3::Eigen
-)
-
 install(
   DIRECTORY include/
   DESTINATION include/
 )
 install(
   TARGETS ${PROJECT_NAME}
-    bezierTest
   DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )

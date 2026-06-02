@@ -23,7 +23,7 @@ include_directories(include)
 add_library(${PROJECT_NAME} SHARED
     src/sbusReader.cpp
     src/serialConfig.cpp
-    src/commandManager.cpp
+    src/joystick.cc
 )
 ament_target_dependencies(${PROJECT_NAME}
   "rclcpp"
@@ -56,22 +56,28 @@ target_link_libraries(twistToGaitTester
     ${PROJECT_NAME}
 )
 
-# add_executable(commandManager
-#     src/commandManager.cpp)
-# ament_target_dependencies(commandManager
-#     rclcpp
-#     std_srvs
-#     dog_msg
-# )
-# target_link_libraries(commandManager
-#     ${PROJECT_NAME}
-# )
+add_executable(joystickController
+    src/joystick_controller.cpp)
+ament_target_dependencies(joystickController
+    rclcpp
+    geometry_msgs
+)
+target_link_libraries(joystickController
+    ${PROJECT_NAME}
+)
+
+add_executable(joystickTester
+    src/test/joystickTester.cpp)
+target_link_libraries(joystickTester
+    ${PROJECT_NAME}
+)
 
 install(
   TARGETS ${PROJECT_NAME}
     sbusTester
     twistToGaitTester
-    # commandManager
+    joystickController
+    joystickTester
   DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )

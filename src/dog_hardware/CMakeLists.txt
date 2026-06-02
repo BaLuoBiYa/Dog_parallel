@@ -4,7 +4,7 @@ project(dog_hardware)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-  add_compile_options(-Wall -Wextra -Wpedantic)
+  add_compile_options(-Wall -Wextra -Wpedantic -O3 -march=native)
 endif()
 
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|i[3-6]86)$")
@@ -24,9 +24,9 @@ find_package(rclcpp REQUIRED)
 find_package(hardware_interface REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(yaml-cpp REQUIRED)
+find_package(ament_index_cpp REQUIRED)
 find_package(std_msgs REQUIRED)
-find_package(dog_remote REQUIRED)
-find_package(dog_tools REQUIRED)
+find_package(Boost REQUIRED COMPONENTS system)
 
 include_directories(include)
 
@@ -34,9 +34,7 @@ add_library(${PROJECT_NAME} SHARED
     src/base.cpp
     src/baseSingle.cpp
     src/goM8010.cpp
-    src/dm_motor.cpp
-    src/dji_motor.cpp
-    src/CanManager.cpp
+    src/serial.cpp
 )
 ament_target_dependencies(${PROJECT_NAME}
   "rclcpp"
@@ -47,7 +45,8 @@ ament_target_dependencies(${PROJECT_NAME}
 )
 target_link_libraries(${PROJECT_NAME}
   ${ARCH_LIB}
-  yaml-cpp
+  yaml-cpp::yaml-cpp
+  Boost::system
 )
 
 add_executable(example_goM8010_6_motor
@@ -62,6 +61,7 @@ add_executable(zeroSetter
 ament_target_dependencies(zeroSetter
     rclcpp
     yaml-cpp
+    ament_index_cpp
 )
 target_link_libraries(zeroSetter
     yaml-cpp

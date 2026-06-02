@@ -1,5 +1,5 @@
 #include "dog_hardware/goM8010.hpp"
-#include "unitree_actuator_sdk/serialPort/SerialPort.h"
+#include "dog_hardware/serial.hpp"
 #include "unitree_actuator_sdk/unitreeMotor/unitreeMotor.h"
 #include <cstdint>
 #include <ios>
@@ -8,7 +8,8 @@
 
 namespace Dog8Dof {
 
-    goM8010Interface::goM8010Interface(uint8_t ID, std::shared_ptr<SerialPort> port) {
+    goM8010Interface::goM8010Interface(uint8_t ID,
+                                       std::shared_ptr<Dog8Dof::SerialPort> port) {
         command_.motorType = MotorType::GO_M8010_6;
         state_.motorType = MotorType::GO_M8010_6;
         command_.mode = queryMotorMode(MotorType::GO_M8010_6, MotorMode::FOC);
@@ -59,24 +60,6 @@ namespace Dog8Dof {
         return port_->sendRecv(&command_, &state_);
     }
 
-    MotorCmd goM8010Interface::makeCmd(float torque, float pos, float vel, float kp, float kd) const {
-        MotorCmd cmd;
-        cmd.motorType = MotorType::GO_M8010_6;
-        cmd.hex_len = 0;
-        cmd.id = command_.id;
-        cmd.mode = command_.mode;
-        cmd.tau = torque / gearRatio_;
-        cmd.q = (pos + posOffset_) * gearRatio_;
-        cmd.dq = vel * gearRatio_;
-        cmd.kp = kp;
-        cmd.kd = kd;
-        return cmd;
-    }
-
-    void goM8010Interface::applyState(const MotorData &data) {
-        state_ = data;
-    }
-
     void goM8010Interface::setZero(float offset) {
         posOffset_ = offset;
     }
@@ -107,47 +90,6 @@ namespace Dog8Dof {
     bool goM8010Interface::release() {
         command_.mode = queryMotorMode(MotorType::GO_M8010_6, MotorMode::FOC);
         return this->zeroTor();
-    }
-
-    float goM8010Interface::getPos() {
-        return state_.q / gearRatio_ - posOffset_;
-    }
-
-    float goM8010Interface::getVel() {
-        return state_.dq / gearRatio_;
-    }
-
-    float goM8010Interface::getTor() {
-        return state_.tau * gearRatio_;
-    }
-
-    int8_t goM8010Interface::getTemp() {
-        return state_.temp;
-    }
-
-    uint8_t goM8010Interface::getID() {
-        return state_.motor_id;
-    }
-
-    std::string goM8010Interface::getError() {
-        switch (state_.merror) {
-        case 0:
-            return "OK";
-        case 1:
-            return "Over Heat";
-        case 2:
-            return "Over Current";
-        case 3:
-            return "Over Voltage";
-        case 4:
-            return "Encoder Error";
-        case 5:
-            return "Under Voltage";
-        case 6:
-            return "Over Heat on Coil";
-        default:
-            return "Unknow Error";
-        }
     }
 
     void goM8010Interface::emergencyStop() {

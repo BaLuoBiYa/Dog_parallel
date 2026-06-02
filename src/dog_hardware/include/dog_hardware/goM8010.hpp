@@ -1,8 +1,7 @@
-#include "unitree_actuator_sdk/serialPort/SerialPort.h"
+#include "dog_hardware/serial.hpp"
 #include "unitree_actuator_sdk/unitreeMotor/unitreeMotor.h"
 #include <cstdint>
 #include <memory>
-#include <string>
 
 namespace Dog8Dof {
 
@@ -12,12 +11,22 @@ namespace Dog8Dof {
      */
     class goM8010Interface {
       public:
+        enum ErrorCode {
+            OK = 0,
+            OVER_HEAT = 1,
+            OVER_CURRENT = 2,
+            OVER_VOLTAGE = 3,
+            ENCODER_ERROR = 4,
+            UNDER_VOLTAGE = 5,
+            OVER_HEAT_COIL = 6
+        };
+
         /**
          * @brief 构造函数，设定电机的 ID
          * @param ID 电机的唯一标识
          * @param port 串口实例的共享指针
          */
-        goM8010Interface(uint8_t ID, std::shared_ptr<SerialPort> port);
+        goM8010Interface(uint8_t ID, std::shared_ptr<Dog8Dof::SerialPort> port);
 
         /**
          * @brief 混合控制模式
@@ -79,53 +88,72 @@ namespace Dog8Dof {
         /**
          * @brief 获得当前电机位置
          */
-        float getPos();
+        float getPos() const {
+            return state_.q / gearRatio_ - posOffset_;
+        }
 
         /**
          * @brief 获得当前电机速度
          */
-        float getVel();
+        float getVel() const {
+            return state_.dq / gearRatio_;
+        }
 
         /**
          * @brief 获得当前电机扭矩
          */
-        float getTor();
+        float getTor() const {
+            return state_.tau * gearRatio_;
+        }
 
         /**
-         * @brief 获得当前电机扭矩
+         * @brief 获得当前电机ID
          */
-        uint8_t getID();
+        uint8_t getID() const {
+            return state_.motor_id;
+        }
 
         /**
          * @brief 获得当前电机温度
          * @note 温度高于90度会触发保护无法控制
          */
-        int8_t getTemp();
+        int8_t getTemp() const {
+            return state_.temp;
+        }
 
         /**
-         * @brief 获得当前电机问题
+         * @brief 获得当前电机错误码
          */
-        std::string getError();
+        ErrorCode getError() const {
+            switch (state_.merror) {
+            case 0:
+                return ErrorCode::OK;
+            case 1:
+                return ErrorCode::OVER_HEAT;
+            case 2:
+                return ErrorCode::OVER_CURRENT;
+            case 3:
+                return ErrorCode::OVER_VOLTAGE;
+            case 4:
+                return ErrorCode::ENCODER_ERROR;
+            case 5:
+                return ErrorCode::UNDER_VOLTAGE;
+            case 6:
+                return ErrorCode::OVER_HEAT_COIL;
+            default:
+                return ErrorCode::OK;
+            }
+        }
 
         /**
          * @brief 紧急停止所有电机
          */
         void emergencyStop();
 
-        /**
-         * @brief 构造用于批量发送的 `MotorCmd` 对象
-         */
-        MotorCmd makeCmd(float torque, float pos, float vel, float kp, float kd) const;
-
-        /**
-         * @brief 从 `MotorData` 更新内部状态（批量接收后调用）
-         */
-        void applyState(const MotorData &data);
-
       private:
         MotorCmd command_;
         MotorData state_;
-        std::shared_ptr<SerialPort> port_;
+        std::shared_ptr<Dog8Dof::SerialPort> port_;
         float posOffset_;
         float gearRatio_ = queryGearRatio(MotorType::GO_M8010_6);
     };

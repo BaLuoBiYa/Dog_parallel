@@ -84,6 +84,24 @@ namespace Dog8Dof {
         Motor targetMotors_[2];
         Body targetTip_;
 
+        // ---- 运动学中间量缓存（避免 sin/cos/sqrt 重复计算）----
+        struct KinCache {
+            float sin_theta = 0, cos_theta = 0;
+            float sin_gamma = 0, cos_gamma = 0;
+        };
+        KinCache tgt_kin_; // setTip() 路径缓存
+        KinCache cur_kin_; // updateMotor() 路径缓存
+
+        /// 从电机角度计算 (theta, gamma) 并填满 KinCache
+        static void fillKinCache(KinCache &kc, float q_f, float q_r) {
+            const float theta = (q_f + q_r) * 0.5f;
+            const float gamma = (q_f - q_r) * 0.5f;
+            kc.sin_theta = std::sin(theta);
+            kc.cos_theta = std::cos(theta);
+            kc.sin_gamma = std::sin(gamma);
+            kc.cos_gamma = std::cos(gamma);
+        }
+
         /**
          * @brief 计算不带足端的机械腿关节角度。
          * 根据足端在腿坐标系下的X和Z坐标，计算前关节和后关节的目标角度。
@@ -97,16 +115,18 @@ namespace Dog8Dof {
          * 将腿部末端的线速度转换为前后电机的角速度。
          * @param vx 腿部在X方向的速度。
          * @param vz 腿部在Z方向的速度。
+         * @param kc 预计算的 sin/cos 缓存（由 tipPosToMotor 填充）
          */
-        bool tipVelToMotor(float velX, float velZ);
+        bool tipVelToMotor(float velX, float velZ, const KinCache &kc);
 
         /**
          * @brief 雅可比矩阵转换函数。
          * 将腿部在X和Z方向的力矢量转换为前后电机所需的力矩。
          * @param fX 腿部在X方向的力。
          * @param fZ 腿部在Z方向的力。
+         * @param kc 预计算的 sin/cos 缓存
          */
-        bool tipForceToMotor(float fX, float fZ);
+        bool tipForceToMotor(float fX, float fZ, const KinCache &kc);
 
         /**
          * @brief 逆运动学：根据关节角度逆向计算不带足端的足端坐标。
@@ -120,16 +140,18 @@ namespace Dog8Dof {
          * 将前后电机的角速度转换为腿部末端的线速度。
          * @param velFront 前电机的角速度。
          * @param velRear 后电机的角速度。
+         * @param kc 预计算的 sin/cos 缓存（由 motorPosToTip 填充）
          */
-        bool motorVelToTip(float velFront, float velRear);
+        bool motorVelToTip(float velFront, float velRear, const KinCache &kc);
 
         /**
          * @brief 雅可比矩阵转换函数 (力)。
          * 将前后电机的力矩转换为腿部在X和Z方向的力矢量。
          * @param tau_front 前电机的力矩。
          * @param tau_rear 后电机的力矩。
+         * @param kc 预计算的 sin/cos 缓存
          */
-        bool motorTauToTip(float tau_front, float tau_rear);
+        bool motorTauToTip(float tau_front, float tau_rear, const KinCache &kc);
     };
 
 } // namespace Dog8Dof

@@ -20,23 +20,23 @@ namespace Dog8Dof {
         virtual ~BaseTrajectory() = default;
 
         /**
-         * @brief 以当前状态生成下一个步态周期内的步态序列
-         * @param currentTip 包含当前关节状态，用于初始化
+         * @brief 获取当前时刻的期望轨迹点（每控制周期调用，内部在线重规划）
+         * @param currentTime 当前 ROS 时间
+         * @param currentTip  当前足端传感器反馈（可空，则用轨迹内推状态）
+         * @return 本周期期望的足端状态（位置、速度、PD 增益）
          */
-        virtual bool generate(const Body &currentTip) = 0;
+        virtual TrajectoryPoint get(const rclcpp::Time &currentTime,
+                                    const Body *currentTip = nullptr) = 0;
 
         /**
-         * @brief 初始化轨迹开始时间
-         * @param startTime 轨迹开始执行时间
-         * @warning 调用该方法后，在轨迹结束前不应该当使用耗时较长的函数，避免拖慢控制回路
+         * @brief 启动轨迹生成器，记录起始时间
+         * @param startTime 轨迹开始时间
+         * @return 是否成功启动
          */
-        virtual bool start(const rclcpp::Time &startTime) = 0;
-
-        /**
-         * @brief 获得下一时刻足尖状态
-         * @param currentTime 当前时间
-         */
-        virtual TrajectoryPoint get(const rclcpp::Time &currentTime) = 0;
+        void start(rclcpp::Time startTime) {
+            startTimeNanoSec_ = startTime.nanoseconds();
+            finished_ = false;
+        }
 
         /**
          * @brief 从配置文件重新读出参数
@@ -56,34 +56,10 @@ namespace Dog8Dof {
         const std::string configPath_;
         YAML::Node configFile_;
 
-        size_t startTimeNanoSec_;
-        const size_t controlDurationNanoSec_;
+        long startTimeNanoSec_;
+        const long controlDurationNanoSec_;
 
         bool finished_ = false;
-        int steps_;
-        Trajectory trajectory_;
-        TrajectoryPoint target_;
-
-        /**
-         * @brief   线性插值函数，赋值target的位置，速度和力属性
-         * @param   currrentNanoSec 当前纳秒时间戳
-         * @note    需要接下来手动实现增益的赋值
-         */
-        void interpolate(size_t currentNanoSec);
-
-        /**
-         * @brief   获得指向步高方向的单位向量
-         * @param   tangentVec 起点坐标
-         */
-        Eigen::Vector2<float> getHeightVec(const Eigen::Vector2<float> &tangentVec);
-
-        /**
-         * @brief   根据步态周期生成步数
-         * @param   durationNs 步态持续时长
-         */
-        size_t stepsFromDurationNs(size_t durationNs,
-                                   size_t minSteps = Const::MIN_RESOLUTION,
-                                   size_t maxSteps = Const::MAX_RESOLUTION) const;
     };
 
 } // namespace Dog8Dof

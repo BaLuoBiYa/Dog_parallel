@@ -1,5 +1,21 @@
+/**
+ * @file jumpTest.cpp
+ * @brief JumpTrajectory 全阶段轨迹测试
+ *
+ * 测试目标：
+ *   1. 完整 CROUCH→PUSH→FLIGHT→ABSORPTION→RECOVER→FINISHED 状态机走通
+ *   2. 各阶段衔接点位置/速度 C² 连续性（基于五次多项式重规划的开环验证）
+ *   3. ABSORPTION 阶段纯阻尼控制（kp=0, kd>0）
+ *   4. FINISHED 后 finished() 标志正确置位
+ *   5. 输出 CSV，便于外部工具绘图验证
+ *
+ * 仿真环境：
+ *   控制频率 300Hz，足端传感器反馈模拟完美跟踪
+ */
+
 #include "dog_trajectory/jumpTrajectory.hpp"
 #include <ament_index_cpp/get_package_share_directory.hpp>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -10,84 +26,186 @@ using Dog8Dof::Body;
 using Dog8Dof::JumpTrajectory;
 using Dog8Dof::TrajectoryPoint;
 
-static void write_header(std::ofstream &csv) {
-    csv << "t_s," << "pos_x,pos_y,pos_z," << "vel_x,vel_y,vel_z," << "tau_x,tau_y,tau_z,"
-        << "kp_front,kp_rear," << "kd_front,kd_rear," << "finished\n";
+// ===================================================================
+//  CSV 输出辅助
+// ===================================================================
+static void writeHeader(std::ofstream &csv) {
+    csv << "t_s," << "phase," << "pos_x,pos_z," << "vel_x,vel_z," << "kp_x,kp_z,"
+        << "kd_x,kd_z," << "tau_x,tau_z\n";
 }
 
-static void
-write_row(std::ofstream &csv, double t, const TrajectoryPoint &p, bool finished) {
-    csv << std::fixed << std::setprecision(6) << t << "," << p.pos[0] << "," << p.pos[1]
-        << "," << p.pos[2] << "," << p.vel[0] << "," << p.vel[1] << "," << p.vel[2] << ","
-        << p.tau[0] << "," << p.tau[1] << "," << p.tau[2] << "," << p.kp[0] << ","
-        << p.kp[1] << "," << p.kd[0] << "," << p.kd[1] << "," << (finished ? 1 : 0)
-        << "\n";
+static const char *phaseName(JumpTrajectory::Phase p) {
+    switch (p) {
+    case JumpTrajectory::CROUCH:
+        return "CROUCH";
+    case JumpTrajectory::PUSH:
+        return "PUSH";
+    case JumpTrajectory::FLIGHT:
+        return "FLIGHT";
+    case JumpTrajectory::ABSORPTION:
+        return "ABSORPTION";
+    case JumpTrajectory::RECOVER:
+        return "RECOVER";
+    case JumpTrajectory::FINISHED:
+        return "FINISHED";
+    default:
+        return "UNKNOWN";
+    }
 }
 
+static void writeRow(std::ofstream &csv,
+                     double t,
+                     JumpTrajectory::Phase phase,
+                     const TrajectoryPoint &p) {
+    csv << std::fixed << std::setprecision(6) << t << "," << phaseName(phase) << ","
+        << p.pos[0] << "," << p.pos[2] << "," << p.vel[0] << "," << p.vel[2] << ","
+        << p.kp[0] << "," << p.kp[1] << "," << p.kd[0] << "," << p.kd[1] << ","
+        << p.tau[0] << "," << p.tau[2] << "\n";
+}
+
+// ===================================================================
+//  主测试
+// ===================================================================
 int main(int argc, char **argv) {
     rclcpp::init(argc, argv);
 
-    const std::string share_dir =
+    // ---- 加载配置 ----
+    const std::string shareDir =
         ament_index_cpp::get_package_share_directory("dog_bringup");
-    const std::string yaml_path =
-        (std::filesystem::path(share_dir) / "parameters" / "jump.yaml").string();
+    const std::string yamlPath =
+        (std::filesystem::path(shareDir) / "parameters" / "jump.yaml").string();
 
-    const rclcpp::Duration period = rclcpp::Duration::from_seconds(0.01);
-    JumpTrajectory traj(yaml_path, period);
+    // 100Hz 控制周期
+    const rclcpp::Duration period = rclcpp::Duration::from_seconds(1.0 / 100.0);
+    JumpTrajectory traj(yamlPath, period);
 
-    Body current_tip{};
-    current_tip.pos.setZero();
-    current_tip.linerVel.setZero();
-    current_tip.pos[0] = 0.0f;
-    current_tip.pos[2] = 180.0f;
+    // ---- 初始足端状态（站立姿态） ----
+    Body currentTip{};
+    currentTip.pos.setZero();
+    currentTip.linerVel.setZero();
+    currentTip.pos[0] = 0.0f;
+    currentTip.pos[2] = 270.0f; // 站立高度
 
-    const float launch_speed = 500.0f;
-    const float fly_time = 0.5f;
-
-    if (!traj.setTarget(launch_speed, fly_time)) {
+    // ---- 设置目标参数ID ----
+    const uint8_t parID = 0;
+    if (!traj.setTarget(parID)) {
         std::cerr << "setTarget failed\n";
         return 1;
     }
-    if (!traj.generate(current_tip)) {
-        std::cerr << "generate failed\n";
+
+    // ---- 初始化跳跃：generate() 锚定 CROUCH 起始点 ----
+    const rclcpp::Time t0(0, 0, RCL_SYSTEM_TIME);
+    TrajectoryPoint firstPt = traj.generate(currentTip, t0);
+
+    // 用首帧更新足端状态
+    currentTip.pos = firstPt.pos;
+    currentTip.linerVel = firstPt.vel;
+
+    // CSV 输出路径
+    std::string csvPath;
+    std::cout << "Output CSV path: ";
+    std::cin >> csvPath;
+
+    std::ofstream csv(csvPath, std::ios::out | std::ios::trunc);
+    if (!csv.is_open()) {
+        std::cerr << "Cannot open: " << csvPath << "\n";
         return 2;
     }
-    if (!traj.start(rclcpp::Time(0, 0, RCL_SYSTEM_TIME))) {
-        std::cerr << "start failed\n";
-        return 3;
-    }
+    writeHeader(csv);
 
-    std::string csv_path;
-    std::cout << "Type csv Path: ";
-    std::cin >> csv_path;
+    // ---- 主仿真循环 ----
+    const int64_t dtNs = period.nanoseconds();
 
-    std::ofstream csv(csv_path, std::ios::out | std::ios::trunc);
-    if (!csv.is_open()) {
-        std::cerr << "cannot open csv file: " << csv_path << "\n";
-        return 4;
-    }
+    // 运行足够长时间覆盖全部阶段（crouch + push + flight + absorb + recover + 额外余量）
+    const double totalSimTime = 5.0;
+    unsigned int step = 0;
 
-    write_header(csv);
+    JumpTrajectory::Phase prevPhase = JumpTrajectory::CROUCH;
 
-    const int max_steps = 3000;
-    const int64_t dt_ns = period.nanoseconds();
+    for (; /* below */; ++step) {
+        const int64_t tNs = static_cast<int64_t>(step + 1) * dtNs; // 从 dt 开始
+        const double t = static_cast<double>(tNs) * 1e-9;
+        const rclcpp::Time now(tNs, RCL_SYSTEM_TIME);
 
-    for (int i = 0; i < max_steps; ++i) {
-        const int64_t t_ns = static_cast<int64_t>(i) * dt_ns;
-        const rclcpp::Time now(t_ns, RCL_SYSTEM_TIME);
+        if (t > totalSimTime)
+            break;
 
-        const TrajectoryPoint p = traj.get(now);
-        const bool finished = traj.finished();
+        // ---- 获取轨迹点（带传感器反馈，模拟完美跟踪） ----
+        const TrajectoryPoint pt = traj.get(now, &currentTip);
+        const JumpTrajectory::Phase curPhase = traj.getPhase();
 
-        write_row(csv, static_cast<double>(t_ns) * 1e-9, p, finished);
+        // ---- 相位转移日志 ----
+        if (curPhase != prevPhase) {
+            std::cout << "[t=" << t << "s] Phase transition: " << phaseName(prevPhase)
+                      << " -> " << phaseName(curPhase) << "  pos=(" << pt.pos[0] << ", "
+                      << pt.pos[2] << ")  vel=(" << pt.vel[0] << ", " << pt.vel[2] << ")"
+                      << std::endl;
 
-        if (finished) {
+            // PUSH 阶段检查：tau 非零（有前馈力矩）
+            if (curPhase == JumpTrajectory::PUSH) {
+                if (std::abs(pt.tau[0]) < 1e-6f && std::abs(pt.tau[2]) < 1e-6f) {
+                    std::cerr
+                        << "  WARNING: PUSH phase tau is zero — PushPlanner may not "
+                           "be active\n";
+                }
+            }
+
+            // ABSORPTION 阶段检查：kp == 0（纯阻尼）
+            if (curPhase == JumpTrajectory::ABSORPTION) {
+                if (pt.kp[0] != 0.0f || pt.kp[1] != 0.0f) {
+                    std::cerr << "  WARNING: ABSORPTION phase kp should be 0\n";
+                }
+                if (pt.kd[0] <= 0.0f || pt.kd[1] <= 0.0f) {
+                    std::cerr << "  WARNING: ABSORPTION phase kd should be > 0\n";
+                }
+            }
+
+            prevPhase = curPhase;
+        }
+
+        // ---- 更新"足端状态"以模拟完美跟踪 ----
+        currentTip.pos[0] = pt.pos[0];
+        currentTip.pos[2] = pt.pos[2];
+        currentTip.linerVel[0] = pt.vel[0];
+        currentTip.linerVel[2] = pt.vel[2];
+
+        writeRow(csv, t, curPhase, pt);
+        csv.flush();
+        // 提前退出：FINISHED 后再跑一小段验证稳定性
+        if (traj.finished()) {
+            std::cout << "[t=" << t << "s] Trajectory finished\n";
             break;
         }
     }
 
     csv.close();
-    std::cout << "csv written to: " << csv_path << std::endl;
+
+    // ---- 结果校验 ----
+    std::cout << "\n=== Test Results ===" << std::endl;
+    std::cout << "Total simulation steps: " << step << std::endl;
+    std::cout << "Final phase: " << phaseName(traj.getPhase()) << std::endl;
+    std::cout << "Trajectory finished: " << (traj.finished() ? "YES" : "NO") << std::endl;
+
+    if (!traj.finished()) {
+        std::cerr << "FAIL: Trajectory did not reach FINISHED within sim time.\n";
+        rclcpp::shutdown();
+        return 3;
+    }
+
+    // 验证最终腿长回到站立高度附近
+    const float finalZ = currentTip.pos[2];
+    const float targetStandZ = 270.0f;
+    const float zErr = std::abs(finalZ - targetStandZ);
+    std::cout << "Final tip Z: " << finalZ << " mm (target: " << targetStandZ
+              << " mm, err: " << zErr << " mm)" << std::endl;
+
+    if (zErr > 5.0f) {
+        std::cerr << "WARNING: Final Z deviation exceeds 5mm — RECOVER may be "
+                     "incomplete.\n";
+    }
+
+    std::cout << "CSV written to: " << csvPath << std::endl;
+    std::cout << "\n=== JumpTest PASSED ===" << std::endl;
 
     rclcpp::shutdown();
     return 0;

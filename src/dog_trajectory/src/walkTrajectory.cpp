@@ -1,22 +1,26 @@
 #include "dog_trajectory/walkTrajectory.hpp"
 #include "dog_tools/quinticPolynomial.hpp"
+#include <cmath>
 
 namespace Dog8Dof {
+
+    // ===================================================================
+    //  WalkTrajectory 构造 & 参数
+    // ===================================================================
     WalkTrajectory::WalkTrajectory(const std::string &configPath, rclcpp::Duration period)
         : BaseTrajectory(configPath, period) {
         if (!reloadParameters()) {
-            throw std::invalid_argument("Could not load Config YAML!");
+            throw std::invalid_argument("Could not load WalkTrajectory Config YAML!");
         }
-        stepHeight_ = 20.0f;
+        stepHeight_ = 0.0f;
         stepLength_ = 0.0f;
-        baseHeight_ = 180.0f;
-        totalTime_ = 1.0f;
-        // 加载参数
+        baseHeight_ = 0.0f;
+        swingTime_ = 0.5f;
+        stanceTime_ = 0.5f;
     }
 
     bool WalkTrajectory::reloadParameters() {
         configFile_ = YAML::LoadFile(configPath_);
-        // 重新加载参数文件
         try {
             parameters_ = configFile_.as<parameters_t>();
         } catch (const YAML::Exception &e) {
@@ -28,17 +32,8 @@ namespace Dog8Dof {
             RCLCPP_ERROR(logger_, "Swing duty cycle must be less than 1!");
             return false;
         }
-
-        if (parameters_.transitionVelMax <= 0.0f) {
-            RCLCPP_ERROR(logger_, "Transition velocity limit must be greater than 0!");
-            return false;
-        }
-        if (parameters_.deltaSpeed[0] < 0.0f) {
-            RCLCPP_ERROR(logger_, "Delta speed x must be greater than 0!");
-            return false;
-        }
-        if (parameters_.deltaSpeed[1] < 0.0f) {
-            RCLCPP_ERROR(logger_, "Delta speed z must be greater than 0!");
+        if (parameters_.swingDutyCycle <= 0.0f) {
+            RCLCPP_ERROR(logger_, "Swing duty cycle must be greater than 0!");
             return false;
         }
         return true;
@@ -61,686 +56,496 @@ namespace Dog8Dof {
             return false;
         }
 
-        stepHeight_ = stepHeight;
         stepLength_ = stepLength;
+        stepHeight_ = stepHeight;
         baseHeight_ = baseHeight;
-        totalTime_ = totalTime;
+        swingTime_ = totalTime * parameters_.swingDutyCycle;
+        stanceTime_ = totalTime - swingTime_;
+        phaseOffset_ = phaseOffset;
 
-        // 归一化到 [0, 1)
-        phaseOffset_ = phaseOffset - std::floor(phaseOffset);
-        if (phaseOffset_ < 0.0f) {
-            phaseOffset_ += 1.0f;
-        }
+        // 计算期望前进速度（腿坐标系）
+        vDes_ = (totalTime > 0.0f) ? stepLength_ / totalTime : 0.0f;
+
         return true;
     }
 
-    bool WalkTrajectory::generate(const Body &currentTip) {
+    TrajectoryPoint WalkTrajectory::generate(const Body &currentTip,
+                                             const rclcpp::Time now) {
         finished_ = false;
-        trajectory_.progress = 0;
-        target_ = TrajectoryPoint();
-        trajectory_ = Trajectory(0);
+        lastUpdateTime_ = now;
+        gaitEpoch_ = now; // 锁定全局相位纪元
+        lastTipX_ = currentTip.pos[0];
 
-        const size_t totalSteps = stepsFromDurationNs(totalTime_ * 1e9);
-        const float dt = static_cast<float>(controlDurationNanoSec_) * 1e-9f;
-        const float TCycle = dt * static_cast<float>(totalSteps);
+        // 以当前足端位置作为摆动相起点，初始化摆动相
+        const float zStart = currentTip.pos[2];
+        const float zTarget = baseHeight_;
+        const float xStart = currentTip.pos[0];
+        // 假设从站立开始，速度/加速度均为 0
+        const float vxStart = 0.0f;
+        const float axStart = 0.0f;
 
-        const bool isZeroStep = std::abs(stepLength_) < 1e-3f;
+        // ---- 相位偏移处理 ----
+        // phaseOffset_ ∈ [0, 1)：表示本腿在全局周期中的起始相位点
+        //
+        // 当 phaseOffset_ = 0.0 时：从 SWING 开始，先摆后撑，完整周期
+        // 当 phaseOffset_ = 0.5 时：从 STANCE 开始，先撑后摆（对侧腿正在摆动）
+        //
+        // Stance 的初始时长按 phaseOffset_ 缩放：
+        //   若 phaseOffset_ < swingDuty，直接按比例进入 SWING 的中间时刻
+        //   若 phaseOffset_ >= swingDuty，从 STANCE 起步，剩余支撑时间 =
+        //       stanceTime * (1 - (phaseOffset - swingDuty) / (1 - swingDuty))
 
-        Trajectory closedCycle;
-        if (isZeroStep) {
-            closedCycle = generateZeroLength(currentTip);
+        const float swingDuty = parameters_.swingDutyCycle;
+        const float phase = std::fmod(phaseOffset_, 1.0f);
+
+        // 根据 phaseOffset 自动推导初始步态，保证相位一致
+        //   phase <  swingDuty → 从 SWING 开始（先摆后撑）
+        //   phase >= swingDuty → 从 STANCE 开始（先撑后摆）
+        const GaitPhase effectiveInitGait = (phase < swingDuty) ? SWING : STANCE;
+
+        if (effectiveInitGait == SWING) {
+            // SWING 起步：按 phase 比例跳过已过的摆动时间
+            //   skipFraction = phase / swingDuty, clamp to [0,1]
+            const float skipFraction =
+                (swingDuty > 0.0f) ? std::max(0.0f, std::min(phase / swingDuty, 1.0f))
+                                   : 0.0f;
+            const float effectiveSwingT =
+                std::max(swingTime_ * (1.0f - skipFraction), parameters_.minReplanTime);
+
+            swing_.init(zStart,
+                        zTarget,
+                        stepHeight_,
+                        effectiveSwingT,
+                        parameters_.lowPassAlpha,
+                        parameters_.minReplanTime,
+                        xStart,
+                        vxStart,
+                        axStart,
+                        stepLength_);
         } else {
-            closedCycle = generateClosedCycle(TCycle, totalSteps);
+            // STANCE 起步：按 (phase - swingDuty) / stanceDuty 比例跳过已过的支撑时间
+            const float stanceDuty = 1.0f - swingDuty;
+            const float stancePhase =
+                (stanceDuty > 0.0f)
+                    ? std::max(0.0f, std::min((phase - swingDuty) / stanceDuty, 1.0f))
+                    : 0.0f;
+            const float effectiveStanceT = stanceTime_ * (1.0f - stancePhase);
+
+            stance_.init(xStart,
+                         zStart,
+                         effectiveStanceT,
+                         parameters_.stanceTimeMin,
+                         parameters_.stanceTimeMax);
         }
+        gaitPhase_ = effectiveInitGait;
 
-        if (closedCycle.points.empty()) {
-            return false;
-        }
-
-        const size_t n = closedCycle.points.size();
-        size_t startIndex = 0;
-        if (isZeroStep) {
-            // 零步长也要保留相位差：按 phaseOffset 选择周期起点。
-            startIndex =
-                static_cast<size_t>(std::lround(phaseOffset_ * static_cast<float>(n))) %
-                n;
-        } else {
-            startIndex =
-                static_cast<size_t>(std::lround(phaseOffset_ * static_cast<float>(n))) %
-                n;
-        }
-
-        Trajectory phaseCycle = rotateCycleToStart(closedCycle, startIndex);
-        if (phaseCycle.points.empty()) {
-            return false;
-        }
-
-        // 相位启动：先从当前位置过渡到相位起点
-        const TrajectoryPoint &phaseStart = phaseCycle.points.front();
-
-        const Eigen::Vector2f currentPos(currentTip.pos[0], currentTip.pos[2]);
-        const Eigen::Vector2f phaseStartPos(phaseStart.pos[0], phaseStart.pos[2]);
-        if ((currentPos - phaseStartPos).squaredNorm() < parameters_.reachThresholdSQ) {
-            // 已经在相位起点附近，无需过渡
-            trajectory_ = std::move(phaseCycle);
-            return true;
-        }
-
-        const Eigen::Vector2f currentVel(currentTip.linerVel[0], currentTip.linerVel[2]);
-        const Eigen::Vector2f phaseStartVel(phaseStart.vel[0], phaseStart.vel[2]);
-        const Eigen::Vector2f zeroAcc = Eigen::Vector2f::Zero();
-
-        // 步向符号：>0 前进，<0 后退
-        const float stepDir = (stepLength_ >= 0.0f) ? 1.0f : -1.0f;
-        const bool startInForwardDir = (phaseStartPos[0] * stepDir) >= 0.0f;
-
-        // 过渡时长与步数
-        const size_t transitionSteps = stepsFromDurationNs(parameters_.startblendTimeNs);
-        const float transitionTime = static_cast<float>(transitionSteps) * dt;
-
-        Trajectory transition(0);
-
-        auto appendUnique = [](Trajectory &dst, Trajectory src) {
-            if (src.points.empty()) {
-                return;
-            }
-            if (!dst.points.empty() &&
-                dst.points.back().pos.isApprox(src.points.front().pos)) {
-                src.points.erase(src.points.begin());
-                if (!src.time.empty()) {
-                    src.time.erase(src.time.begin());
-                }
-            }
-            dst = dst + src;
-        };
-
-        if (isZeroStep) {
-            // 两阶段：先回到正下方，再按相位进入原地踏步周期。
-            const Eigen::Vector2f centerPos(
-                0.0f,
-                std::clamp(baseHeight_, Const::BODY_HEIGHT_MIN, Const::BODY_HEIGHT_MAX));
-            const Eigen::Vector2f centerVel = Eigen::Vector2f::Zero();
-
-            const size_t toCenterSteps = transitionSteps;
-            const float toCenterTime = transitionTime;
-
-            const size_t settleSteps = transitionSteps / 4;
-            const float settleTime = static_cast<float>(settleSteps) * dt;
-
-            const size_t toPhaseSteps = transitionSteps;
-            const float toPhaseTime = transitionTime;
-
-            Trajectory toCenter = QuinticPolynomial::generate(currentPos,
-                                                              centerPos,
-                                                              currentVel,
-                                                              centerVel,
-                                                              zeroAcc,
-                                                              zeroAcc,
-                                                              toCenterTime,
-                                                              toCenterSteps);
-
-            Trajectory settle = QuinticPolynomial::generate(centerPos,
-                                                            centerPos,
-                                                            centerVel,
-                                                            centerVel,
-                                                            zeroAcc,
-                                                            zeroAcc,
-                                                            settleTime,
-                                                            settleSteps);
-
-            Trajectory toPhase = QuinticPolynomial::generate(centerPos,
-                                                             phaseStartPos,
-                                                             centerVel,
-                                                             phaseStartVel,
-                                                             zeroAcc,
-                                                             zeroAcc,
-                                                             toPhaseTime,
-                                                             toPhaseSteps);
-
-            appendUnique(transition, std::move(toCenter));
-            appendUnique(transition, std::move(settle));
-            appendUnique(transition, std::move(toPhase));
-        } else if (startInForwardDir) {
-            // 前向相位起点：抬腿移动到起点
-            const Eigen::Vector2f skyDir = getHeightVec(Eigen::Vector2f(stepDir, 0.0f));
-            const float liftMag = std::max(10.0f, std::abs(stepHeight_) * 0.6f);
-
-            const size_t steps1 = transitionSteps / 2;
-            const size_t steps2 = transitionSteps - steps1;
-            const float t1 = transitionTime * 0.5f;
-            const float t2 = transitionTime - t1;
-
-            const Eigen::Vector2f midPos =
-                0.5f * (currentPos + phaseStartPos) + skyDir * liftMag;
-
-            const Eigen::Vector2f midVel = QuinticPolynomial::solveMidVel2D(
-                currentPos, midPos, phaseStartPos, currentVel, phaseStartVel, t1, t2);
-
-            const Eigen::Vector2f midAcc = QuinticPolynomial::solveMidAcc2D(currentPos,
-                                                                            currentVel,
-                                                                            zeroAcc,
-                                                                            midPos,
-                                                                            midVel,
-                                                                            phaseStartPos,
-                                                                            phaseStartVel,
-                                                                            zeroAcc,
-                                                                            t1,
-                                                                            t2);
-
-            Trajectory first = QuinticPolynomial::generate(
-                currentPos, midPos, currentVel, midVel, zeroAcc, midAcc, t1, steps1);
-
-            Trajectory second = QuinticPolynomial::generate(midPos,
-                                                            phaseStartPos,
-                                                            midVel,
-                                                            phaseStartVel,
-                                                            midAcc,
-                                                            zeroAcc,
-                                                            t2,
-                                                            steps2);
-
-            if (!first.points.empty() && !second.points.empty()) {
-                if (first.points.back().pos.isApprox(second.points.front().pos)) {
-                    second.points.erase(second.points.begin());
-                    if (!second.time.empty()) {
-                        second.time.erase(second.time.begin());
-                    }
-                }
-            }
-
-            appendUnique(transition, std::move(first));
-            appendUnique(transition, std::move(second));
-        } else {
-            // 后向相位起点：从地面移动到起点
-            const float groundZ = baseHeight_;
-            const Eigen::Vector2f groundStart(currentPos[0], groundZ);
-            const Eigen::Vector2f groundEnd(phaseStartPos[0], groundZ);
-
-            const size_t steps1 = transitionSteps / 2;
-            const size_t steps2 = transitionSteps - steps1;
-            const float t1 = transitionTime * 0.5f;
-            const float t2 = transitionTime - t1;
-
-            const Eigen::Vector2f midPos = 0.5f * (groundStart + groundEnd);
-
-            const Eigen::Vector2f groundStartVel(currentVel[0], 0.0f);
-            const Eigen::Vector2f groundEndVel(phaseStartVel[0], 0.0f);
-
-            const Eigen::Vector2f midVel = QuinticPolynomial::solveMidVel2D(
-                groundStart, midPos, groundEnd, groundStartVel, groundEndVel, t1, t2);
-
-            const Eigen::Vector2f midAcc =
-                QuinticPolynomial::solveMidAcc2D(groundStart,
-                                                 groundStartVel,
-                                                 zeroAcc,
-                                                 midPos,
-                                                 midVel,
-                                                 groundEnd,
-                                                 groundEndVel,
-                                                 zeroAcc,
-                                                 t1,
-                                                 t2);
-
-            Trajectory first = QuinticPolynomial::generate(
-                groundStart, midPos, groundStartVel, midVel, zeroAcc, midAcc, t1, steps1);
-
-            Trajectory second = QuinticPolynomial::generate(
-                midPos, groundEnd, midVel, groundEndVel, midAcc, zeroAcc, t2, steps2);
-
-            if (!first.points.empty() && !second.points.empty()) {
-                if (first.points.back().pos.isApprox(second.points.front().pos)) {
-                    second.points.erase(second.points.begin());
-                    if (!second.time.empty()) {
-                        second.time.erase(second.time.begin());
-                    }
-                }
-            }
-
-            appendUnique(transition, std::move(first));
-            appendUnique(transition, std::move(second));
-        }
-
-        // 过渡段力矩渐变：从 currentTip.tau 平滑过渡到 phaseStart.tau，消除力矩跳变
-        if (!transition.points.empty()) {
-            const float tau_start_x = currentTip.tau[0];
-            const float tau_start_z = currentTip.tau[2];
-            const float tau_end_x = phaseStart.tau[0];
-            const float tau_end_z = phaseStart.tau[2];
-            for (size_t i = 0; i < transition.points.size(); ++i) {
-                const float s =
-                    transition.points.size() <= 1
-                        ? 1.0f
-                        : static_cast<float>(i) /
-                              static_cast<float>(transition.points.size() - 1);
-                transition.points[i].tau[0] = tau_start_x + (tau_end_x - tau_start_x) * s;
-                transition.points[i].tau[2] = tau_start_z + (tau_end_z - tau_start_z) * s;
-            }
-        }
-
-        // 去掉过渡段末点与相位段首点重复
-        if (!transition.points.empty() && !phaseCycle.points.empty()) {
-            if (transition.points.back().pos.isApprox(phaseCycle.points.front().pos)) {
-                phaseCycle.points.erase(phaseCycle.points.begin());
-                if (!phaseCycle.time.empty()) {
-                    phaseCycle.time.erase(phaseCycle.time.begin());
-                }
-            }
-        }
-
-        trajectory_ = transition + phaseCycle;
-        return !trajectory_.points.empty();
-    }
-
-    bool WalkTrajectory::start(const rclcpp::Time &startTime) {
-        startTimeNanoSec_ = static_cast<size_t>(startTime.nanoseconds());
-        trajectory_.progress = 0;
-
-        // generate 已经判定“无需过渡”时，直接保持 target_
-        if (finished_) {
-            return true;
-        }
-
-        if (trajectory_.points.empty()) {
-            return false;
-        }
-
-        for (size_t i = 0; i < trajectory_.time.size(); ++i) {
-            trajectory_.time[i] = startTimeNanoSec_ + i * controlDurationNanoSec_;
-        }
-
-        target_ = trajectory_.points.front();
+        // 返回初始点
+        target_.pos[0] = xStart;
+        target_.pos[1] = 0.0f;
+        target_.pos[2] = zStart;
+        target_.vel.setZero();
+        target_.tau.setZero();
         target_.kp[0] = parameters_.walkKp;
         target_.kp[1] = parameters_.walkKp;
         target_.kd[0] = parameters_.walkKd;
         target_.kd[1] = parameters_.walkKd;
-        return true;
-    }
 
-    TrajectoryPoint WalkTrajectory::get(const rclcpp::Time &currentTime) {
-        if (finished_) {
-            return target_;
-        }
-
-        const size_t pointCount = trajectory_.points.size();
-        const size_t currentNanoSec = static_cast<size_t>(currentTime.nanoseconds());
-
-        auto assignTransitionGains = [this]() {
-            target_.kp[0] = parameters_.walkKp;
-            target_.kp[1] = parameters_.walkKp;
-            target_.kd[0] = parameters_.walkKd;
-            target_.kd[1] = parameters_.walkKd;
-        };
-
-        if (currentNanoSec <= trajectory_.time.front()) {
-            target_ = trajectory_.points.front();
-            assignTransitionGains();
-            trajectory_.progress = 0;
-            return target_;
-        }
-
-        if (currentNanoSec >= trajectory_.time.back()) {
-            target_ = trajectory_.points.back();
-            assignTransitionGains();
-            trajectory_.progress = pointCount;
-            finished_ = true;
-            return target_;
-        }
-
-        interpolate(currentNanoSec);
-        if (trajectory_.progress == trajectory_.points.size()) {
-            finished_ = true;
-        }
-        assignTransitionGains();
         return target_;
     }
 
-    Trajectory WalkTrajectory::generateClosedCycle(const float cycleTime,
-                                                   const size_t totalSteps) {
-        size_t swingSteps = static_cast<size_t>(
-            std::lround(static_cast<float>(totalSteps) * parameters_.swingDutyCycle));
-        swingSteps = std::clamp(swingSteps, static_cast<size_t>(2), totalSteps - 2);
-        const size_t stanceSteps = totalSteps - swingSteps;
+    // ===================================================================
+    //  get() — 每控制周期的主入口
+    // ===================================================================
+    TrajectoryPoint WalkTrajectory::get(const rclcpp::Time &currentTime,
+                                        const Body *currentTip) {
+        const float dt = (currentTime - lastUpdateTime_).seconds();
+        if (dt <= 0.0f) {
+            // 同一时刻多次调用，直接返回上次结果
+            return target_;
+        }
+        lastUpdateTime_ = currentTime;
 
-        Trajectory swing = generateSwing(cycleTime, swingSteps);
-        Trajectory stance = generateStance(cycleTime, stanceSteps);
-        const Trajectory blend = generateBlend(swing, stance);
-
-        return swing + blend + stance;
-    }
-
-    // size_t WalkTrajectory::findNearestPointIndex(const Trajectory &cycle,
-    //                                              const Body &currentTip) const {
-    //     if (cycle.points.empty()) {
-    //         return 0;
-    //     }
-
-    //     const Eigen::Vector2f currentPos(currentTip.pos[0], currentTip.pos[2]);
-    //     size_t nearestIndex = 0;
-    //     float bestDistSq = std::numeric_limits<float>::max();
-
-    //     for (size_t i = 0; i < cycle.points.size(); ++i) {
-    //         const Eigen::Vector2f pointPos(cycle.points[i].pos[0],
-    //                                        cycle.points[i].pos[2]);
-    //         const float distSq = (pointPos - currentPos).squaredNorm();
-    //         if (distSq < bestDistSq) {
-    //             bestDistSq = distSq;
-    //             nearestIndex = i;
-    //         }
-    //     }
-
-    //     return nearestIndex;
-    // }
-
-    Trajectory WalkTrajectory::rotateCycleToStart(const Trajectory &cycle,
-                                                  size_t startIndex) const {
-        if (cycle.points.empty()) {
-            return Trajectory(0);
+        // 速度估计：Raibert 落脚点公式仅使用期望速度，保持步态 Z 轴对称
+        //   传感器位置反馈已通过多项式重规划提供误差修正，
+        //   若再引入传感器差分速度会导致落脚点偏移，破坏对称性。
+        const float vAct = vDes_;
+        if (currentTip) {
+            lastTipX_ = currentTip->pos[0];
         }
 
-        const size_t n = cycle.points.size();
-        startIndex %= n;
-        if (startIndex == 0) {
-            return cycle;
-        }
+        float xDes = target_.pos[0];
+        float zDes = target_.pos[2];
+        float vxDes = 0.0f;
+        float vzDes = 0.0f;
 
-        Trajectory rotated(0);
-        rotated.points.reserve(n);
-        rotated.time.resize(n);
-        rotated.progress = 0;
+        // ---- 全局相位锁：基于绝对时间的确定性相位 ----
+        // 所有腿接收相同的 currentTime，确保相位永不漂移
+        const float totalPeriod = swingTime_ + stanceTime_;
+        if (totalPeriod > 0.0f) {
+            const double elapsed = (currentTime - gaitEpoch_).seconds();
+            const double globalPhase =
+                std::fmod(std::max(0.0, elapsed) / static_cast<double>(totalPeriod) +
+                              static_cast<double>(phaseOffset_),
+                          1.0);
+            const float swingDuty = parameters_.swingDutyCycle;
+            const GaitPhase clockPhase =
+                (globalPhase < static_cast<double>(swingDuty)) ? SWING : STANCE;
 
-        for (size_t i = 0; i < n; ++i) {
-            rotated.points.push_back(cycle.points[(startIndex + i) % n]);
-        }
-
-        return rotated;
-    }
-
-    Trajectory WalkTrajectory::generateStance(const float transitionTime,
-                                              const size_t steps) {
-        const Eigen::Vector2f stanceStartPos(stepLength_ * 0.5f, baseHeight_);
-        const Eigen::Vector2f stanceFinishPos(-stepLength_ * 0.5f, baseHeight_);
-        // 支撑相起始位置
-
-        const float phaseTime = transitionTime * (1.0f - parameters_.swingDutyCycle);
-        const Eigen::Vector2f stanceAcc(0.0f, 0.0f);
-        const Eigen::Vector2f stanceStartVel(0.0f, parameters_.deltaSpeed[1]);
-        const Eigen::Vector2f stanceFinishVel(0.0f, -parameters_.deltaSpeed[1]);
-        // 支撑相边界速度设为 x=0，避免与摆动相切换时 x 速度跳变
-
-        Trajectory res = QuinticPolynomial::generate(stanceStartPos,
-                                                     stanceFinishPos,
-                                                     stanceStartVel,
-                                                     stanceFinishVel,
-                                                     stanceAcc,
-                                                     stanceAcc,
-                                                     phaseTime,
-                                                     steps);
-
-        const float pushForce = parameters_.horizontalPushGain * stepLength_;
-        const float pressForce = Const::BODY_MASS * Const::G * 0.5 +
-                                 parameters_.verticalPushGain * std::abs(pushForce);
-        const size_t rampSteps = std::max<size_t>(1, static_cast<size_t>(steps * 0.1f));
-
-        auto smoothstep01 = [](float x) {
-            x = std::clamp(x, 0.0f, 1.0f);
-            return x * x * (3.0f - 2.0f * x);
-        };
-
-        for (size_t i = 0; i < steps; i++) {
-            float scale = 1.0f;
-            if (i < rampSteps) {
-                const float s = static_cast<float>(i + 1) / static_cast<float>(rampSteps);
-                scale = smoothstep01(s);
-            } else if (i + rampSteps >= steps) {
-                const size_t tailIndex = steps - 1 - i;
-                const float s =
-                    static_cast<float>(tailIndex) / static_cast<float>(rampSteps);
-                scale = smoothstep01(s);
+            // 全局时钟认为应切换相位时，强制切换
+            if (clockPhase != gaitPhase_) {
+                if (clockPhase == STANCE) {
+                    // 摆动→支撑：立即锁定落脚点并初始化支撑相
+                    stance_.init(swing_.getTargetX(),
+                                 swing_.getZTarget(),
+                                 stanceTime_,
+                                 parameters_.stanceTimeMin,
+                                 parameters_.stanceTimeMax);
+                } else {
+                    // 支撑→摆动：位置用传感器修正，速度用 0（支撑相结束时期望静止）
+                    const float zs = currentTip ? currentTip->pos[2] : zDes;
+                    const float xs = currentTip ? currentTip->pos[0] : xDes;
+                    swing_.init(zs,
+                                baseHeight_,
+                                stepHeight_,
+                                swingTime_,
+                                parameters_.lowPassAlpha,
+                                parameters_.minReplanTime,
+                                xs,
+                                0.0f,
+                                0.0f,
+                                stepLength_);
+                }
+                gaitPhase_ = clockPhase;
             }
-
-            res.points[i].tau[0] = pushForce * scale;
-            res.points[i].tau[1] = 0.0f;
-            res.points[i].tau[2] = pressForce * scale;
-        }
-        // 添加前馈支撑力矩
-        return res;
-    }
-
-    Trajectory WalkTrajectory::generateSwing(const float transitionTime,
-                                             const size_t steps) {
-        const Eigen::Vector2f zeroAcc(0.0f, 0.0f);
-
-        const Eigen::Vector2f swingStartPos(-stepLength_ * 0.5f, baseHeight_);
-        const Eigen::Vector2f swingFinishPos(stepLength_ * 0.5f, baseHeight_);
-
-        const Eigen::Vector2f tangentVec = swingFinishPos - swingStartPos;
-        const Eigen::Vector2f directionVec = getHeightVec(tangentVec);
-
-        const float phaseTime = transitionTime * parameters_.swingDutyCycle;
-        const float T1 = phaseTime * 0.5;
-        const float T2 = T1;
-
-        const size_t steps1 = static_cast<size_t>(steps * 0.5f);
-        const size_t steps2 = steps - steps1;
-        // 计算摆动相两段的时间和分辨率占比
-
-        const Eigen::Vector2f swingStartVel(0.0f, -parameters_.deltaSpeed[1]);
-        const Eigen::Vector2f swingFinishVel(0.0f, parameters_.deltaSpeed[1]);
-        // 起始加入微小的向上速度，结束添加微小向下速度，避免曲线退化为直线
-
-        const Eigen::Vector2f swingMidPos =
-            (swingFinishPos + swingStartPos) * 0.5 + directionVec * stepHeight_;
-        const Eigen::Vector2f swingMidVel =
-            QuinticPolynomial::solveMidVel2D(swingStartPos,
-                                             swingMidPos,
-                                             swingFinishPos,
-                                             swingStartVel,
-                                             swingFinishVel,
-                                             T1,
-                                             T2);
-        const Eigen::Vector2f swingMidAcc =
-            QuinticPolynomial::solveMidAcc2D(swingStartPos,
-                                             swingStartVel,
-                                             zeroAcc,
-                                             swingMidPos,
-                                             swingMidVel,
-                                             swingFinishPos,
-                                             swingFinishVel,
-                                             zeroAcc,
-                                             T1,
-                                             T2);
-        // 计算中点属性
-        Trajectory first = QuinticPolynomial::generate(swingStartPos,
-                                                       swingMidPos,
-                                                       swingStartVel,
-                                                       swingMidVel,
-                                                       zeroAcc,
-                                                       swingMidAcc,
-                                                       T1,
-                                                       steps1);
-
-        Trajectory second = QuinticPolynomial::generate(swingMidPos,
-                                                        swingFinishPos,
-                                                        swingMidVel,
-                                                        swingFinishVel,
-                                                        swingMidAcc,
-                                                        zeroAcc,
-                                                        T2,
-                                                        steps2);
-        return first + second;
-    }
-
-    Trajectory WalkTrajectory::generateBlend(const Trajectory &lhs,
-                                             const Trajectory &rhs) {
-        const size_t blendSteps = std::clamp(stepsFromDurationNs(parameters_.blendTimeNs),
-                                             static_cast<size_t>(3),
-                                             static_cast<size_t>(20));
-        const float blendTime = static_cast<float>(parameters_.blendTimeNs) / 1e9;
-        if (lhs.points.empty() || rhs.points.empty()) {
-            return Trajectory(0);
         }
 
-        const TrajectoryPoint &p0 = lhs.points.back();
-        const TrajectoryPoint &p1 = rhs.points.front();
+        switch (gaitPhase_) {
+        // ---- 摆动相 ----
+        case SWING: {
+            swing_.update(dt,
+                          vDes_,
+                          vAct,
+                          parameters_.horizontalPushGain,
+                          currentTip,
+                          xDes,
+                          zDes,
+                          vxDes,
+                          vzDes,
+                          stepLength_);
 
-        const Eigen::Vector2f blendStartPos(p0.pos[0], p0.pos[2]);
-        const Eigen::Vector2f blendFinishPos(p1.pos[0], p1.pos[2]);
-        const Eigen::Vector2f blendStartVel(p0.vel[0], p0.vel[2]);
-        const Eigen::Vector2f blendFinishVel(p1.vel[0], p1.vel[2]);
-        const Eigen::Vector2f zeroAcc = Eigen::Vector2f::Zero();
-
-        Trajectory blend = QuinticPolynomial::generate(blendStartPos,
-                                                       blendFinishPos,
-                                                       blendStartVel,
-                                                       blendFinishVel,
-                                                       zeroAcc,
-                                                       zeroAcc,
-                                                       blendTime,
-                                                       blendSteps);
-
-        for (size_t i = 0; i < blend.points.size(); ++i) {
-            const float s =
-                (blend.points.size() <= 1)
-                    ? 1.0f
-                    : static_cast<float>(i) / static_cast<float>(blend.points.size() - 1);
-            blend.points[i].tau = p0.tau + (p1.tau - p0.tau) * s;
-        }
-
-        if (blend.points.size() > 2) {
-            blend.points.erase(blend.points.begin());
-            blend.points.pop_back();
-            blend.time.resize(blend.points.size());
-        }
-
-        return blend;
-    };
-
-    Trajectory WalkTrajectory::generateZeroLength(const Body &currentTip) {
-        (void)currentTip;
-
-        const size_t totalSteps =
-            stepsFromDurationNs(static_cast<size_t>(totalTime_ * 1e9));
-        if (totalSteps < 4) {
-            return Trajectory(0);
-        }
-
-        const float dt = static_cast<float>(controlDurationNanoSec_) * 1e-9f;
-        const float cycleTime = dt * static_cast<float>(totalSteps);
-
-        size_t swingSteps = static_cast<size_t>(
-            std::lround(static_cast<float>(totalSteps) * parameters_.swingDutyCycle));
-        swingSteps = std::clamp(swingSteps, static_cast<size_t>(2), totalSteps - 2);
-        const size_t stanceSteps = totalSteps - swingSteps;
-
-        const float x0 = 0.0f;
-        const float z0 =
-            std::clamp(baseHeight_, Const::BODY_HEIGHT_MIN, Const::BODY_HEIGHT_MAX);
-
-        // stepLength=0 时上层常把 stepHeight 也传成 0，给一个最小抬脚高度避免轨迹退化。
-        const float minLift = 10.0f;
-        const float liftHeight = std::max(std::abs(stepHeight_), minLift);
-        const float zLift = std::max(Const::BODY_HEIGHT_MIN, z0 - liftHeight);
-
-        const Eigen::Vector2f pStart(x0, z0);
-        const Eigen::Vector2f pMid(x0, zLift);
-        const Eigen::Vector2f pEnd(x0, z0);
-
-        const Eigen::Vector2f zeroVel(0.0f, 0.0f);
-        const Eigen::Vector2f zeroAcc(0.0f, 0.0f);
-
-        const float swingTime = cycleTime * parameters_.swingDutyCycle;
-        const float T1 = swingTime * 0.5f;
-        const float T2 = swingTime - T1;
-
-        size_t steps1 = swingSteps / 2;
-        if (steps1 == 0) {
-            steps1 = 1;
-        }
-        const size_t steps2 = swingSteps - steps1;
-
-        Trajectory swingUp = QuinticPolynomial::generate(
-            pStart, pMid, zeroVel, zeroVel, zeroAcc, zeroAcc, T1, steps1);
-        Trajectory swingDown = QuinticPolynomial::generate(
-            pMid, pEnd, zeroVel, zeroVel, zeroAcc, zeroAcc, T2, steps2);
-        Trajectory swing = swingUp + swingDown;
-
-        const float stanceTime = cycleTime - swingTime;
-        Trajectory stance = QuinticPolynomial::generate(
-            pEnd, pEnd, zeroVel, zeroVel, zeroAcc, zeroAcc, stanceTime, stanceSteps);
-
-        const float pressForce = Const::BODY_MASS * Const::G * 0.5f;
-        const size_t rampSteps =
-            std::max<size_t>(1, static_cast<size_t>(stance.points.size() * 0.1f));
-
-        auto smoothstep01 = [](float x) {
-            x = std::clamp(x, 0.0f, 1.0f);
-            return x * x * (3.0f - 2.0f * x);
-        };
-
-        for (size_t i = 0; i < stance.points.size(); ++i) {
-            float scale = 1.0f;
-            if (i < rampSteps) {
-                const float s = static_cast<float>(i + 1) / static_cast<float>(rampSteps);
-                scale = smoothstep01(s);
-            } else if (i + rampSteps >= stance.points.size()) {
-                const size_t tailIndex = stance.points.size() - i;
-                const float s =
-                    static_cast<float>(tailIndex) / static_cast<float>(rampSteps);
-                scale = smoothstep01(s);
+            if (swing_.isLanded()) {
+                // 摆动→支撑 切换
+                stance_.init(swing_.getTargetX(),
+                             swing_.getZTarget(),
+                             stanceTime_,
+                             parameters_.stanceTimeMin,
+                             parameters_.stanceTimeMax);
+                gaitPhase_ = STANCE;
             }
+        } break;
 
-            stance.points[i].tau[0] = 0.0f;
-            stance.points[i].tau[1] = 0.0f;
-            stance.points[i].tau[2] = pressForce * scale;
+        // ---- 支撑相 ----
+        case STANCE: {
+            // 使用支撑相专用机体速度，保证支撑期间机体移动完整步长，
+            // 使足端在机体系下从 +stepLength/2 移动到 -stepLength/2
+            const float stanceBodyVel =
+                (stanceTime_ > 0.0f) ? (stepLength_ / stanceTime_) : vDes_;
+            stance_.update(dt, stanceBodyVel, currentTip, xDes, zDes);
+            vxDes = 0.0f;
+            vzDes = 0.0f;
+
+            if (stance_.isLifted()) {
+                // 支撑→摆动 切换
+                // 位置用传感器修正，速度用 0（支撑相结束时期望静止）
+                const float zStart = currentTip ? currentTip->pos[2] : zDes;
+                const float xStart = currentTip ? currentTip->pos[0] : xDes;
+                const float vxStart = 0.0f;
+                const float axStart = 0.0f;
+
+                swing_.init(zStart,
+                            baseHeight_,
+                            stepHeight_,
+                            swingTime_,
+                            parameters_.lowPassAlpha,
+                            parameters_.minReplanTime,
+                            xStart,
+                            vxStart,
+                            axStart,
+                            stepLength_);
+
+                gaitPhase_ = SWING;
+
+                // 立即为第一帧摆动计算输出
+                swing_.update(0.0f,
+                              vDes_,
+                              vAct,
+                              parameters_.horizontalPushGain,
+                              currentTip,
+                              xDes,
+                              zDes,
+                              vxDes,
+                              vzDes,
+                              stepLength_);
+            }
+        } break;
         }
 
-        const Trajectory blend = generateBlend(swing, stance);
-        return swing + blend + stance;
+        // 组装输出
+        target_.pos[0] = xDes;
+        target_.pos[1] = 0.0f;
+        target_.pos[2] = zDes;
+        target_.vel[0] = vxDes;
+        target_.vel[1] = 0.0f;
+        target_.vel[2] = vzDes;
+        target_.tau.setZero();
+        target_.kp[0] = parameters_.walkKp;
+        target_.kp[1] = parameters_.walkKp;
+        target_.kd[0] = parameters_.walkKd;
+        target_.kd[1] = parameters_.walkKd;
+
+        return target_;
+    }
+
+    // ===================================================================
+    //  SwingTrajectory 实现
+    // ===================================================================
+    void WalkTrajectory::SwingTrajectory::init(float zStart,
+                                               float zTarget,
+                                               float stepH,
+                                               float swingT,
+                                               float alpha,
+                                               float minReplan,
+                                               float xStart,
+                                               float vxStart,
+                                               float axStart,
+                                               float stepLength) {
+        H_ = stepH;
+        T_swing_nominal_ = swingT;
+        T_min_ = minReplan;
+        alpha_ = alpha;
+        t_elapsed_ = 0.0f;
+        step_length_ = stepLength;
+
+        z_start_ = zStart;
+        z_target_ = zTarget;
+        landed_ = false;
+        foothold_locked_ = false;
+
+        // 初始 X 系数：从起点到初始目标（Raibert 在 update 中第一次计算前，
+        // 先用期望步长的一半作为初始落脚点）
+        p_target_x_ = xStart; // 首次滤波由 update 填充
+
+        // 初始多项式：匀速延伸至当前 p_target_x_（或保持原速）
+        // 为安全起见，构建一个初始的常速/零加速多项式
+        std::array<float, 3> start = {xStart, vxStart, axStart};
+        std::array<float, 3> finish = {xStart, vxStart, axStart};
+        // T=0 无法求解，使用一个极小的 T 构建初始安全多项式
+        const float epsT = 1e-3f;
+        last_coeffs_x_ = QuinticPolynomial::computeCoefficients(start, finish, epsT);
+    }
+
+    void WalkTrajectory::SwingTrajectory::update(float dt,
+                                                 float vDes,
+                                                 float vAct,
+                                                 float pushGain,
+                                                 const Body *currentTip,
+                                                 float &xDes,
+                                                 float &zDes,
+                                                 float &vxDes,
+                                                 float &vzDes,
+                                                 float stepLength) {
+        constexpr float eps = 1e-6f;
+
+        // 1. 更新时间
+        t_elapsed_ += dt;
+        const float T_rem = T_swing_nominal_ - t_elapsed_;
+
+        // 2. 落地判定
+        if (T_rem <= eps || t_elapsed_ >= T_swing_nominal_) {
+            xDes = p_target_x_;
+            zDes = z_target_;
+            vxDes = 0.0f;
+            vzDes = 0.0f;
+            landed_ = true;
+            return;
+        }
+
+        // 3. 滑动更新 X 目标（Raibert 落脚点 + 低通滤波）
+        if (!foothold_locked_) {
+            if (T_rem < T_min_) {
+                foothold_locked_ = true; // 接近落地，锁定落脚点
+            } else {
+                // Raibert 公式：p_raw = stepLength/2 + k*(v_des - v_act)
+                const float p_raw_x = stepLength * 0.5f + pushGain * (vDes - vAct);
+
+                // 一阶低通滤波
+                p_target_x_ += alpha_ * (p_raw_x - p_target_x_);
+            }
+        }
+
+        // 4. 获取起点状态：位置用传感器修正漂移，速度/加速度用轨迹内推保持一致性
+        //    直接使用传感器速度可能导致与目标状态矛盾，使五次多项式产生大幅度偏移，
+        //    超出腿工作空间 → IK 报不可达。
+        float x0, vx0, ax0;
+        // 始终从轨迹反算速度和加速度，保证初始条件与多项式连续
+        vx0 = QuinticPolynomial::evaluateVel(last_coeffs_x_, dt);
+        ax0 = QuinticPolynomial::evaluateAcc(last_coeffs_x_, dt);
+        if (currentTip) {
+            // 仅位置使用传感器反馈，修正累积漂移
+            x0 = currentTip->pos[0];
+        } else {
+            x0 = QuinticPolynomial::evaluatePos(last_coeffs_x_, dt);
+        }
+
+        // 5. X 轴五次多项式重规划
+        //    起点：(x0, vx0, ax0)  终点：(p_target_x_, 0, 0)  时长：T_rem
+        if (T_rem > eps) {
+            const std::array<float, 3> startState = {x0, vx0, ax0};
+            const std::array<float, 3> finishState = {p_target_x_, 0.0f, 0.0f};
+            last_coeffs_x_ =
+                QuinticPolynomial::computeCoefficients(startState, finishState, T_rem);
+        }
+
+        // 在新多项式中取时刻 dt 的值
+        xDes = QuinticPolynomial::evaluatePos(last_coeffs_x_, dt);
+        vxDes = QuinticPolynomial::evaluateVel(last_coeffs_x_, dt);
+
+        // 6. Z 轴独立光滑弧线
+        const float phase = std::max(0.0f, std::min(1.0f, t_elapsed_ / T_swing_nominal_));
+        zDes = smoothArcZ(phase);
+
+        // Z 速度：解析求导，匹配 -H 符号（抬腿=Z减小）
+        //   z(φ) = z₀ + Δz·s(φ) - H·a(φ)
+        //   s'(φ) = 30φ²(1-φ)²
+        //   a'(φ) = 32φ(1-φ)(1-2φ)
+        const float dz = z_target_ - z_start_;
+        const float ds = 30.0f * phase * phase * (1.0f - phase) * (1.0f - phase);
+        const float da = 32.0f * phase * (1.0f - phase) * (1.0f - 2.0f * phase);
+        const float dphase_dt = (T_swing_nominal_ > eps) ? 1.0f / T_swing_nominal_ : 0.0f;
+        vzDes = (dz * ds - H_ * da) * dphase_dt;
+
+        // 7. 二次落地判定：是否已在落点邻域
+        if (T_rem < T_min_) {
+            const float dx = p_target_x_ - xDes;
+            const float dz2 = z_target_ - zDes;
+            if (dx * dx + dz2 * dz2 < 10.0f) { // 10mm² 邻域
+                xDes = p_target_x_;
+                zDes = z_target_;
+                vxDes = 0.0f;
+                vzDes = 0.0f;
+                landed_ = true;
+            }
+        }
+    }
+
+    float WalkTrajectory::SwingTrajectory::smoothArcZ(float phase) const {
+        // Z=0 为机身，正 Z 向下（远离机身）。
+        // 抬腿时 Z 减小（靠近机身），因此拱形项为负：
+        // z(φ) = z_start + (z_target - z_start) * s(φ) - H * a(φ)
+        //
+        // s(φ) = 10φ³ - 15φ⁴ + 6φ⁵   —— quintic smoothstep (C², s(0)=0, s(1)=1,
+        //                                                s'(0)=s'(1)=s''(0)=s''(1)=0)
+        // a(φ) = 16φ²(1-φ)²           —— 归一化拱形 (max=1 at φ=0.5, a(0)=a(1)=0,
+        //                                                a'(0)=a'(1)=0)
+        const float p2 = phase * phase;
+        const float p3 = p2 * phase;
+        const float p4 = p3 * phase;
+        const float p5 = p4 * phase;
+
+        const float s = 10.0f * p3 - 15.0f * p4 + 6.0f * p5;
+        const float oneMinusPhase = 1.0f - phase;
+        const float a = 16.0f * p2 * oneMinusPhase * oneMinusPhase;
+
+        // 抬腿方向：Z 减小（靠近机身） → -H*a
+        return z_start_ + (z_target_ - z_start_) * s - H_ * a;
+    }
+
+    // ===================================================================
+    //  StanceTrajectory 实现
+    // ===================================================================
+    void WalkTrajectory::StanceTrajectory::init(
+        float xLand, float zLand, float stanceT, float tMin, float tMax) {
+        foot_pos_land_ = Eigen::Vector2f(xLand, zLand);
+        body_disp_x_ = 0.0f;
+        T_stance_nominal_ = stanceT;
+        T_stance_min_ = tMin;
+        T_stance_max_ = tMax;
+        t_stance_ = 0.0f;
+        lifted_ = false;
+    }
+
+    void WalkTrajectory::StanceTrajectory::update(
+        float dt, float bodyVelX, const Body *currentTip, float &xDes, float &zDes) {
+        t_stance_ += dt;
+
+        // 累积机体位移：机体前进 → 足端在机体系中后退
+        body_disp_x_ += bodyVelX * dt;
+
+        // 足端在世界系固定 → 机体系坐标 = 落地机体坐标 - 机体位移
+        xDes = foot_pos_land_[0] - body_disp_x_;
+        zDes = foot_pos_land_[1];
+
+        // ---- 离地判定 ----
+        // 条件 1：达到名义支撑时间
+        if (t_stance_ >= T_stance_nominal_) {
+            lifted_ = true;
+            return;
+        }
+
+        // 条件 2：达到最大支撑时间，强制离地
+        if (t_stance_ >= T_stance_max_) {
+            lifted_ = true;
+            return;
+        }
+
+        // 条件 3：超过最小支撑+静默期，且跟踪误差过大时提前离地
+        //  静默期(30ms)让 PD 控制器在落地瞬间有足够时间收敛，避免误触离地
+        if (t_stance_ > T_stance_min_ + early_lift_grace_s_ && currentTip) {
+            const float dx = currentTip->pos[0] - xDes;
+            const float dz = currentTip->pos[2] - zDes;
+            constexpr float earlyLiftErrorSQ = 400.0f; // 20mm 跟踪误差触发提前离地
+            if (dx * dx + dz * dz > earlyLiftErrorSQ) {
+                lifted_ = true;
+                return;
+            }
+        }
     }
 
 } // namespace Dog8Dof
 
+// ===================================================================
+//  YAML 转换
+// ===================================================================
 namespace YAML {
     template <> struct convert<Dog8Dof::WalkTrajectory::parameters_t> {
         static Node encode(const Dog8Dof::WalkTrajectory::parameters_t &rhs) {
             Node node;
             node["walkKp"] = rhs.walkKp;
             node["walkKd"] = rhs.walkKd;
-
-            node["reachThreshold"] = std::sqrt(rhs.reachThresholdSQ);
-            node["transitionVelMax"] = rhs.transitionVelMax;
-
             node["swingDutyCycle"] = rhs.swingDutyCycle;
-
+            node["minReplanTime"] = rhs.minReplanTime;
+            node["lowPassAlpha"] = rhs.lowPassAlpha;
             node["pushGain"]["horizontal"] = rhs.horizontalPushGain;
             node["pushGain"]["vertical"] = rhs.verticalPushGain;
-
-            node["deltaSpeed"]["x"] = rhs.deltaSpeed[0];
-            node["deltaSpeed"]["z"] = rhs.deltaSpeed[1];
-
-            node["blendTime"] = rhs.blendTimeNs / 1e9;
-            node["startblendTime"] = rhs.startblendTimeNs / 1e9;
+            node["stanceTimeMin"] = rhs.stanceTimeMin;
+            node["stanceTimeMax"] = rhs.stanceTimeMax;
             return node;
         }
 
         static bool decode(const Node &node, Dog8Dof::WalkTrajectory::parameters_t &rhs) {
-            rhs.walkKp = node["walkKp"].as<float>(0.001);
-            rhs.walkKd = node["walkKd"].as<float>(0.001);
+            rhs.walkKp = node["walkKp"].as<float>(3.0f);
+            rhs.walkKd = node["walkKd"].as<float>(0.05f);
 
-            rhs.reachThresholdSQ = node["reachThreshold"].as<float>(100.0) *
-                                   node["reachThreshold"].as<float>(100.0);
-            rhs.transitionVelMax = node["transitionVelMax"].as<float>(100.0);
+            rhs.swingDutyCycle = node["swingDutyCycle"].as<float>(0.5f);
+            rhs.minReplanTime = node["minReplanTime"].as<float>(0.02f);
+            rhs.lowPassAlpha = node["lowPassAlpha"].as<float>(0.3f);
 
-            rhs.horizontalPushGain = node["pushGain"]["horizontal"].as<float>(0.01);
-            rhs.verticalPushGain = node["pushGain"]["vertical"].as<float>(0.01);
+            rhs.horizontalPushGain = node["pushGain"]["horizontal"].as<float>(0.02f);
+            rhs.verticalPushGain = node["pushGain"]["vertical"].as<float>(0.02f);
 
-            rhs.swingDutyCycle = node["swingDutyCycle"].as<float>(0.5);
+            rhs.stanceTimeMin = node["stanceTimeMin"].as<float>(0.05f);
+            rhs.stanceTimeMax = node["stanceTimeMax"].as<float>(1.0f);
 
-            rhs.deltaSpeed = Eigen::Vector2f(node["deltaSpeed"]["x"].as<float>(1.0),
-                                             node["deltaSpeed"]["z"].as<float>(1.0));
-
-            rhs.blendTimeNs = node["blendTime"].as<float>(1.0f) * 1e9;
-            rhs.startblendTimeNs = node["startBlendTime"].as<float>(1.0f) * 1e9;
             return true;
         }
     };

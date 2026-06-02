@@ -1,4 +1,6 @@
 #include "dog_hardware/zeroSetter.hpp"
+
+#include <ament_index_cpp/get_package_share_directory.hpp>
 #include <fstream>
 
 namespace Dog8Dof {
@@ -26,7 +28,8 @@ namespace Dog8Dof {
         try {
             node_ = YAML::LoadFile(configPath_);
 
-            portName_ = node_["RS485_Port"].as<std::string>();
+            portNameLeft_ = node_["RS485_Port_Left"].as<std::string>();
+            portNameRight_ = node_["RS485_Port_Right"].as<std::string>();
 
             frontAngleIdle_ = node_["idleAngle"]["front"].as<float>();
             rearAngleIdle_ = node_["idleAngle"]["rear"].as<float>();
@@ -52,27 +55,52 @@ namespace Dog8Dof {
             throw std::runtime_error("Can't load joint configs");
         }
 
-        port_.reset();
-        for (auto &m : motor_) {
-            m.reset();
-        }
+        portLeft_.reset();
+        portRight_.reset();
+        motor_.clear();
         // 清空智能指针
     }
 
     bool ZeroSetter::init() {
         size_t attempt = 0;
         const std::chrono::seconds retryDelay(3);
+
+        // ---- 打开左路 485 ----
         while (rclcpp::ok()) {
             ++attempt;
             try {
-                port_ = std::make_shared<SerialPort>(portName_);
+                portLeft_ = std::make_shared<Dog8Dof::SerialPort>(portNameLeft_);
+                RCLCPP_INFO_STREAM(logger_,
+                                   "Opened left serial port "
+                                       << portNameLeft_ << " on attempt " << attempt);
+                break;
+            } catch (const std::exception &e) {
+                RCLCPP_WARN(
+                    logger_, "RS485 left port attempt %zu failed: %s", attempt, e.what());
                 RCLCPP_INFO_STREAM(
                     logger_,
-                    "Opened serial port " << portName_ << " on attempt " << attempt);
-                break; // 成功
+                    "Retrying in " << retryDelay.count() << "s (press Ctrl-C to abort)");
+                std::this_thread::sleep_for(retryDelay);
+            }
+        }
+        if (!portLeft_) {
+            RCLCPP_ERROR(logger_, "RS485 left port connection aborted or failed");
+            throw std::runtime_error("RS485 left port connection failed or aborted");
+        }
+
+        // ---- 打开右路 485 ----
+        attempt = 0;
+        while (rclcpp::ok()) {
+            ++attempt;
+            try {
+                portRight_ = std::make_shared<Dog8Dof::SerialPort>(portNameRight_);
+                RCLCPP_INFO_STREAM(logger_,
+                                   "Opened right serial port "
+                                       << portNameRight_ << " on attempt " << attempt);
+                break;
             } catch (const std::exception &e) {
                 RCLCPP_WARN(logger_,
-                            "RS485 connection attempt %zu failed: %s",
+                            "RS485 right port attempt %zu failed: %s",
                             attempt,
                             e.what());
                 RCLCPP_INFO_STREAM(
@@ -81,48 +109,51 @@ namespace Dog8Dof {
                 std::this_thread::sleep_for(retryDelay);
             }
         }
-
-        // 如果退出循环时未成功建立 port_，说明被中断或失败
-        if (!port_) {
-            RCLCPP_ERROR(
-                logger_,
-                "RS485 connection aborted (Ctrl-C or shutdown) or failed to open port");
-            throw std::runtime_error("RS485 connection failed or aborted");
+        if (!portRight_) {
+            RCLCPP_ERROR(logger_, "RS485 right port connection aborted or failed");
+            throw std::runtime_error("RS485 right port connection failed or aborted");
         }
 
+        // ---- 连接电机 ----
         attempt = 0;
-
         while (rclcpp::ok()) {
             ++attempt;
+            motor_.clear();
             try {
                 for (size_t i = 0; i < motorNumber_; ++i) {
-
-                    motor_[i] = std::make_unique<goM8010Interface>(
-                        jointMapping_[jointNames_[i]], port_);
-                    motor_[i]->setZero(0.0f);
+                    // 左组电机用左端口，右组用右端口
+                    std::shared_ptr<Dog8Dof::SerialPort> port =
+                        (i == LEFT_MOTOR_INDICES[0] || i == LEFT_MOTOR_INDICES[1] ||
+                         i == LEFT_MOTOR_INDICES[2] || i == LEFT_MOTOR_INDICES[3])
+                            ? portLeft_
+                            : portRight_;
+                    motor_.emplace_back(jointMapping_[jointNames_[i]], port);
+                    motor_[i].setZero(0.0f);
                 }
             } catch (const std::exception &e) {
-                RCLCPP_WARN_STREAM(logger_,
-                                   "Connecting to motor " << "failed: " << e.what());
+                RCLCPP_WARN_STREAM(logger_, "Connecting to motor failed: " << e.what());
+                // 重建串口，清空 485 总线残留数据
+                try {
+                    portLeft_->reopen();
+                    portRight_->reopen();
+                    RCLCPP_INFO_STREAM(logger_, "Serial ports reopened for retry");
+                } catch (const std::exception &re) {
+                    RCLCPP_WARN_STREAM(logger_, "Reopen failed: " << re.what());
+                }
                 RCLCPP_INFO_STREAM(
                     logger_,
                     "Retrying in " << retryDelay.count() << "s (press Ctrl-C to abort)");
                 std::this_thread::sleep_for(retryDelay);
+                continue;
             }
 
-            size_t i = 0;
-            for (; i < motorNumber_; ++i) {
-                if (!motor_[i]) {
-                    break; // 如果有任何一个电机未成功创建，继续重试
-                }
-            }
-            if (i == motorNumber_) {
+            // 检查所有电机是否连接成功
+            if (motor_.size() == motorNumber_) {
                 RCLCPP_INFO_STREAM(
                     logger_,
                     "Successfully connected to all motors on attempt " << attempt);
                 return true;
             }
-            // 创建电机指针
         }
 
         RCLCPP_ERROR(this->get_logger(), "Failed to initilize motors");
@@ -136,11 +167,9 @@ namespace Dog8Dof {
             logger_, "Move front motors to true zero spot! Press any to continue...");
         std::getline(std::cin, dummy);
 
-        // RCLCPP_INFO_STREAM(logger_,
-        //                    "Start setting current position as the zero position!");
         for (size_t i = 0; i < motorNumber_; i = i + 2) {
-            motor_[i]->zeroTor();
-            motor_[i + 1]->zeroTor();
+            motor_[i].zeroTor();
+            motor_[i + 1].zeroTor();
 
             RCLCPP_INFO_STREAM(logger_,
                                "Setting for " << jointNames_[i] << " and "
@@ -157,18 +186,7 @@ namespace Dog8Dof {
         }
 
         RCLCPP_INFO_STREAM(logger_, "Finish callibrating");
-        std::ofstream outFile(configPath_ + ".tmp");
-        if (!outFile.is_open()) {
-            RCLCPP_ERROR(logger_, "Failed open tmp file");
-            return false;
-        }
-
-        node_["idleAngle"]["front"] = frontAngleIdle_;
-        node_["idleAngle"]["rear"] = rearAngleIdle_;
-        outFile << node_;
-        outFile.close();
-        std::rename((configPath_ + ".tmp").c_str(), configPath_.c_str());
-
+        flushToFile();
         return true;
     }
 
@@ -186,10 +204,10 @@ namespace Dog8Dof {
             RCLCPP_INFO_STREAM(logger_, "Checking " << jointNames_[i]);
 
             float currentPosSum = 0.0f;
-            motor_[i]->zeroTor();
+            motor_[i].zeroTor();
             for (size_t j = 0; j < repeatLoops_; ++j) {
-                motor_[i]->zeroTor();
-                currentPosSum += motor_[i]->getPos(); // 这里是原始电机角(当前 setZero(0))
+                motor_[i].zeroTor();
+                currentPosSum += motor_[i].getPos(); // 这里是原始电机角(当前 setZero(0))
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
             }
 
@@ -205,9 +223,10 @@ namespace Dog8Dof {
                                               << ", expectedRaw=" << desiredCtrl
                                               << ", offset=" << offset);
 
-            writeFile(offset, i);
+            updateOffset(offset, i);
         }
 
+        flushToFile();
         return true;
     }
 
@@ -223,8 +242,8 @@ namespace Dog8Dof {
     bool ZeroSetter::getOffsetInteractive(size_t jointIdx) {
         float currentPosSum = 0.0f;
         for (size_t j = 0; j < repeatLoops_; j++) {
-            motor_[jointIdx]->zeroTor();
-            currentPosSum += motor_[jointIdx]->getPos();
+            motor_[jointIdx].zeroTor();
+            currentPosSum += motor_[jointIdx].getPos();
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
         float measured = currentPosSum / static_cast<float>(repeatLoops_);
@@ -241,45 +260,52 @@ namespace Dog8Dof {
             std::string userDecision;
             std::getline(std::cin, userDecision);
             if (select(userDecision)) {
-                writeFile(newOffset, jointIdx);
+                updateOffset(newOffset, jointIdx);
                 return true;
             } else {
                 RCLCPP_WARN_STREAM(logger_, "Stopping zero setting progress");
                 return false;
             }
         } else {
-            writeFile(newOffset, jointIdx);
+            updateOffset(newOffset, jointIdx);
             return true;
         }
     }
 
-    void ZeroSetter::writeFile(float offSet, size_t jointIdx) {
-        std::ofstream outFile(configPath_ + ".tmp");
-        if (!outFile.is_open()) {
-            RCLCPP_ERROR(logger_, "Failed open tmp file");
-            return;
-        }
-
+    void ZeroSetter::updateOffset(float offSet, size_t jointIdx) {
         float oldOffset = zeroOffsetByIndex_[jointIdx];
-        const std::string log = "Updating zero offset of " + jointNames_[jointIdx] +
-                                " from " + std::to_string(oldOffset) + " to " +
-                                std::to_string(offSet);
-
         zeroOffsetByIndex_[jointIdx] = offSet;
         node_[jointNames_[jointIdx]]["offset"] = offSet;
+
+        RCLCPP_INFO_STREAM(logger_,
+                           "Updating zero offset of " << jointNames_[jointIdx] << " from "
+                                                      << oldOffset << " to " << offSet);
+    }
+
+    void ZeroSetter::flushToFile() {
+        // 确保 idleAngle 也写回
+        node_["idleAngle"]["front"] = frontAngleIdle_;
+        node_["idleAngle"]["rear"] = rearAngleIdle_;
+
+        std::ofstream outFile(configPath_ + ".tmp");
+        if (!outFile.is_open()) {
+            RCLCPP_ERROR(logger_, "Failed open tmp file for final write");
+            return;
+        }
         outFile << node_;
         outFile.close();
         std::rename((configPath_ + ".tmp").c_str(), configPath_.c_str());
 
-        RCLCPP_INFO_STREAM(logger_, log);
-    };
+        RCLCPP_INFO_STREAM(logger_, "All calibrations written to " << configPath_);
+    }
 
 } // namespace Dog8Dof
 
 int main(int argc, char **argv) {
 
-    const std::string configPath = "/home/luo/Project/Horse/Dog_parallel/src/dog_bringup/"
-                                   "parameters/motors.yaml";
+    const std::string configPath =
+        ament_index_cpp::get_package_share_directory("dog_bringup") +
+        "/parameters/motors.yaml";
     rclcpp::init(argc, argv);
 
     bool interactive = isatty(fileno(stdin));

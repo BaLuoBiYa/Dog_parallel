@@ -51,6 +51,7 @@
             <state_interface name="position" />
             <state_interface name="velocity" />
             <state_interface name="effort" />
+            <state_interface name="temperature" />
         </joint>
     </xacro:macro>
     <!-- 关节电机简化宏 -->
@@ -60,7 +61,7 @@
     <ros2_control name="go8010" type="system">
         <hardware>
             <param name="configPath">
-                /home/luo/Project/Horse/Dog_parallel/src/dog_bringup/parameters/motors.yaml</param>
+                $(find dog_bringup)/parameters/motors.yaml</param>
             <plugin>dog8Dof/baseHardware</plugin>
         </hardware>
 

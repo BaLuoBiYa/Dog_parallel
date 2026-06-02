@@ -1,6 +1,6 @@
 controller_manager:
   ros__parameters:
-    update_rate: 200
+    update_rate: 100
 
     base_controller:
       type: dog8Dof/baseController
@@ -8,9 +8,9 @@ controller_manager:
 base_controller:
   ros__parameters:
     robotName: dog
-    standProfile: /home/sunrise/Dog_parallel/src/dog_bringup/parameters/stand.yaml
-    walkProfile: /home/sunrise/Dog_parallel/src/dog_bringup/parameters/walk.yaml
-    jumpProfile: /home/sunrise/Dog_parallel/src/dog_bringup/parameters/jumpLegacy.yaml
+    standProfile: $(find dog_bringup)/parameters/stand.yaml
+    walkProfile: $(find dog_bringup)/parameters/walk.yaml
+    jumpProfile: $(find dog_bringup)/parameters/jump.yaml
 
     idleTipX: 0.0
     idleTipZ: 250.0

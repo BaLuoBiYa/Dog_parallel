@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.8)
 project(dog_controller)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-  add_compile_options(-Wall -Wextra -Wpedantic)
+  add_compile_options(-Wall -Wextra -Wpedantic -O3 -march=native)
 endif()
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
@@ -27,6 +27,8 @@ add_library(${PROJECT_NAME} SHARED
   src/trajectoryTracker.cpp
   src/trajectoryTrackerSingle.cpp
   src/gaitManager.cpp
+  src/gaitTwistConverter.cpp
+  src/stateMonitor.cpp
 )
 ament_export_libraries(${PROJECT_NAME})
 ament_target_dependencies(${PROJECT_NAME} 
@@ -98,20 +100,20 @@ target_link_libraries(jumpTest
     yaml-cpp
 )
 
-add_executable(jumpLegacyTest
-    src/test/jumpLegacyTest.cpp
-)
-ament_target_dependencies(jumpLegacyTest
-    rclcpp
-    dog_tools
-    dog_trajectory
-    Eigen3
-    ament_index_cpp
-)
-target_link_libraries(jumpLegacyTest
-    Eigen3::Eigen
-    yaml-cpp
-)
+# add_executable(jumpLegacyTest
+#     src/test/jumpLegacyTest.cpp
+# )
+# ament_target_dependencies(jumpLegacyTest
+#     rclcpp
+#     dog_tools
+#     dog_trajectory
+#     Eigen3
+#     ament_index_cpp
+# )
+# target_link_libraries(jumpLegacyTest
+#     Eigen3::Eigen
+#     yaml-cpp
+# )
 
 add_executable(legTest 
     src/test/legTest.cpp)
@@ -156,11 +158,10 @@ pluginlib_export_plugin_description_file(controller_interface dog_controllerInte
 
 install(
   TARGETS ${PROJECT_NAME}
-        # PinocchionTest
         standTest
         walkTest
         jumpTest
-        jumpLegacyTest
+        # jumpLegacyTest
         legTest
         legCli
         gaitManagerReplanTest

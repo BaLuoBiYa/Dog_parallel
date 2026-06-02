@@ -1,5 +1,5 @@
 #include "dog_hardware/base.hpp"
-#include "unitree_actuator_sdk/serialPort/SerialPort.h"
+#include "dog_hardware/serial.hpp"
 
 #include <cstddef>
 #include <fcntl.h>
@@ -7,7 +7,9 @@
 #include <linux/serial.h>
 #include <memory>
 #include <rclcpp/logging.hpp>
+#include <string>
 #include <sys/ioctl.h>
+#include <thread>
 #include <unistd.h>
 #include <yaml-cpp/yaml.h>
 
@@ -34,13 +36,19 @@ namespace Dog8Dof {
                               .base(),
                           configPath_.end());
 
+        retryCountL_ = 0;
+        retryCountR_ = 0;
+
         try {
             const YAML::Node root = YAML::LoadFile(configPath_);
 
-            portName_ = root["RS485_Port"].as<std::string>();
+            // 两路独立 485 端口
+            portNameLeft_ = root["RS485_Port_Left"].as<std::string>();
+            portNameRight_ = root["RS485_Port_Right"].as<std::string>();
             maxRetry_ = root["maxRetry"].as<size_t>(3);
             deactiveDamp_ = root["deactiveDamp"].as<float>(0.1);
             deactiveDampTime_ = root["deactiveDampTime"].as<long>(2);
+            alpha_ = root["lowPassFilterAlpha"].as<float>(0.5f);
 
             for (size_t i = 0; i < 8; ++i) {
                 const YAML::Node joint_node = root[jointNames_[i]];
@@ -56,6 +64,11 @@ namespace Dog8Dof {
 
                 jointMapping_[jointNames_[i]] = static_cast<uint8_t>(id);
                 zeroOffsetByIndex_[i] = offset;
+
+                stPosF_[i] = LowPassFilter<double>(alpha_);
+                stVelF_[i] = LowPassFilter<double>(alpha_);
+                stTauF_[i] = LowPassFilter<double>(alpha_);
+                stTempF_[i] = LowPassFilter<double>(alpha_);
             }
             // 从YAML文件读取参数
 
@@ -73,9 +86,19 @@ namespace Dog8Dof {
         state_interfaces.reserve(8 * 3);
 
         for (size_t i = 0; i < 8; ++i) {
+<<<<<<< HEAD
             state_interfaces.emplace_back(jointNames_[i], "position", &stPos_[i]);
             state_interfaces.emplace_back(jointNames_[i], "velocity", &stVel_[i]);
             state_interfaces.emplace_back(jointNames_[i], "effort", &stTau_[i]);
+=======
+            state_interfaces.emplace_back(
+                jointNames_[i], hardware_interface::HW_IF_POSITION, &stPos_[i]);
+            state_interfaces.emplace_back(
+                jointNames_[i], hardware_interface::HW_IF_VELOCITY, &stVel_[i]);
+            state_interfaces.emplace_back(
+                jointNames_[i], hardware_interface::HW_IF_EFFORT, &stTau_[i]);
+            state_interfaces.emplace_back(jointNames_[i], "temperature", &stTemp_[i]);
+>>>>>>> main
         }
 
         return state_interfaces;
@@ -101,14 +124,16 @@ namespace Dog8Dof {
     BaseInterface::on_configure(const rclcpp_lifecycle::State &pre) {
         (void)pre;
 
-        port_.reset();
+        portLeft_.reset();
+        portRight_.reset();
         motor_.clear();
         // 清空智能指针
 
         try {
-            port_ = std::make_shared<SerialPort>(portName_);
+            portLeft_ = std::make_shared<Dog8Dof::SerialPort>(portNameLeft_);
         } catch (const std::exception &e) {
             RCLCPP_ERROR(
+<<<<<<< HEAD
                 rclcpp::get_logger("base"), "RS485 connection failed: %s", e.what());
             return hardware_interface::CallbackReturn::ERROR;
         }
@@ -142,14 +167,29 @@ namespace Dog8Dof {
                             "Cannot open %s to set low_latency",
                             portName_.c_str());
             }
+=======
+                this->get_logger(), "RS485 left port connection failed: %s", e.what());
+            return hardware_interface::CallbackReturn::ERROR;
         }
-        // 缩短超时：电机正常在 300~500µs 内响应，2ms 足够
-        port_->resetSerial(16, 4000000, 2000);
-        // 创建串口通信指针
+
+        try {
+            portRight_ = std::make_shared<Dog8Dof::SerialPort>(portNameRight_);
+        } catch (const std::exception &e) {
+            RCLCPP_ERROR(
+                this->get_logger(), "RS485 right port connection failed: %s", e.what());
+            return hardware_interface::CallbackReturn::ERROR;
+>>>>>>> main
+        }
 
         for (size_t i = 0; i < 8; ++i) {
             try {
-                motor_.push_back(goM8010Interface(jointMapping_[jointNames_[i]], port_));
+                // 左组电机使用左端口，右组电机使用右端口
+                std::shared_ptr<Dog8Dof::SerialPort> port =
+                    (i == LEFT_MOTOR_INDICES[0] || i == LEFT_MOTOR_INDICES[1] ||
+                     i == LEFT_MOTOR_INDICES[2] || i == LEFT_MOTOR_INDICES[3])
+                        ? portLeft_
+                        : portRight_;
+                motor_.push_back(goM8010Interface(jointMapping_[jointNames_[i]], port));
                 motor_[i].setZero(zeroOffsetByIndex_[i]);
             } catch (const std::exception &e) {
                 RCLCPP_ERROR(rclcpp::get_logger("base"),
@@ -159,8 +199,6 @@ namespace Dog8Dof {
                 return hardware_interface::CallbackReturn::ERROR;
             }
         }
-        // 创建电机指针
-
         return hardware_interface::CallbackReturn::SUCCESS;
     }
 
@@ -169,13 +207,10 @@ namespace Dog8Dof {
         (void)pre;
 
         for (size_t i = 0; i < 8; ++i) {
-            bool res;
-            res = motor_[i].release();
-            if (!res) {
+            if (!motor_[i].release()) {
                 return hardware_interface::CallbackReturn::ERROR;
             }
         }
-        // 解除电机锁定
 
         return hardware_interface::CallbackReturn::SUCCESS;
     }
@@ -206,18 +241,59 @@ namespace Dog8Dof {
                                                         const rclcpp::Duration &period) {
         (void)time;
         (void)period;
+        bool hasError = false;
 
         for (size_t i = 0; i < 8; ++i) {
-            stPos_[i] = static_cast<double>(motor_[i].getPos());
-            stVel_[i] = static_cast<double>(motor_[i].getVel());
-            stTau_[i] = static_cast<double>(motor_[i].getTor());
+            stPos_[i] = stPosF_[i].filter(motor_[i].getPos());
+            stVel_[i] = stVelF_[i].filter(motor_[i].getVel());
+            stTau_[i] = stTauF_[i].filter(motor_[i].getTor());
+            stTemp_[i] = stTempF_[i].filter(motor_[i].getTemp());
 
-            if (motor_[i].getError() != "OK") {
-                RCLCPP_ERROR_STREAM(
-                    rclcpp::get_logger("base"),
-                    "Motor " << jointNames_[i] << " " << motor_[i].getError());
-                return hardware_interface::return_type::ERROR;
+            goM8010Interface::ErrorCode err = motor_[i].getError();
+            if (err == goM8010Interface::ErrorCode::OK) {
+                continue;
+            } else {
+                std::string errStr;
+                switch (err) {
+                case goM8010Interface::ErrorCode::OK:
+                    errStr = "OK";
+                    break;
+                case goM8010Interface::ErrorCode::OVER_HEAT:
+                    errStr = "Over Heat";
+                    break;
+                case goM8010Interface::ErrorCode::OVER_CURRENT:
+                    errStr = "Over Current";
+                    break;
+                case goM8010Interface::ErrorCode::OVER_VOLTAGE:
+                    errStr = "Over Voltage";
+                    break;
+                case goM8010Interface::ErrorCode::ENCODER_ERROR:
+                    errStr = "Encoder Error";
+                    break;
+                case goM8010Interface::ErrorCode::UNDER_VOLTAGE:
+                    errStr = "Under Voltage";
+                    break;
+                case goM8010Interface::ErrorCode::OVER_HEAT_COIL:
+                    errStr = "Over Heat Coil";
+                    break;
+                default:
+                    errStr = "Unknown Error";
+                    break;
+                }
+                RCLCPP_ERROR_STREAM(get_logger(),
+                                    "Motor " << jointNames_[i] << " " << errStr);
+                retryCountL_++;
+                hasError = true;
             }
+        }
+
+        if (retryCountL_ + retryCountR_ > maxRetry_) {
+            return hardware_interface::return_type::ERROR;
+        }
+
+        if (!hasError) {
+            retryCountL_ = 0;
+            retryCountR_ = 0;
         }
         return hardware_interface::return_type::OK;
     }
@@ -227,28 +303,51 @@ namespace Dog8Dof {
         (void)time;
         (void)period;
 
-        // 预构建所有 MotorCmd / MotorData 对象
-        MotorCmd cmds[8];
-        MotorData datas[8];
-        for (size_t i = 0; i < 8; ++i) {
-            float pos = static_cast<float>(cmdPos_[i]);
-            float vel = static_cast<float>(cmdVel_[i]);
-            float kp = static_cast<float>(cmdKp_[i]);
-            float kd = static_cast<float>(cmdKd_[i]);
-            float tor = static_cast<float>(cmdTau_[i]);
+        bool leftOk = true;
+        bool rightOk = true;
 
-            cmds[i] = motor_[i].makeCmd(tor, pos, vel, kp, kd);
-            datas[i].motorType = MotorType::GO_M8010_6;
+        // 左右两路 485 并行通信
+        std::thread leftThread([&]() {
+            for (size_t idx : LEFT_MOTOR_INDICES) {
+                const float pos = static_cast<float>(cmdPos_[idx]);
+                const float vel = static_cast<float>(cmdVel_[idx]);
+                const float tor = static_cast<float>(cmdTau_[idx]);
+                const float kp = static_cast<float>(cmdKp_[idx]);
+                const float kd = static_cast<float>(cmdKd_[idx]);
 
-            if (!motor_[i].setHybrid(tor, pos, vel, kp, kd)) {
-                RCLCPP_WARN_STREAM(rclcpp::get_logger("BaseInterface"),
-                                   "Motor " << jointNames_[i] << " setHybrid timeout");
+                if (!motor_[idx].setHybrid(tor, pos, vel, kp, kd)) {
+                    RCLCPP_ERROR_STREAM(get_logger(), "Time out on " << jointNames_[idx]);
+                    leftOk = false;
+                }
             }
+        });
+
+        std::thread rightThread([&]() {
+            for (size_t idx : RIGHT_MOTOR_INDICES) {
+                const float pos = static_cast<float>(cmdPos_[idx]);
+                const float vel = static_cast<float>(cmdVel_[idx]);
+                const float tor = static_cast<float>(cmdTau_[idx]);
+                const float kp = static_cast<float>(cmdKp_[idx]);
+                const float kd = static_cast<float>(cmdKd_[idx]);
+
+                if (!motor_[idx].setHybrid(tor, pos, vel, kp, kd)) {
+                    RCLCPP_ERROR_STREAM(get_logger(), "Time out on " << jointNames_[idx]);
+                    rightOk = false;
+                }
+            }
+        });
+
+        leftThread.join();
+        rightThread.join();
+
+        if (leftOk && rightOk) {
+            retryCountL_ = 0;
+            retryCountR_ = 0;
+            return hardware_interface::return_type::OK;
         }
 
-        // 将返回的状态数据写入各电机对象
-        for (size_t i = 0; i < 8; ++i) {
-            motor_[i].applyState(datas[i]);
+        if (leftOk + leftOk >= maxRetry_) {
+            return hardware_interface::return_type::OK;
         }
 
         return hardware_interface::return_type::OK;
