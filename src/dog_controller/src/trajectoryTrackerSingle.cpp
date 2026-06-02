@@ -282,11 +282,12 @@ namespace Dog8Dof {
 
     bool TrajectoryTrackerSingle::setJointCommands(size_t legIndex, const Motor &target) {
         const auto &idx = cmdIdx_[legIndex];
-        return command_interfaces_[idx.pos].set_value(static_cast<double>(target.pos)) &&
-               command_interfaces_[idx.vel].set_value(static_cast<double>(target.vel)) &&
-               command_interfaces_[idx.eff].set_value(static_cast<double>(target.tau)) &&
-               command_interfaces_[idx.kp].set_value(static_cast<double>(target.kp)) &&
-               command_interfaces_[idx.kd].set_value(static_cast<double>(target.kd));
+        command_interfaces_[idx.pos].set_value(static_cast<double>(target.pos));
+        command_interfaces_[idx.vel].set_value(static_cast<double>(target.vel));
+        command_interfaces_[idx.eff].set_value(static_cast<double>(target.tau));
+        command_interfaces_[idx.kp].set_value(static_cast<double>(target.kp));
+        command_interfaces_[idx.kd].set_value(static_cast<double>(target.kd));
+        return true;
     }
 
     bool TrajectoryTrackerSingle::setAllJointCommands() {
@@ -296,15 +297,15 @@ namespace Dog8Dof {
 
     float TrajectoryTrackerSingle::getPos(size_t i) {
         return static_cast<float>(
-            state_interfaces_[stateIdx_[i].pos].get_optional<double>().value());
+            state_interfaces_[stateIdx_[i].pos].get_value());
     }
     float TrajectoryTrackerSingle::getVel(size_t i) {
         return static_cast<float>(
-            state_interfaces_[stateIdx_[i].vel].get_optional<double>().value());
+            state_interfaces_[stateIdx_[i].vel].get_value());
     }
     float TrajectoryTrackerSingle::getTau(size_t i) {
         return static_cast<float>(
-            state_interfaces_[stateIdx_[i].eff].get_optional<double>().value());
+            state_interfaces_[stateIdx_[i].eff].get_value());
     }
 
 } // namespace Dog8Dof

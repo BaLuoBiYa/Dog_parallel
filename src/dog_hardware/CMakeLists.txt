@@ -27,6 +27,8 @@ find_package(yaml-cpp REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(Boost REQUIRED COMPONENTS system)
+find_package(dog_remote REQUIRED)
+find_package(dog_tools REQUIRED)
 
 include_directories(include)
 
@@ -45,7 +47,7 @@ ament_target_dependencies(${PROJECT_NAME}
 )
 target_link_libraries(${PROJECT_NAME}
   ${ARCH_LIB}
-  yaml-cpp::yaml-cpp
+  yaml-cpp
   Boost::system
 )
 
@@ -78,33 +80,34 @@ target_link_libraries(motorTester
     ${PROJECT_NAME}
 )
 
-add_executable(DM_Motor_test
-    src/test/DM_Motor_test.cpp
-)
-ament_target_dependencies(DM_Motor_test
-    rclcpp
-)
-target_link_libraries(DM_Motor_test
-    ${PROJECT_NAME}
-)
+# 注释掉缺少实现的测试程序
+# add_executable(DM_Motor_test
+#     src/test/DM_Motor_test.cpp
+# )
+# ament_target_dependencies(DM_Motor_test
+#     rclcpp
+# )
+# target_link_libraries(DM_Motor_test
+#     ${PROJECT_NAME}
+# )
 
-add_executable(DJI_Motor_test
-    src/test/DJI_2005_Motor_test.cpp
-)
-ament_target_dependencies(DJI_Motor_test
-    rclcpp
-)
-target_link_libraries(DJI_Motor_test
-    ${PROJECT_NAME}
-)
+# add_executable(DJI_Motor_test
+#     src/test/DJI_2005_Motor_test.cpp
+# )
+# ament_target_dependencies(DJI_Motor_test
+#     rclcpp
+# )
+# target_link_libraries(DJI_Motor_test
+#     ${PROJECT_NAME}
+# )
 
-add_executable(canTester src/test/canTester.cpp)
-ament_target_dependencies(canTester
-    rclcpp
-)
-target_link_libraries(canTester
-    ${PROJECT_NAME}
-)
+# add_executable(canTester src/test/canTester.cpp)
+# ament_target_dependencies(canTester
+#     rclcpp
+# )
+# target_link_libraries(canTester
+#     ${PROJECT_NAME}
+# )
 
 pluginlib_export_plugin_description_file(hardware_interface dog_hardwareInterface.xml)
 
@@ -119,9 +122,6 @@ install(
         example_goM8010_6_motor
         zeroSetter
         motorTester
-        DM_Motor_test
-        DJI_Motor_test
-        canTester
   DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )

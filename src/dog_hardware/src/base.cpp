@@ -86,19 +86,13 @@ namespace Dog8Dof {
         state_interfaces.reserve(8 * 3);
 
         for (size_t i = 0; i < 8; ++i) {
-<<<<<<< HEAD
-            state_interfaces.emplace_back(jointNames_[i], "position", &stPos_[i]);
-            state_interfaces.emplace_back(jointNames_[i], "velocity", &stVel_[i]);
-            state_interfaces.emplace_back(jointNames_[i], "effort", &stTau_[i]);
-=======
             state_interfaces.emplace_back(
-                jointNames_[i], hardware_interface::HW_IF_POSITION, &stPos_[i]);
+                jointNames_[i], "position", &stPos_[i]);
             state_interfaces.emplace_back(
-                jointNames_[i], hardware_interface::HW_IF_VELOCITY, &stVel_[i]);
+                jointNames_[i], "velocity", &stVel_[i]);
             state_interfaces.emplace_back(
-                jointNames_[i], hardware_interface::HW_IF_EFFORT, &stTau_[i]);
+                jointNames_[i], "effort", &stTau_[i]);
             state_interfaces.emplace_back(jointNames_[i], "temperature", &stTemp_[i]);
->>>>>>> main
         }
 
         return state_interfaces;
@@ -133,42 +127,7 @@ namespace Dog8Dof {
             portLeft_ = std::make_shared<Dog8Dof::SerialPort>(portNameLeft_);
         } catch (const std::exception &e) {
             RCLCPP_ERROR(
-<<<<<<< HEAD
-                rclcpp::get_logger("base"), "RS485 connection failed: %s", e.what());
-            return hardware_interface::CallbackReturn::ERROR;
-        }
-
-        // 设置 USB 串口 low_latency 标志，将 USB 事务延迟从 ~16ms 降低到 ~100µs
-        // 同时启用内核 RS485 模式，让内核自动管理 RTS 方向切换
-        {
-            const int fd = ::open(portName_.c_str(), O_RDWR | O_NONBLOCK);
-            if (fd >= 0) {
-                struct serial_struct serinfo;
-                if (::ioctl(fd, TIOCGSERIAL, &serinfo) == 0) {
-                    serinfo.flags |= ASYNC_LOW_LATENCY;
-                    ::ioctl(fd, TIOCSSERIAL, &serinfo);
-                }
-
-                struct serial_rs485 rs485conf;
-                memset(&rs485conf, 0, sizeof(rs485conf));
-                rs485conf.flags = SER_RS485_ENABLED;
-                rs485conf.delay_rts_before_send = 0;
-                rs485conf.delay_rts_after_send = 0;
-                if (::ioctl(fd, TIOCSRS485, &rs485conf) < 0) {
-                    RCLCPP_WARN(rclcpp::get_logger("BaseInterface"),
-                                "RS485 mode not supported on %s, "
-                                "batch communication may fail",
-                                portName_.c_str());
-                }
-
-                ::close(fd);
-            } else {
-                RCLCPP_WARN(rclcpp::get_logger("BaseInterface"),
-                            "Cannot open %s to set low_latency",
-                            portName_.c_str());
-            }
-=======
-                this->get_logger(), "RS485 left port connection failed: %s", e.what());
+                rclcpp::get_logger("BaseInterface"), "RS485 left port connection failed: %s", e.what());
             return hardware_interface::CallbackReturn::ERROR;
         }
 
@@ -176,9 +135,8 @@ namespace Dog8Dof {
             portRight_ = std::make_shared<Dog8Dof::SerialPort>(portNameRight_);
         } catch (const std::exception &e) {
             RCLCPP_ERROR(
-                this->get_logger(), "RS485 right port connection failed: %s", e.what());
+                rclcpp::get_logger("BaseInterface"), "RS485 right port connection failed: %s", e.what());
             return hardware_interface::CallbackReturn::ERROR;
->>>>>>> main
         }
 
         for (size_t i = 0; i < 8; ++i) {
@@ -280,7 +238,7 @@ namespace Dog8Dof {
                     errStr = "Unknown Error";
                     break;
                 }
-                RCLCPP_ERROR_STREAM(get_logger(),
+                RCLCPP_ERROR_STREAM(rclcpp::get_logger("BaseInterface"),
                                     "Motor " << jointNames_[i] << " " << errStr);
                 retryCountL_++;
                 hasError = true;
@@ -316,7 +274,7 @@ namespace Dog8Dof {
                 const float kd = static_cast<float>(cmdKd_[idx]);
 
                 if (!motor_[idx].setHybrid(tor, pos, vel, kp, kd)) {
-                    RCLCPP_ERROR_STREAM(get_logger(), "Time out on " << jointNames_[idx]);
+                    RCLCPP_ERROR_STREAM(rclcpp::get_logger("BaseInterface"), "Time out on " << jointNames_[idx]);
                     leftOk = false;
                 }
             }
@@ -331,7 +289,7 @@ namespace Dog8Dof {
                 const float kd = static_cast<float>(cmdKd_[idx]);
 
                 if (!motor_[idx].setHybrid(tor, pos, vel, kp, kd)) {
-                    RCLCPP_ERROR_STREAM(get_logger(), "Time out on " << jointNames_[idx]);
+                    RCLCPP_ERROR_STREAM(rclcpp::get_logger("BaseInterface"), "Time out on " << jointNames_[idx]);
                     rightOk = false;
                 }
             }

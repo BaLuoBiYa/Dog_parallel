@@ -186,7 +186,7 @@ namespace Dog8Dof {
                     errStr = "Unknown Error";
                     break;
                 }
-                RCLCPP_ERROR_STREAM(get_logger(),
+                RCLCPP_ERROR_STREAM(rclcpp::get_logger("SingleLegInterface"),
                                     "Motor " << jointNames_[i] << " " << errStr);
             }
         }
