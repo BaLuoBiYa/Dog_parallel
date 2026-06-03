@@ -131,7 +131,7 @@ namespace Dog8Dof {
                 "Current tip state is required for JumpTrajectory.");
         }
 
-        Phase currentPhase = getCurrentPhase(currentTime);
+        Phase currentPhase = getCurrentPhase(currentTime, currentTip);
 
         // 状态切换时的初始化
         if (currentPhase != phase_) {
@@ -143,10 +143,10 @@ namespace Dog8Dof {
                 break;
             case PUSH: {
                 phase_ = PUSH;
-                // 使用理想状态而非实际状态，确保每次从相同的计划蹲伏位置起跳，避免高度不一致
-                Body startState = idelTipState_;
+                // 使用真实状态作为起跳点，因为CROUCH阶段已经确保到位
+                Body startState = *currentTip;
                 Body endState = getFlightTarget(
-                    idelTipState_, currentPar_.launchAngle, currentPar_.launchSpeed);
+                    *currentTip, currentPar_.launchAngle, currentPar_.launchSpeed);
                 pushPlanner_ = std::make_unique<PushPlanner>(startState,
                                                              endState,
                                                              currentTime.seconds(),
@@ -248,7 +248,7 @@ namespace Dog8Dof {
     }
 
     JumpTrajectory::Phase
-    JumpTrajectory::getCurrentPhase(const rclcpp::Time &currentTime) {
+    JumpTrajectory::getCurrentPhase(const rclcpp::Time &currentTime, const Body *currentTip) {
         const float elapsed = (currentTime - launchTime_).seconds();
 
         // 预计算累计边界
@@ -259,6 +259,16 @@ namespace Dog8Dof {
         const float t_recover = t_absorb + currentPar_.recoverDuration;
 
         if (elapsed <= t_crouch) {
+            // CROUCH阶段：需要同时满足时间条件和位置条件
+            // 如果时间到了但位置未到位，继续保持CROUCH状态
+            if (currentTip != nullptr) {
+                const float crouchThreshold = 20.0f; // 允许20mm误差
+                const float zError = std::abs(currentTip->pos[2] - currentPar_.startZ);
+                if (elapsed >= t_crouch * 0.8f && zError > crouchThreshold) {
+                    // 时间已过80%但还没到位，继续等待
+                    return CROUCH;
+                }
+            }
             return CROUCH;
         } else if (elapsed <= t_push) {
             return PUSH;

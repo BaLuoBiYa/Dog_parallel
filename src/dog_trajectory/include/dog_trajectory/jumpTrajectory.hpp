@@ -143,7 +143,7 @@ namespace Dog8Dof {
 
         rclcpp::Logger logger_ = rclcpp::get_logger("jumpTrajectory");
 
-        Phase getCurrentPhase(const rclcpp::Time &currentTime);
+        Phase getCurrentPhase(const rclcpp::Time &currentTime, const Body *currentTip = nullptr);
         Body
         getFlightTarget(const Body &currentTip, float launchAngle, float launchSpeed);
 
