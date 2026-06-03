@@ -3,12 +3,22 @@
   smoothKd : 0.01
 
   crouchDuration: 1.0
+  crouchKp : 0.5
+  crouchKd : 0.01
 
   launchSpeed : 1.5
   launchAngle : -1.0
   pushDuration : 0.15
   pushKp : 3.0
   pushKd : 0.05
+  pushKpLF : 3.5  # 左前腿可以适当增大补偿机械增益差异
+  pushKdLF : 0.01
+  pushKpRF : 3.5  # 右前腿
+  pushKdRF : 0.01
+  pushKpLR : 3.0  # 左后腿
+  pushKdLR : 0.01
+  pushKpRR : 3.0  # 右后腿
+  pushKdRR : 0.01
   startZ : 80.0
   finishZ : 270.0
 
@@ -21,17 +31,30 @@
   recoverDuration : 0.20
   legLengthStand : 270.0
 
+  finishedKp : 2.0
+  finishedKd : 0.01
+
 1:
   smoothKp : 0.5
   smoothKd : 0.01
 
   crouchDuration: 1.0
+  crouchKp : 0.5
+  crouchKd : 0.01
 
   launchSpeed : 1.5
   launchAngle : -1.0
   pushDuration : 0.1
   pushKp : 1.0
   pushKd : 0.05
+  pushKpLF : 1.5
+  pushKdLF : 0.05
+  pushKpRF : 1.5
+  pushKdRF : 0.05
+  pushKpLR : 1.0
+  pushKdLR : 0.05
+  pushKpRR : 1.0
+  pushKdRR : 0.05
   startZ : 100.0
   finishZ : 300.0
 
@@ -43,3 +66,6 @@
 
   recoverDuration : 2.0
   legLengthStand : 270.0
+
+  finishedKp : 2.0
+  finishedKd : 0.01

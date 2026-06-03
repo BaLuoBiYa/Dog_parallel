@@ -25,6 +25,8 @@ namespace Dog8Dof {
                     std::string standConfig,
                     std::string jumpConfig,
 
+                    JumpTrajectory::LegID legID = JumpTrajectory::LF,
+
                     float upperLength = Const::UPPER_LENGTH,
                     float lowerLength = Const::LOWER_LENGTH,
                     float tipLength = 0.0f);

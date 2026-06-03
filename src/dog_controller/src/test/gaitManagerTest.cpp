@@ -13,6 +13,7 @@
  */
 
 #include "dog_controller/gaitManager.hpp"
+#include "dog_trajectory/jumpTrajectory.hpp"
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <filesystem>
 #include <fstream>
@@ -85,6 +86,7 @@ int main(int argc, char **argv) {
                    walkYaml,
                    standYaml,
                    jumpYaml,
+                   Dog8Dof::JumpTrajectory::LF,
                    Const::UPPER_LENGTH,
                    Const::LOWER_LENGTH);
 

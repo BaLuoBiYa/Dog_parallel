@@ -85,7 +85,10 @@ def generate_launch_description():
     event_handler1 = RegisterEventHandler(
         event_handler=OnProcessStart(
             target_action=controler_manager,
-            on_start=[controler_spawner]
+            on_start=[TimerAction(
+                period=3.0,
+                actions=[controler_spawner]
+            )]
         )
     )
 

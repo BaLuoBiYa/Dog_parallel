@@ -5,8 +5,8 @@
 
 namespace Dog8Dof {
 
-    JumpTrajectory::JumpTrajectory(const std::string &configPath, rclcpp::Duration period)
-        : BaseTrajectory(configPath, period) {
+    JumpTrajectory::JumpTrajectory(const std::string &configPath, rclcpp::Duration period, LegID legID)
+        : BaseTrajectory(configPath, period), legID_(legID) {
         configPath_ = configPath;
         reloadParameters();
     }
@@ -77,13 +77,13 @@ namespace Dog8Dof {
 
     // ---- 参数映射：Jump → Stand -------
     static StandTrajectory::parameters_t
-    jumpToStandcurrentPar_s(const JumpTrajectory::parameters_t &jp, float duration) {
+    jumpToStandcurrentPar_s(const JumpTrajectory::parameters_t &jp, float duration, float kp, float kd) {
         StandTrajectory::parameters_t sp;
         sp.transitionTime = duration;
-        sp.transitionKp = jp.smoothKp;
-        sp.transitionKd = jp.smoothKd;
-        sp.standKp = jp.smoothKp;
-        sp.standKd = jp.smoothKd;
+        sp.transitionKp = kp;
+        sp.transitionKd = kd;
+        sp.standKp = kp;
+        sp.standKd = kd;
         sp.transitionVelMax = 500.0f;
         sp.reachThresholdSQ = 1.0f;
         sp.stepHeightFactor = jp.airTipLevelFactor;
@@ -104,7 +104,7 @@ namespace Dog8Dof {
         launchTime_ = now; // 记录绝对起点
         lastUpdateTime_ = now; // 同步时钟源，避免后续减法时报 time source 不一致
         smooth_->configure(
-            jumpToStandcurrentPar_s(currentPar_, currentPar_.crouchDuration),
+            jumpToStandcurrentPar_s(currentPar_, currentPar_.crouchDuration, currentPar_.crouchKp, currentPar_.crouchKd),
             0.0f,
             currentPar_.startZ);
         idelTipState_ = currentTip; // 以当前状态为锚点，生成下蹲过渡;
@@ -143,22 +143,23 @@ namespace Dog8Dof {
                 break;
             case PUSH: {
                 phase_ = PUSH;
-                Body startState = *currentTip;
+                // 使用理想状态而非实际状态，确保每次从相同的计划蹲伏位置起跳，避免高度不一致
+                Body startState = idelTipState_;
                 Body endState = getFlightTarget(
-                    *currentTip, currentPar_.launchAngle, currentPar_.launchSpeed);
+                    idelTipState_, currentPar_.launchAngle, currentPar_.launchSpeed);
                 pushPlanner_ = std::make_unique<PushPlanner>(startState,
                                                              endState,
                                                              currentTime.seconds(),
                                                              currentPar_.pushDuration,
                                                              Const::BODY_MASS,
-                                                             currentPar_.pushKp,
-                                                             currentPar_.pushKd);
+                                                             getPushKpForLeg(),
+                                                             getPushKdForLeg());
                 target_ = pushPlanner_->get(currentTime);
                 break;
             }
             case FLIGHT:
                 smooth_->configure(
-                    jumpToStandcurrentPar_s(currentPar_, currentPar_.flightDuration),
+                    jumpToStandcurrentPar_s(currentPar_, currentPar_.flightDuration, currentPar_.smoothKp, currentPar_.smoothKd),
                     -currentTip->pos[0],
                     currentTip->pos[2]);
                 // 进入
@@ -178,7 +179,7 @@ namespace Dog8Dof {
                 break;
             case RECOVER:
                 smooth_->configure(
-                    jumpToStandcurrentPar_s(currentPar_, currentPar_.recoverDuration),
+                    jumpToStandcurrentPar_s(currentPar_, currentPar_.recoverDuration, currentPar_.smoothKp, currentPar_.smoothKd),
                     0.0f,
                     currentPar_.legLengthStand);
                 // 进入 RECOVER：以当前状态为起点，水平位置回到目标，高度过渡到正常站立
@@ -200,10 +201,10 @@ namespace Dog8Dof {
                 target_.pos[2] = currentPar_.legLengthStand;
                 target_.vel.setZero();
                 target_.tau.setZero();
-                target_.kp[0] = currentPar_.smoothKp * 4.0f;
-                target_.kp[1] = currentPar_.smoothKp * 4.0f;
-                target_.kd[0] = currentPar_.smoothKd;
-                target_.kd[1] = currentPar_.smoothKd;
+                target_.kp[0] = currentPar_.finishedKp;
+                target_.kp[1] = currentPar_.finishedKp;
+                target_.kd[0] = currentPar_.finishedKd;
+                target_.kd[1] = currentPar_.finishedKd;
                 break;
             }
 
@@ -236,10 +237,10 @@ namespace Dog8Dof {
             target_.pos[2] = currentPar_.legLengthStand;
             target_.vel.setZero();
             target_.tau.setZero();
-            target_.kp[0] = currentPar_.smoothKp * 4.0f;
-            target_.kp[1] = currentPar_.smoothKp * 4.0f;
-            target_.kd[0] = currentPar_.smoothKd;
-            target_.kd[1] = currentPar_.smoothKd;
+            target_.kp[0] = currentPar_.finishedKp;
+            target_.kp[1] = currentPar_.finishedKp;
+            target_.kd[0] = currentPar_.finishedKd;
+            target_.kd[1] = currentPar_.finishedKd;
             RCLCPP_INFO(logger_, "Jump Finished");
             break;
         }
@@ -283,6 +284,36 @@ namespace Dog8Dof {
         absorptionTarget.kd[1] = absorbDamp;
         // 生成一个以当前状态为锚点，零速度，零力矩，纯阻尼控制的吸收目标
         return absorptionTarget;
+    }
+
+    float JumpTrajectory::getPushKpForLeg() const {
+        switch (legID_) {
+        case LF:
+            return currentPar_.pushKpLF;
+        case RF:
+            return currentPar_.pushKpRF;
+        case LR:
+            return currentPar_.pushKpLR;
+        case RR:
+            return currentPar_.pushKpRR;
+        default:
+            return currentPar_.pushKp;
+        }
+    }
+
+    float JumpTrajectory::getPushKdForLeg() const {
+        switch (legID_) {
+        case LF:
+            return currentPar_.pushKdLF;
+        case RF:
+            return currentPar_.pushKdRF;
+        case LR:
+            return currentPar_.pushKdLR;
+        case RR:
+            return currentPar_.pushKdRR;
+        default:
+            return currentPar_.pushKd;
+        }
     }
 
     Body JumpTrajectory::getFlightTarget(const Body &currentTip,
@@ -404,12 +435,22 @@ namespace YAML {
             node["smoothKd"] = rhs.smoothKd;
 
             node["crouchDuration"] = rhs.crouchDuration;
+            node["crouchKp"] = rhs.crouchKp;
+            node["crouchKd"] = rhs.crouchKd;
 
             node["launchSpeed"] = rhs.launchSpeed;
             node["launchAngle"] = rhs.launchAngle;
             node["pushDuration"] = rhs.pushDuration;
             node["pushKp"] = rhs.pushKp;
             node["pushKd"] = rhs.pushKd;
+            node["pushKpLF"] = rhs.pushKpLF;
+            node["pushKdLF"] = rhs.pushKdLF;
+            node["pushKpRF"] = rhs.pushKpRF;
+            node["pushKdRF"] = rhs.pushKdRF;
+            node["pushKpLR"] = rhs.pushKpLR;
+            node["pushKdLR"] = rhs.pushKdLR;
+            node["pushKpRR"] = rhs.pushKpRR;
+            node["pushKdRR"] = rhs.pushKdRR;
             node["startZ"] = rhs.startZ;
             node["finishZ"] = rhs.finishZ;
 
@@ -420,6 +461,9 @@ namespace YAML {
 
             node["recoverDuration"] = rhs.recoverDuration;
             node["legLengthStand"] = rhs.legLengthStand;
+
+            node["finishedKp"] = rhs.finishedKp;
+            node["finishedKd"] = rhs.finishedKd;
             return node;
         }
 
@@ -428,12 +472,23 @@ namespace YAML {
             rhs.smoothKd = node["smoothKd"].as<float>(0.02f);
 
             rhs.crouchDuration = node["crouchDuration"].as<float>(0.20f);
+            rhs.crouchKp = node["crouchKp"].as<float>(2.0f);
+            rhs.crouchKd = node["crouchKd"].as<float>(0.02f);
 
             rhs.launchSpeed = node["launchSpeed"].as<float>(0.0f);
             rhs.launchAngle = node["launchAngle"].as<float>(3.0f);
             rhs.pushDuration = node["pushDuration"].as<float>(0.15f);
             rhs.pushKp = node["pushKp"].as<float>(3.0f);
             rhs.pushKd = node["pushKd"].as<float>(0.05f);
+            // 如果YAML中没有指定各腿的Kp/Kd，则使用全局pushKp/pushKd作为默认值
+            rhs.pushKpLF = node["pushKpLF"].as<float>(rhs.pushKp);
+            rhs.pushKdLF = node["pushKdLF"].as<float>(rhs.pushKd);
+            rhs.pushKpRF = node["pushKpRF"].as<float>(rhs.pushKp);
+            rhs.pushKdRF = node["pushKdRF"].as<float>(rhs.pushKd);
+            rhs.pushKpLR = node["pushKpLR"].as<float>(rhs.pushKp);
+            rhs.pushKdLR = node["pushKdLR"].as<float>(rhs.pushKd);
+            rhs.pushKpRR = node["pushKpRR"].as<float>(rhs.pushKp);
+            rhs.pushKdRR = node["pushKdRR"].as<float>(rhs.pushKd);
             rhs.startZ = node["startZ"].as<float>(30.0f);
             rhs.finishZ = node["finishZ"].as<float>(100.0f);
 
@@ -444,6 +499,9 @@ namespace YAML {
 
             rhs.recoverDuration = node["recoverDuration"].as<float>(0.25f);
             rhs.legLengthStand = node["legLengthStand"].as<float>(270.0f);
+
+            rhs.finishedKp = node["finishedKp"].as<float>(2.0f);
+            rhs.finishedKd = node["finishedKd"].as<float>(0.02f);
             return true;
         }
     };
