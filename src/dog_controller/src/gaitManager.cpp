@@ -15,13 +15,14 @@ namespace Dog8Dof {
                              std::string walkConfig,
                              std::string standConfig,
                              std::string jumpConfig,
+                             JumpTrajectory::LegID legID,
                              float upperLength,
                              float lowerLength,
                              float tipLength)
         : clock_(clock), leg_(upperLength, lowerLength, tipLength) {
         walkTrajectory_ = std::make_shared<WalkTrajectory>(walkConfig, period);
         standTrajectory_ = std::make_shared<StandTrajectory>(standConfig, period);
-        jumpTrajectory_ = std::make_shared<JumpTrajectory>(jumpConfig, period);
+        jumpTrajectory_ = std::make_shared<JumpTrajectory>(jumpConfig, period, legID);
     }
 
     // =========================================================================

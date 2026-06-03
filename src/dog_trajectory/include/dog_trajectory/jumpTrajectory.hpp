@@ -19,7 +19,9 @@ namespace Dog8Dof {
      */
     class JumpTrajectory : public BaseTrajectory {
       public:
-        explicit JumpTrajectory(const std::string &configPath, rclcpp::Duration period);
+        enum LegID { LF = 0, RF = 1, LR = 2, RR = 3 };
+
+        explicit JumpTrajectory(const std::string &configPath, rclcpp::Duration period, LegID legID = LF);
 
         enum Phase { CROUCH, PUSH, FLIGHT, ABSORPTION, RECOVER, FINISHED };
 
@@ -42,18 +44,28 @@ namespace Dog8Dof {
 
         struct parameters_t {
             // 全局参数
-            float smoothKp = 2.0f;  // 平滑 PD-Kp (用于 CROUCH/RECOVER/FLIGHT 过渡)
-            float smoothKd = 0.02f; // 平滑 PD-Kd (用于 CROUCH/RECOVER/FLIGHT 过渡)
+            float smoothKp = 2.0f;  // 平滑 PD-Kp (用于 RECOVER/FLIGHT 过渡)
+            float smoothKd = 0.02f; // 平滑 PD-Kd (用于 RECOVER/FLIGHT 过渡)
 
             // 下蹲阶段
             float crouchDuration = 0.20f; // 下蹲总时长 (s)
+            float crouchKp = 2.0f;         // 下蹲 PD-Kp
+            float crouchKd = 0.02f;        // 下蹲 PD-Kd
 
             // 蹬地阶段
             float launchSpeed = 0.0f;   // 起跳速度
             float launchAngle = 3.0f;   // 起跳角度
             float pushDuration = 0.15f; // 蹬地总时长 (s)
-            float pushKp = 3.0f;        // 蹬地 PD-Kp
-            float pushKd = 0.05f;       // 蹬地 PD-Kd
+            float pushKp = 3.0f;        // 蹬地 PD-Kp (全局默认)
+            float pushKd = 0.05f;       // 蹬地 PD-Kd (全局默认)
+            float pushKpLF = 3.0f;      // 左前腿 (LF) 蹬地 PD-Kp
+            float pushKdLF = 0.05f;     // 左前腿 (LF) 蹬地 PD-Kd
+            float pushKpRF = 3.0f;      // 右前腿 (RF) 蹬地 PD-Kp
+            float pushKdRF = 0.05f;     // 右前腿 (RF) 蹬地 PD-Kd
+            float pushKpLR = 3.0f;      // 左后腿 (LR) 蹬地 PD-Kp
+            float pushKdLR = 0.05f;     // 左后腿 (LR) 蹬地 PD-Kd
+            float pushKpRR = 3.0f;      // 右后腿 (RR) 蹬地 PD-Kp
+            float pushKdRR = 0.05f;     // 右后腿 (RR) 蹬地 PD-Kd
             float startZ = 30.0f;       // 下蹲足端高度 (mm)
             float finishZ = 100.0f;     // 起跳足端高度 (mm)
 
@@ -68,6 +80,10 @@ namespace Dog8Dof {
             // 恢复阶段
             float recoverDuration = 0.25f; // 恢复总时长 (s)
             float legLengthStand = 270.0f; // 正常站立腿长 (mm)
+
+            // 完成阶段
+            float finishedKp = 2.0f;  // 完成状态 PD-Kp
+            float finishedKd = 0.02f; // 完成状态 PD-Kd
         };
 
       private:
@@ -80,6 +96,7 @@ namespace Dog8Dof {
         bool isInit_ = false;
         bool targetSet_ = false;
         time_t yamlLastMtime_{0};
+        LegID legID_ = LF; // 当前腿的ID
         // 组合 StandTrajectory 实例，用于 CROUCH/RECOVER/FLIGHT 阶段的平滑过渡
         std::unique_ptr<StandTrajectory> smooth_;
         std::string configPath_;
@@ -131,6 +148,11 @@ namespace Dog8Dof {
         getFlightTarget(const Body &currentTip, float launchAngle, float launchSpeed);
 
         TrajectoryPoint getAbsorptionTarget(float absorbDamp);
+
+        /** @brief 根据腿ID获取对应的PUSH阶段Kp值 */
+        float getPushKpForLeg() const;
+        /** @brief 根据腿ID获取对应的PUSH阶段Kd值 */
+        float getPushKdForLeg() const;
 
         bool if_file_change();
         static time_t file_mtime(const std::string &path);

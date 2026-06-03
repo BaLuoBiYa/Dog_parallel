@@ -1,6 +1,7 @@
 #include "dog_trajectory/walkTrajectory.hpp"
 #include "dog_tools/quinticPolynomial.hpp"
 #include <cmath>
+#include <sys/stat.h>
 
 namespace Dog8Dof {
 
@@ -9,6 +10,7 @@ namespace Dog8Dof {
     // ===================================================================
     WalkTrajectory::WalkTrajectory(const std::string &configPath, rclcpp::Duration period)
         : BaseTrajectory(configPath, period) {
+        configPath_ = configPath;
         if (!reloadParameters()) {
             throw std::invalid_argument("Could not load WalkTrajectory Config YAML!");
         }
@@ -44,6 +46,11 @@ namespace Dog8Dof {
                                    float baseHeight,
                                    float totalTime,
                                    float phaseOffset) {
+        // 检查 YAML 文件是否变化，如果变化则热重载
+        if (if_file_change()) {
+            reloadParameters();
+        }
+
         if (stepHeight <= 0.0f) {
             RCLCPP_ERROR(logger_, "Step height must be greater than 0!");
             return false;
@@ -550,3 +557,31 @@ namespace YAML {
         }
     };
 } // namespace YAML
+
+namespace Dog8Dof {
+
+    time_t WalkTrajectory::file_mtime(const std::string &path) {
+        struct stat st;
+        return stat(path.c_str(), &st) == 0 ? st.st_mtime : 0;
+    }
+
+    bool WalkTrajectory::if_file_change() {
+        if (configPath_.empty()) {
+            return false;
+        }
+
+        time_t mtime = file_mtime(configPath_);
+        if (mtime == 0) {
+            return false; // 文件不存在
+        }
+
+        if (mtime != yamlLastMtime_) {
+            yamlLastMtime_ = mtime;
+            RCLCPP_INFO(logger_, "检测到 YAML 变更, 热重载中...");
+            return true;
+        }
+
+        return false;
+    }
+
+} // namespace Dog8Dof

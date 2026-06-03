@@ -39,13 +39,13 @@ namespace Dog8Dof {
 
         try {
             LF_ = std::make_unique<GaitManager>(
-                clock, period, walkProfile_, standProfile_, jumpProfile_);
+                clock, period, walkProfile_, standProfile_, jumpProfile_, JumpTrajectory::LF);
             LR_ = std::make_unique<GaitManager>(
-                clock, period, walkProfile_, standProfile_, jumpProfile_);
+                clock, period, walkProfile_, standProfile_, jumpProfile_, JumpTrajectory::LR);
             RF_ = std::make_unique<GaitManager>(
-                clock, period, walkProfile_, standProfile_, jumpProfile_);
+                clock, period, walkProfile_, standProfile_, jumpProfile_, JumpTrajectory::RF);
             RR_ = std::make_unique<GaitManager>(
-                clock, period, walkProfile_, standProfile_, jumpProfile_);
+                clock, period, walkProfile_, standProfile_, jumpProfile_, JumpTrajectory::RR);
         } catch (const std::exception &e) {
             RCLCPP_ERROR(this->get_node()->get_logger(),
                          "TrajectoryTracker configure failed: %s",

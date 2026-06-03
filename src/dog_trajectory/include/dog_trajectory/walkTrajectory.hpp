@@ -75,6 +75,9 @@ namespace Dog8Dof {
         float vDes_ = 0.0f;     ///< 当前期望前进速度 (mm/s)
         float lastTipX_ = 0.0f; ///< 上一周期足端 X（用于速度估计）
 
+        time_t yamlLastMtime_{0}; ///< YAML 文件最后修改时间，用于热重载检测
+        std::string configPath_;  ///< YAML 配置文件路径
+
         rclcpp::Logger logger_ = rclcpp::get_logger("walkTrajectory");
 
       private:
@@ -232,6 +235,12 @@ namespace Dog8Dof {
 
         SwingTrajectory swing_;
         StanceTrajectory stance_;
+
+        // ======================== 热重载辅助函数 ========================
+        /** @brief 检查 YAML 文件是否发生变化 */
+        bool if_file_change();
+        /** @brief 获取文件最后修改时间 */
+        static time_t file_mtime(const std::string &path);
     };
 
 } // namespace Dog8Dof
