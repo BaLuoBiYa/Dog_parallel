@@ -1,22 +1,19 @@
 0:
-  smoothKp : 0.5
+  smoothKp : 1.0
   smoothKd : 0.01
 
-  crouchDuration: 1.0
+  crouchDuration: 1.1
 
-  launchSpeed : 1.5
-  launchAngle : -1.0
-  pushDuration : 0.15
-  pushKp : 3.0
-  pushKd : 0.05
-  startZ : 80.0
-  finishZ : 270.0
+  launchSpeed : 3.0
+  launchAngle : 13.0
+  startZ : 90.0
+  finishZ : 300.0
 
-  flightDuration : 0.50
-  airTipLevelFactor : 0.1
+  flightDuration : 0.30
+  airTipLevelFactor : 0.5
 
-  absorbDuration : 1.0
-  absorbDamp : 0.1
+  absorbDuration : 0.25
+  absorbDamp : 0.15
 
   recoverDuration : 0.20
   legLengthStand : 270.0

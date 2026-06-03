@@ -283,7 +283,7 @@ namespace Dog8Dof {
         } else if (isJumping_.load()) {
             auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::steady_clock::now() - jumpStartTime_).count();
-            if (elapsed < 3000) {  // 保持JUMP模式3秒
+            if (elapsed < 500) {  // 保持JUMP模式3秒
                 msg.gait = static_cast<uint8_t>(GaitMode::JUMP);
             } else {
                 isJumping_.store(false);
