@@ -23,7 +23,7 @@ add_library(${PROJECT_NAME}
 )
 target_link_libraries(${PROJECT_NAME}
     Eigen3::Eigen
-    yaml-cpp
+    yaml-cpp::yaml-cpp
 )
 ament_target_dependencies(${PROJECT_NAME}
     rclcpp

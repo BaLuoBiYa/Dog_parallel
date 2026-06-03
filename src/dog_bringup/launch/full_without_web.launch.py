@@ -64,7 +64,7 @@ def generate_launch_description():
     controler_manager = Node(
         package="controller_manager",
         executable="ros2_control_node",
-        parameters=[manager_path],
+        parameters=[manager_path, {"robot_description": robot_description_content}],
     )
     # 加载控制管理器
 
@@ -82,18 +82,33 @@ def generate_launch_description():
         )
     )
 
+    # statepub_node 必须在 controler_manager 启动后再启动，
+    # 确保 controller_manager 已订阅 robot_description topic，
+    # 这样 robot_state_publisher 发布的 transient_local 消息才能被收到
+    event_handler_pub = RegisterEventHandler(
+        event_handler=OnProcessStart(
+            target_action=controler_manager,
+            on_start=[statepub_node]
+        )
+    )
+
     event_handler1 = RegisterEventHandler(
         event_handler=OnProcessStart(
             target_action=controler_manager,
-            on_start=[controler_spawner]
+            on_start=[TimerAction(
+                period=3.0,
+                actions=[controler_spawner]
+            )]
         )
     )
+
 
     # ZeroSetter 写入的是 install 空间的 motors.yaml，
     # 此处回调将其同步回 src 源目录，避免 colcon build 后丢失校准结果
     install_motors = os.path.join(pkg_share, "parameters", "motors.yaml")
+    # 使用 realpath 解析 symlink，确保指向源代码目录
     src_motors = os.path.join(
-        os.path.dirname(__file__), "..", "parameters", "motors.yaml"
+        os.path.dirname(os.path.realpath(__file__)), "..", "parameters", "motors.yaml"
     )
     src_motors = os.path.abspath(src_motors)
 
@@ -136,11 +151,11 @@ def generate_launch_description():
             declare_xacro,
             declare_manager,
 
-            statepub_node,
             zeroSetter_node,
             joystick_node,
             event_handler_sync,
             event_handler0,
+            event_handler_pub,
             event_handler1,
         ])
     
