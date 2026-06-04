@@ -119,7 +119,7 @@ namespace Dog8Dof {
           public:
             PushPlanner(const Body &startState,
                         const Body &targetState,
-                        const float &startTime,
+                        const rclcpp::Time &startTime,
                         float duration,
                         float mass,
                         float kp,
@@ -128,7 +128,7 @@ namespace Dog8Dof {
 
           private:
             const Body startState_;
-            const float startTime_;
+            const rclcpp::Time startTime_;
             const float duration_;
             const float massPerLeg_; ///< 单腿承重 = 总质量/4
             TrajectoryPoint target_;
@@ -143,7 +143,7 @@ namespace Dog8Dof {
 
         rclcpp::Logger logger_ = rclcpp::get_logger("jumpTrajectory");
 
-        Phase getCurrentPhase(const rclcpp::Time &currentTime, const Body *currentTip = nullptr);
+        Phase getCurrentPhase(const rclcpp::Time &currentTime);
         Body
         getFlightTarget(const Body &currentTip, float launchAngle, float launchSpeed);
 

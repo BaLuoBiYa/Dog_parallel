@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.8)
+cmake_minimum_required(VERSION 3.8...3.31)
 project(dog_trajectory)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
@@ -23,7 +23,7 @@ add_library(${PROJECT_NAME}
 )
 target_link_libraries(${PROJECT_NAME}
     Eigen3::Eigen
-    yaml-cpp::yaml-cpp
+    yaml-cpp
 )
 ament_target_dependencies(${PROJECT_NAME}
     rclcpp

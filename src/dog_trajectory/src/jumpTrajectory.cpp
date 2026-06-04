@@ -136,7 +136,7 @@ namespace Dog8Dof {
                 "Current tip state is required for JumpTrajectory.");
         }
 
-        Phase currentPhase = getCurrentPhase(currentTime, currentTip);
+        Phase currentPhase = getCurrentPhase(currentTime);
 
         // 状态切换时的初始化
         if (currentPhase != phase_) {
@@ -154,7 +154,7 @@ namespace Dog8Dof {
                     *currentTip, currentPar_.launchAngle, currentPar_.launchSpeed);
                 pushPlanner_ = std::make_unique<PushPlanner>(startState,
                                                              endState,
-                                                             currentTime.seconds(),
+                                                             currentTime,
                                                              currentPar_.pushDuration,
                                                              Const::BODY_MASS,
                                                              getPushKpForLeg(),
@@ -256,8 +256,7 @@ namespace Dog8Dof {
         return target_;
     }
 
-    JumpTrajectory::Phase JumpTrajectory::getCurrentPhase(const rclcpp::Time &currentTime,
-                                                          const Body *currentTip) {
+    JumpTrajectory::Phase JumpTrajectory::getCurrentPhase(const rclcpp::Time &currentTime) {
         const float elapsed = (currentTime - launchTime_).seconds();
 
         // 预计算累计边界
@@ -270,22 +269,6 @@ namespace Dog8Dof {
         if (elapsed <= t_crouch) {
             return CROUCH;
         } else if (elapsed <= t_push) {
-            // PUSH阶段：检查是否真正到达CROUCH目标
-            // 如果还没到位，拒绝进入PUSH，继续等待
-            if (currentTip != nullptr && phase_ == CROUCH) {
-                const float crouchThreshold = 20.0f;
-                const float zError = std::abs(currentTip->pos[2] - currentPar_.startZ);
-                if (zError > crouchThreshold) {
-                    // 还没到位，延长launchTime_让CROUCH阶段继续
-                    // 注意：这会修改起始时间，所有后续phase都会延迟
-                    const_cast<JumpTrajectory*>(this)->launchTime_ =
-                        currentTime - rclcpp::Duration::from_seconds(t_crouch * 0.99);
-                    RCLCPP_WARN(logger_,
-                                "CROUCH not ready: Z error=%.1fmm, extending CROUCH time",
-                                static_cast<double>(zError));
-                    return CROUCH;
-                }
-            }
             return PUSH;
         } else if (elapsed <= t_flight) {
             return FLIGHT;
@@ -368,7 +351,7 @@ namespace Dog8Dof {
     // =========================================================================
     JumpTrajectory::PushPlanner::PushPlanner(const Body &startState,
                                              const Body &targetState,
-                                             const float &startTime,
+                                             const rclcpp::Time &startTime,
                                              float duration,
                                              float mass,
                                              float kp,
@@ -394,7 +377,7 @@ namespace Dog8Dof {
     }
 
     TrajectoryPoint JumpTrajectory::PushPlanner::get(const rclcpp::Time &currentTime) {
-        float t = static_cast<float>(currentTime.seconds() - startTime_);
+        float t = static_cast<float>((currentTime - startTime_).seconds());
         t = std::clamp(t, 0.0f, duration_);
 
         TrajectoryPoint out;
