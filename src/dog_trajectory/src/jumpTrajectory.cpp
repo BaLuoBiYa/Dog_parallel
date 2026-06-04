@@ -5,7 +5,9 @@
 
 namespace Dog8Dof {
 
-    JumpTrajectory::JumpTrajectory(const std::string &configPath, rclcpp::Duration period, LegID legID)
+    JumpTrajectory::JumpTrajectory(const std::string &configPath,
+                                   rclcpp::Duration period,
+                                   LegID legID)
         : BaseTrajectory(configPath, period), legID_(legID) {
         configPath_ = configPath;
         reloadParameters();
@@ -43,8 +45,9 @@ namespace Dog8Dof {
             return false;
         }
 
-        if (if_file_change()){
+        if (if_file_change()) {
             reloadParameters();
+            RCLCPP_ERROR(logger_, "yaml file reload");
         }
 
         if (parameters_[parID].has_value()) {
@@ -76,8 +79,8 @@ namespace Dog8Dof {
     }
 
     // ---- 参数映射：Jump → Stand -------
-    static StandTrajectory::parameters_t
-    jumpToStandcurrentPar_s(const JumpTrajectory::parameters_t &jp, float duration, float kp, float kd) {
+    static StandTrajectory::parameters_t jumpToStandcurrentPar_s(
+        const JumpTrajectory::parameters_t &jp, float duration, float kp, float kd) {
         StandTrajectory::parameters_t sp;
         sp.transitionTime = duration;
         sp.transitionKp = kp;
@@ -101,12 +104,14 @@ namespace Dog8Dof {
             throw std::logic_error("Target not set. Call setTarget() with valid "
                                    "ID before generate().");
         }
-        launchTime_ = now; // 记录绝对起点
+        launchTime_ = now;     // 记录绝对起点
         lastUpdateTime_ = now; // 同步时钟源，避免后续减法时报 time source 不一致
-        smooth_->configure(
-            jumpToStandcurrentPar_s(currentPar_, currentPar_.crouchDuration, currentPar_.crouchKp, currentPar_.crouchKd),
-            0.0f,
-            currentPar_.startZ);
+        smooth_->configure(jumpToStandcurrentPar_s(currentPar_,
+                                                   currentPar_.crouchDuration,
+                                                   currentPar_.crouchKp,
+                                                   currentPar_.crouchKd),
+                           0.0f,
+                           currentPar_.startZ);
         idelTipState_ = currentTip; // 以当前状态为锚点，生成下蹲过渡;
         isInit_ = true;
         target_ = smooth_->generate(currentTip, now);
@@ -158,10 +163,12 @@ namespace Dog8Dof {
                 break;
             }
             case FLIGHT:
-                smooth_->configure(
-                    jumpToStandcurrentPar_s(currentPar_, currentPar_.flightDuration, currentPar_.smoothKp, currentPar_.smoothKd),
-                    -currentTip->pos[0],
-                    currentTip->pos[2]);
+                smooth_->configure(jumpToStandcurrentPar_s(currentPar_,
+                                                           currentPar_.flightDuration,
+                                                           currentPar_.smoothKp,
+                                                           currentPar_.smoothKd),
+                                   -currentTip->pos[0],
+                                   currentTip->pos[2]);
                 // 进入
                 // FLIGHT：以当前状态为起点，水平位置反向，高度保持不变，过渡到冲击吸收
 
@@ -178,10 +185,12 @@ namespace Dog8Dof {
                 phase_ = ABSORPTION;
                 break;
             case RECOVER:
-                smooth_->configure(
-                    jumpToStandcurrentPar_s(currentPar_, currentPar_.recoverDuration, currentPar_.smoothKp, currentPar_.smoothKd),
-                    0.0f,
-                    currentPar_.legLengthStand);
+                smooth_->configure(jumpToStandcurrentPar_s(currentPar_,
+                                                           currentPar_.recoverDuration,
+                                                           currentPar_.smoothKp,
+                                                           currentPar_.smoothKd),
+                                   0.0f,
+                                   currentPar_.legLengthStand);
                 // 进入 RECOVER：以当前状态为起点，水平位置回到目标，高度过渡到正常站立
                 target_ = smooth_->generate(*currentTip, currentTime);
                 idelTipState_ = Body(target_.pos,
@@ -247,8 +256,8 @@ namespace Dog8Dof {
         return target_;
     }
 
-    JumpTrajectory::Phase
-    JumpTrajectory::getCurrentPhase(const rclcpp::Time &currentTime, const Body *currentTip) {
+    JumpTrajectory::Phase JumpTrajectory::getCurrentPhase(const rclcpp::Time &currentTime,
+                                                          const Body *currentTip) {
         const float elapsed = (currentTime - launchTime_).seconds();
 
         // 预计算累计边界
@@ -259,18 +268,24 @@ namespace Dog8Dof {
         const float t_recover = t_absorb + currentPar_.recoverDuration;
 
         if (elapsed <= t_crouch) {
-            // CROUCH阶段：需要同时满足时间条件和位置条件
-            // 如果时间到了但位置未到位，继续保持CROUCH状态
-            if (currentTip != nullptr) {
-                const float crouchThreshold = 20.0f; // 允许20mm误差
+            return CROUCH;
+        } else if (elapsed <= t_push) {
+            // PUSH阶段：检查是否真正到达CROUCH目标
+            // 如果还没到位，拒绝进入PUSH，继续等待
+            if (currentTip != nullptr && phase_ == CROUCH) {
+                const float crouchThreshold = 20.0f;
                 const float zError = std::abs(currentTip->pos[2] - currentPar_.startZ);
-                if (elapsed >= t_crouch * 0.8f && zError > crouchThreshold) {
-                    // 时间已过80%但还没到位，继续等待
+                if (zError > crouchThreshold) {
+                    // 还没到位，延长launchTime_让CROUCH阶段继续
+                    // 注意：这会修改起始时间，所有后续phase都会延迟
+                    const_cast<JumpTrajectory*>(this)->launchTime_ =
+                        currentTime - rclcpp::Duration::from_seconds(t_crouch * 0.99);
+                    RCLCPP_WARN(logger_,
+                                "CROUCH not ready: Z error=%.1fmm, extending CROUCH time",
+                                static_cast<double>(zError));
                     return CROUCH;
                 }
             }
-            return CROUCH;
-        } else if (elapsed <= t_push) {
             return PUSH;
         } else if (elapsed <= t_flight) {
             return FLIGHT;
