@@ -20,6 +20,7 @@ namespace Dog8Dof {
         idleTipZ_ = auto_declare<float>("idleTipZ", 180.0f);
         commandTopic_ = auto_declare<std::string>("commandTopic", "/dog/command");
         monitorTopic_ = auto_declare<std::string>("monitorTopic", "/dog/monitor");
+        jointStateTopicPrefix_ = auto_declare<std::string>("jointStateTopicPrefix", "/dog/joint_state/");
         maxfailure_ = auto_declare<uint8_t>("maxFailure", 5);
         return controller_interface::CallbackReturn::SUCCESS;
     }
@@ -63,6 +64,7 @@ namespace Dog8Dof {
             });
 
         registerMonitorPublisher();
+        registerJointStatePublishers();
 
         return controller_interface::CallbackReturn::SUCCESS;
     }
@@ -176,6 +178,9 @@ namespace Dog8Dof {
             monitorPubCounter_ = 0;
             publishMonitorState();
         }
+
+        // ---- 关节状态发布（每周期发布，方便 rqt 实时调试） ----
+        publishJointStates(period);
 
         // 1. 处理新命令（立即应用，generate 已基于当前状态重规划）
         if (newCmd_) {
@@ -427,6 +432,63 @@ namespace Dog8Dof {
         }
 
         monitorPub_->publish(msg);
+    }
+
+    // =========================================================================
+    //  关节状态调试发布
+    // =========================================================================
+    void TrajectoryTracker::registerJointStatePublishers() {
+        for (size_t i = 0; i < 4; ++i) {
+            const std::string topic = jointStateTopicPrefix_ + kLegNames_[i];
+            jointStatePub_[i] =
+                this->get_node()->create_publisher<dog_msg::msg::JointState>(topic, 10);
+        }
+        RCLCPP_INFO(this->get_node()->get_logger(),
+                    "JointState publishers registered under %s*",
+                    jointStateTopicPrefix_.c_str());
+    }
+
+    void TrajectoryTracker::publishJointStates(const rclcpp::Duration &period) {
+        // 辅助 lambda：获取 GaitManager 的当前与目标足端状态
+        auto fillAndPublish = [&](size_t legIdx,
+                                  const std::unique_ptr<GaitManager> &gm) {
+            if (!gm || !jointStatePub_[legIdx]) {
+                return;
+            }
+
+            const Body current = gm->getTipCurrent();
+            const Body target = gm->getTipTarget();
+
+            dog_msg::msg::JointState msg;
+            msg.name = kLegNames_[legIdx];
+            msg.pos_x = current.pos.x();
+            msg.pos_z = current.pos.z();
+            msg.vel_x = current.linerVel.x();
+            msg.vel_z = current.linerVel.z();
+
+            // 加速度：基于上一周期速度差分计算
+            const Eigen::Vector2f curVel(current.linerVel.x(), current.linerVel.z());
+            if (prevTipVelValid_) {
+                const float dt = period.seconds();
+                if (dt > 1e-6f) {
+                    msg.acc_x = (curVel.x() - prevTipVel_[legIdx].x()) / dt;
+                    msg.acc_z = (curVel.y() - prevTipVel_[legIdx].y()) / dt;
+                }
+            }
+            prevTipVel_[legIdx] = curVel;
+
+            msg.target_pos_x = target.pos.x();
+            msg.target_pos_z = target.pos.z();
+
+            jointStatePub_[legIdx]->publish(msg);
+        };
+
+        fillAndPublish(0, LF_);
+        fillAndPublish(1, RF_);
+        fillAndPublish(2, LR_);
+        fillAndPublish(3, RR_);
+
+        prevTipVelValid_ = true;
     }
 
 } // namespace Dog8Dof

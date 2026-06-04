@@ -1,0 +1,10 @@
+# 单腿足端关节状态（用于 rqt 调试监控）
+string          name            # 腿名称 (LF / RF / LR / RR)
+float32         pos_x           # 足端当前 X 位置 (mm)
+float32         pos_z           # 足端当前 Z 位置 (mm)
+float32         vel_x           # 足端当前 X 速度 (mm/s)
+float32         vel_z           # 足端当前 Z 速度 (mm/s)
+float32         acc_x           # 足端当前 X 加速度 (mm/s^2)
+float32         acc_z           # 足端当前 Z 加速度 (mm/s^2)
+float32         target_pos_x    # 足端目标 X 位置 (mm)
+float32         target_pos_z    # 足端目标 Z 位置 (mm)

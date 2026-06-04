@@ -101,6 +101,16 @@ namespace Dog8Dof {
         Motor getFrontTarget() const;
         Motor getRearTarget() const;
 
+        /**
+         * @brief 获取足端当前状态（用于调试/监控）
+         */
+        Body getTipCurrent() const;
+
+        /**
+         * @brief 获取足端目标状态（用于调试/监控）
+         */
+        Body getTipTarget() const;
+
       private:
         enum class GaitType { STAND, WALK, JUMP };
 

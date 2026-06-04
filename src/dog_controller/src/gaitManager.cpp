@@ -250,4 +250,12 @@ namespace Dog8Dof {
         return leg_.getMotorTarget(Leg2Dof::REAR);
     }
 
+    Body GaitManager::getTipCurrent() const {
+        return currentTip_;
+    }
+
+    Body GaitManager::getTipTarget() const {
+        return Body(targetPoint_.pos, targetPoint_.vel, targetPoint_.tau);
+    }
+
 } // namespace Dog8Dof

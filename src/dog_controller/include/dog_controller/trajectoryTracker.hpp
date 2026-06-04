@@ -8,6 +8,7 @@
 #include "dog_controller/stateMonitor.hpp"
 #include "dog_controller/threadSafeMessageBox.hpp"
 #include "dog_msg/msg/gait_twist.hpp"
+#include "dog_msg/msg/joint_state.hpp"
 #include "dog_msg/msg/system_state.hpp"
 
 namespace Dog8Dof {
@@ -97,6 +98,14 @@ namespace Dog8Dof {
         size_t monitorPubCounter_ = 0;
         static constexpr size_t kMonitorPubDecimation = 10;
 
+        // ---- 关节状态调试发布（每腿独立 topic，方便 rqt_plot） ----
+        std::string jointStateTopicPrefix_;
+        rclcpp::Publisher<dog_msg::msg::JointState>::SharedPtr jointStatePub_[4];
+        static constexpr std::array<const char *, 4> kLegNames_{"LF", "RF", "LR", "RR"};
+        // 存储上一周期足端速度，用于计算加速度
+        Eigen::Vector2f prevTipVel_[4]{};
+        bool prevTipVelValid_{false};
+
         // ---- 命令处理 ----
         ThreadSafeMessageBox<dog_msg::msg::GaitTwist> commandBox_;
         rclcpp::Subscription<dog_msg::msg::GaitTwist>::SharedPtr commandSub_;
@@ -111,6 +120,8 @@ namespace Dog8Dof {
         bool switchToStandMode(bool useInitTransition = false);
         void registerMonitorPublisher();
         void publishMonitorState();
+        void registerJointStatePublishers();
+        void publishJointStates(const rclcpp::Duration &period);
         bool setJointCommands(size_t legIndex, const Motor &target);
         bool setAllJointCommands();
         float getPos(size_t i);
