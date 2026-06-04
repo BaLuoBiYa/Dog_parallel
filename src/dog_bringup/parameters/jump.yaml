@@ -24,6 +24,7 @@
 
   flightDuration : 0.30
   airTipLevelFactor : 0.5
+  tuckMinZ : 230.0
 
   absorbDuration : 0.25
   absorbDamp : 0.15
@@ -60,6 +61,7 @@
 
   flightDuration : 0.1
   airTipLevelFactor : 0.1
+  tuckMinZ : 230.0
 
   absorbDuration : 1.0
   absorbDamp : 0.1

@@ -163,20 +163,8 @@ namespace Dog8Dof {
                 break;
             }
             case FLIGHT:
-                smooth_->configure(jumpToStandcurrentPar_s(currentPar_,
-                                                           currentPar_.flightDuration,
-                                                           currentPar_.smoothKp,
-                                                           currentPar_.smoothKd),
-                                   -currentTip->pos[0],
-                                   currentTip->pos[2]);
-                // 进入
-                // FLIGHT：以当前状态为起点，水平位置反向，高度保持不变，过渡到冲击吸收
-
-                target_ = smooth_->generate(*currentTip, currentTime);
-                idelTipState_ = Body(target_.pos,
-                                     target_.vel,
-                                     target_.tau); // 以站立过渡的初始点为新状态锚点
-
+                initFlightTuck(*currentTip, currentTime);
+                target_ = getFlightTuckTarget(currentTime);
                 phase_ = FLIGHT;
                 break;
             case ABSORPTION:
@@ -223,13 +211,16 @@ namespace Dog8Dof {
 
         switch (currentPhase) {
         case CROUCH:
-        case FLIGHT:
         case RECOVER:
             target_ = smooth_->get(currentTime, &idelTipState_);
             idelTipState_ = Body(target_.pos, target_.vel, target_.tau);
             break;
-            // 这三个阶段都使用 smooth_ 生成轨迹，且以理想状态
+            // 这两个阶段都使用 smooth_ 生成轨迹，且以理想状态
             // 的输出作为状态追踪锚点，确保平滑过渡
+        case FLIGHT:
+            target_ = getFlightTuckTarget(currentTime);
+            idelTipState_ = Body(target_.pos, target_.vel, target_.tau);
+            break;
         case PUSH:
             target_ = pushPlanner_->get(currentTime);
             idelTipState_ = Body(target_.pos, target_.vel, target_.tau);
@@ -292,6 +283,53 @@ namespace Dog8Dof {
         absorptionTarget.kd[1] = absorbDamp;
         // 生成一个以当前状态为锚点，零速度，零力矩，纯阻尼控制的吸收目标
         return absorptionTarget;
+    }
+
+    float JumpTrajectory::computeFlightTuckZ(const Body &currentTip) const {
+        const float tuckDelta =
+            std::max(0.0f, currentTip.pos[2] - currentPar_.startZ) *
+            std::clamp(currentPar_.airTipLevelFactor, 0.0f, 1.0f);
+        const float targetZ = currentTip.pos[2] - tuckDelta;
+        return std::max(currentPar_.tuckMinZ, targetZ);
+    }
+
+    void JumpTrajectory::initFlightTuck(const Body &currentTip,
+                                        const rclcpp::Time &currentTime) {
+        flightStartTime_ = currentTime;
+        flightTuckDuration_ = std::max(currentPar_.flightDuration, 1e-3f);
+
+        const float targetX = currentTip.pos[0];
+        const float targetZ = computeFlightTuckZ(currentTip);
+
+        flightCoeff_[0] = QuinticPolynomial::computeCoefficients(
+            {currentTip.pos[0], currentTip.linerVel[0], 0.0f},
+            {targetX, 0.0f, 0.0f},
+            flightTuckDuration_);
+        flightCoeff_[1] = QuinticPolynomial::computeCoefficients(
+            {currentTip.pos[2], currentTip.linerVel[2], 0.0f},
+            {targetZ, 0.0f, 0.0f},
+            flightTuckDuration_);
+
+        idelTipState_ = currentTip;
+    }
+
+    TrajectoryPoint JumpTrajectory::getFlightTuckTarget(const rclcpp::Time &currentTime) {
+        float t = static_cast<float>((currentTime - flightStartTime_).seconds());
+        t = std::clamp(t, 0.0f, flightTuckDuration_);
+
+        TrajectoryPoint flightTarget;
+        flightTarget.pos[0] = QuinticPolynomial::evaluatePos(flightCoeff_[0], t);
+        flightTarget.pos[1] = 0.0f;
+        flightTarget.pos[2] = QuinticPolynomial::evaluatePos(flightCoeff_[1], t);
+        flightTarget.vel[0] = QuinticPolynomial::evaluateVel(flightCoeff_[0], t);
+        flightTarget.vel[1] = 0.0f;
+        flightTarget.vel[2] = QuinticPolynomial::evaluateVel(flightCoeff_[1], t);
+        flightTarget.tau.setZero();
+        flightTarget.kp[0] = currentPar_.smoothKp;
+        flightTarget.kp[1] = currentPar_.smoothKp;
+        flightTarget.kd[0] = currentPar_.smoothKd;
+        flightTarget.kd[1] = currentPar_.smoothKd;
+        return flightTarget;
     }
 
     float JumpTrajectory::getPushKpForLeg() const {
@@ -463,6 +501,8 @@ namespace YAML {
             node["finishZ"] = rhs.finishZ;
 
             node["flightDuration"] = rhs.flightDuration;
+            node["airTipLevelFactor"] = rhs.airTipLevelFactor;
+            node["tuckMinZ"] = rhs.tuckMinZ;
 
             node["absorbDuration"] = rhs.absorbDuration;
             node["absorbDamp"] = rhs.absorbDamp;
@@ -501,6 +541,8 @@ namespace YAML {
             rhs.finishZ = node["finishZ"].as<float>(100.0f);
 
             rhs.flightDuration = node["flightDuration"].as<float>(0.30f);
+            rhs.airTipLevelFactor = node["airTipLevelFactor"].as<float>(0.1f);
+            rhs.tuckMinZ = node["tuckMinZ"].as<float>(220.0f);
 
             rhs.absorbDuration = node["absorbDuration"].as<float>(0.10f);
             rhs.absorbDamp = node["absorbDamp"].as<float>(4.0f);

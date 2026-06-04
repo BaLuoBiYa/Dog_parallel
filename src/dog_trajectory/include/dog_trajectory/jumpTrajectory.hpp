@@ -70,8 +70,9 @@ namespace Dog8Dof {
             float finishZ = 100.0f;     // 起跳足端高度 (mm)
 
             // 空中阶段
-            float flightDuration = 0.30f; // 空中总时长 (s)
+            float flightDuration = 0.30f;   // 空中总时长 (s)
             float airTipLevelFactor = 0.1f; // 空中足端系数（影响空中状态切换的抬腿高度）
+            float tuckMinZ = 220.0f; // 收腿最小腿长 (mm)，防止足端过度靠近髋部
 
             // 缓冲阶段
             float absorbDuration = 0.10f; // 缓冲总时长 (s)
@@ -148,6 +149,9 @@ namespace Dog8Dof {
         getFlightTarget(const Body &currentTip, float launchAngle, float launchSpeed);
 
         TrajectoryPoint getAbsorptionTarget(float absorbDamp);
+        void initFlightTuck(const Body &currentTip, const rclcpp::Time &currentTime);
+        TrajectoryPoint getFlightTuckTarget(const rclcpp::Time &currentTime);
+        float computeFlightTuckZ(const Body &currentTip) const;
 
         /** @brief 根据腿ID获取对应的PUSH阶段Kp值 */
         float getPushKpForLeg() const;
@@ -156,6 +160,10 @@ namespace Dog8Dof {
 
         bool if_file_change();
         static time_t file_mtime(const std::string &path);
+
+        Eigen::Matrix<float, 6, 1> flightCoeff_[2];
+        rclcpp::Time flightStartTime_;
+        float flightTuckDuration_ = 0.0f;
 
     };
 
