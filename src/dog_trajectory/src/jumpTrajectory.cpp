@@ -154,7 +154,7 @@ namespace Dog8Dof {
                     *currentTip, currentPar_.launchAngle, currentPar_.launchSpeed);
                 pushPlanner_ = std::make_unique<PushPlanner>(startState,
                                                              endState,
-                                                             currentTime.seconds(),
+                                                             currentTime,
                                                              currentPar_.pushDuration,
                                                              Const::BODY_MASS,
                                                              getPushKpForLeg(),
@@ -368,7 +368,7 @@ namespace Dog8Dof {
     // =========================================================================
     JumpTrajectory::PushPlanner::PushPlanner(const Body &startState,
                                              const Body &targetState,
-                                             const float &startTime,
+                                             const rclcpp::Time &startTime,
                                              float duration,
                                              float mass,
                                              float kp,
@@ -394,7 +394,7 @@ namespace Dog8Dof {
     }
 
     TrajectoryPoint JumpTrajectory::PushPlanner::get(const rclcpp::Time &currentTime) {
-        float t = static_cast<float>(currentTime.seconds() - startTime_);
+        float t = static_cast<float>(currentTime - startTime_);
         t = std::clamp(t, 0.0f, duration_);
 
         TrajectoryPoint out;

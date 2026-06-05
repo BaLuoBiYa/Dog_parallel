@@ -70,7 +70,7 @@ namespace Dog8Dof {
             float finishZ = 100.0f;     // 起跳足端高度 (mm)
 
             // 空中阶段
-            float flightDuration = 0.30f; // 空中总时长 (s)
+            float flightDuration = 0.30f;   // 空中总时长 (s)
             float airTipLevelFactor = 0.1f; // 空中足端系数（影响空中状态切换的抬腿高度）
 
             // 缓冲阶段
@@ -119,7 +119,7 @@ namespace Dog8Dof {
           public:
             PushPlanner(const Body &startState,
                         const Body &targetState,
-                        const float &startTime,
+                        const rclcpp::Time &startTime,
                         float duration,
                         float mass,
                         float kp,
@@ -128,7 +128,7 @@ namespace Dog8Dof {
 
           private:
             const Body startState_;
-            const float startTime_;
+            const rclcpp::Time startTime_;
             const float duration_;
             const float massPerLeg_; ///< 单腿承重 = 总质量/4
             TrajectoryPoint target_;
@@ -156,7 +156,6 @@ namespace Dog8Dof {
 
         bool if_file_change();
         static time_t file_mtime(const std::string &path);
-
     };
 
 } // namespace Dog8Dof
