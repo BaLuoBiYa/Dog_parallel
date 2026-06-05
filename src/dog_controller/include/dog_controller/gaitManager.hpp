@@ -18,8 +18,7 @@ namespace Dog8Dof {
      */
     class GaitManager {
       public:
-        GaitManager(rclcpp::Clock::SharedPtr clock,
-                    rclcpp::Duration period,
+        GaitManager(rclcpp::Duration period,
 
                     std::string walkConfig,
                     std::string standConfig,
@@ -59,7 +58,8 @@ namespace Dog8Dof {
 
         /**
          * @brief 切换到跳跃步态
-         * @param parID 跳跃配置参数索引（对应 YAML 中的 key，由上位机通过 GaitTwist.step_height 传入）
+         * @param parID 跳跃配置参数索引（对应 YAML 中的 key，由上位机通过
+         * GaitTwist.step_height 传入）
          * @note 跳跃步态一旦进入不可打断，直到完成才回落 Stand
          */
         bool setJumpGait(uint8_t parID);
@@ -104,7 +104,8 @@ namespace Dog8Dof {
       private:
         enum class GaitType { STAND, WALK, JUMP };
 
-        rclcpp::Clock::SharedPtr clock_;
+        rclcpp::Duration period_;
+        rclcpp::Time current_time_{0, 0, RCL_ROS_TIME};
         Leg2Dof leg_;
         Body currentTip_;
         TrajectoryPoint targetPoint_;

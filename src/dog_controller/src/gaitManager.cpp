@@ -10,8 +10,7 @@ namespace Dog8Dof {
     // =========================================================================
     //  构造
     // =========================================================================
-    GaitManager::GaitManager(rclcpp::Clock::SharedPtr clock,
-                             rclcpp::Duration period,
+    GaitManager::GaitManager(rclcpp::Duration period,
                              std::string walkConfig,
                              std::string standConfig,
                              std::string jumpConfig,
@@ -19,7 +18,7 @@ namespace Dog8Dof {
                              float upperLength,
                              float lowerLength,
                              float tipLength)
-        : clock_(clock), leg_(upperLength, lowerLength, tipLength) {
+        : period_(period), leg_(upperLength, lowerLength, tipLength) {
         walkTrajectory_ = std::make_shared<WalkTrajectory>(walkConfig, period);
         standTrajectory_ = std::make_shared<StandTrajectory>(standConfig, period);
         jumpTrajectory_ = std::make_shared<JumpTrajectory>(jumpConfig, period, legID);
@@ -72,7 +71,7 @@ namespace Dog8Dof {
 
         // generate() 仅在首次切换到 WALK 模式时调用，避免高频重置轨迹导致抖动
         if (isNewMode) {
-            walkTrajectory_->generate(currentTip_, clock_->now());
+            walkTrajectory_->generate(currentTip_, current_time_);
         }
 
         RCLCPP_INFO(logger_,
@@ -103,7 +102,7 @@ namespace Dog8Dof {
         }
 
         currentTrajectory_ = jumpTrajectory_;
-        jumpTrajectory_->generate(currentTip_, clock_->now());
+        jumpTrajectory_->generate(currentTip_, current_time_);
         RCLCPP_INFO(logger_, "Jump gait set: parID=%d", parID);
         return true;
     }
@@ -162,7 +161,7 @@ namespace Dog8Dof {
 
             // 使用自定义过渡时间配置并生成轨迹
             standTrajectory_->configure(params, tipX, tipZ, transitionTime);
-            standTrajectory_->generate(currentTip_, clock_->now());
+            standTrajectory_->generate(currentTip_, current_time_);
 
             RCLCPP_INFO(logger_,
                         "Stand gait set: target=(%.0f, %.0f), transition=%.2f s",
@@ -195,8 +194,8 @@ namespace Dog8Dof {
 
         // 2. 在线重规划：跳跃模式传入当前足端真值做反馈，其余模式开环
         targetPoint_ = (currentTrajectory_ == jumpTrajectory_)
-                           ? currentTrajectory_->get(clock_->now(), &currentTip_)
-                           : currentTrajectory_->get(clock_->now(), nullptr);
+                           ? currentTrajectory_->get(current_time_, &currentTip_)
+                           : currentTrajectory_->get(current_time_, nullptr);
 
         // 3. 逆运动学：期望足端 → 期望关节角度
         if (!leg_.setTip(targetPoint_.pos, targetPoint_.vel, targetPoint_.tau)) {
@@ -218,10 +217,13 @@ namespace Dog8Dof {
             jumpTrajectory_->getPhase() == JumpTrajectory::FINISHED) {
             // 跳跃完成后自动切回站立（以轨迹目标位置为准，避免传感器滞后导致位置错误）
             standTrajectory_->setTarget(targetPoint_.pos[0], targetPoint_.pos[2]);
-            standTrajectory_->generate(currentTip_, clock_->now());
+            standTrajectory_->generate(currentTip_, current_time_);
             currentTrajectory_ = standTrajectory_;
             RCLCPP_INFO(logger_, "Jump finished, fallback to stand");
         }
+
+        // 5. 自维护时钟累加一个控制周期
+        current_time_ += period_;
 
         return true;
     }
