@@ -217,12 +217,12 @@ namespace Dog8Dof {
             break;
             // 这两个阶段都使用 smooth_ 生成轨迹，且以理想状态
             // 的输出作为状态追踪锚点，确保平滑过渡
-        case FLIGHT:
-            target_ = getFlightTuckTarget(currentTime);
-            idelTipState_ = Body(target_.pos, target_.vel, target_.tau);
-            break;
         case PUSH:
             target_ = pushPlanner_->get(currentTime);
+            idelTipState_ = Body(target_.pos, target_.vel, target_.tau);
+            break;
+        case FLIGHT:
+            target_ = getFlightTuckTarget(currentTime);
             idelTipState_ = Body(target_.pos, target_.vel, target_.tau);
             break;
         case ABSORPTION:
@@ -247,7 +247,8 @@ namespace Dog8Dof {
         return target_;
     }
 
-    JumpTrajectory::Phase JumpTrajectory::getCurrentPhase(const rclcpp::Time &currentTime) {
+    JumpTrajectory::Phase
+    JumpTrajectory::getCurrentPhase(const rclcpp::Time &currentTime) {
         const float elapsed = (currentTime - launchTime_).seconds();
 
         // 预计算累计边界
@@ -286,9 +287,8 @@ namespace Dog8Dof {
     }
 
     float JumpTrajectory::computeFlightTuckZ(const Body &currentTip) const {
-        const float tuckDelta =
-            std::max(0.0f, currentTip.pos[2] - currentPar_.startZ) *
-            std::clamp(currentPar_.airTipLevelFactor, 0.0f, 1.0f);
+        const float tuckDelta = std::max(0.0f, currentTip.pos[2] - currentPar_.startZ) *
+                                std::clamp(currentPar_.airTipLevelFactor, 0.0f, 1.0f);
         const float targetZ = currentTip.pos[2] - tuckDelta;
         return std::max(currentPar_.tuckMinZ, targetZ);
     }
