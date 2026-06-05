@@ -34,18 +34,17 @@ namespace Dog8Dof {
             return controller_interface::CallbackReturn::ERROR;
         }
 
-        const auto clock = this->get_node()->get_clock();
         const auto period = rclcpp::Duration::from_seconds(updateDuration_);
 
         try {
             LF_ = std::make_unique<GaitManager>(
-                clock, period, walkProfile_, standProfile_, jumpProfile_);
+                period, walkProfile_, standProfile_, jumpProfile_);
             LR_ = std::make_unique<GaitManager>(
-                clock, period, walkProfile_, standProfile_, jumpProfile_);
+                period, walkProfile_, standProfile_, jumpProfile_);
             RF_ = std::make_unique<GaitManager>(
-                clock, period, walkProfile_, standProfile_, jumpProfile_);
+                period, walkProfile_, standProfile_, jumpProfile_);
             RR_ = std::make_unique<GaitManager>(
-                clock, period, walkProfile_, standProfile_, jumpProfile_);
+                period, walkProfile_, standProfile_, jumpProfile_);
         } catch (const std::exception &e) {
             RCLCPP_ERROR(this->get_node()->get_logger(),
                          "TrajectoryTracker configure failed: %s",

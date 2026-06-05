@@ -62,7 +62,6 @@ int main(int argc, char **argv) {
         (std::filesystem::path(shareDir) / "parameters" / "jump.yaml").string();
 
     // 300Hz 控制周期
-    const auto clock = std::make_shared<rclcpp::Clock>(RCL_SYSTEM_TIME);
     const rclcpp::Duration period = rclcpp::Duration::from_seconds(1.0 / 300.0);
 
     // ---- 辅助腿模型（用于 IK/FK 转换） ----
@@ -80,8 +79,7 @@ int main(int argc, char **argv) {
     Motor rearInit = verifyLeg.getMotorTarget(Leg2Dof::REAR);
 
     // ---- 创建 GaitManager ----
-    GaitManager gm(clock,
-                   period,
+    GaitManager gm(period,
                    walkYaml,
                    standYaml,
                    jumpYaml,
