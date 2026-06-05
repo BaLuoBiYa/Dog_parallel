@@ -43,7 +43,7 @@ namespace Dog8Dof {
             return false;
         }
 
-        if (if_file_change()){
+        if (if_file_change()) {
             reloadParameters();
         }
 
@@ -101,7 +101,7 @@ namespace Dog8Dof {
             throw std::logic_error("Target not set. Call setTarget() with valid "
                                    "ID before generate().");
         }
-        launchTime_ = now; // 记录绝对起点
+        launchTime_ = now;     // 记录绝对起点
         lastUpdateTime_ = now; // 同步时钟源，避免后续减法时报 time source 不一致
         smooth_->configure(
             jumpToStandcurrentPar_s(currentPar_, currentPar_.crouchDuration),
@@ -148,7 +148,7 @@ namespace Dog8Dof {
                     *currentTip, currentPar_.launchAngle, currentPar_.launchSpeed);
                 pushPlanner_ = std::make_unique<PushPlanner>(startState,
                                                              endState,
-                                                             currentTime.seconds(),
+                                                             currentTime,
                                                              currentPar_.pushDuration,
                                                              Const::BODY_MASS,
                                                              currentPar_.pushKp,
@@ -312,7 +312,7 @@ namespace Dog8Dof {
     // =========================================================================
     JumpTrajectory::PushPlanner::PushPlanner(const Body &startState,
                                              const Body &targetState,
-                                             const float &startTime,
+                                             const rclcpp::Time &startTime,
                                              float duration,
                                              float mass,
                                              float kp,
@@ -338,7 +338,7 @@ namespace Dog8Dof {
     }
 
     TrajectoryPoint JumpTrajectory::PushPlanner::get(const rclcpp::Time &currentTime) {
-        float t = static_cast<float>(currentTime.seconds() - startTime_);
+        float t = static_cast<float>(currentTime - startTime_);
         t = std::clamp(t, 0.0f, duration_);
 
         TrajectoryPoint out;
