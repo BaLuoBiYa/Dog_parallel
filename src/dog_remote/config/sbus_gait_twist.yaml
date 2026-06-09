@@ -1,0 +1,33 @@
+# ============================================================
+# SBUS → GaitTwist 节点默认配置
+# 路径: src/dog_remote/config/sbus_gait_twist.yaml
+# ============================================================
+
+# ── 发布频率 ──
+publish_rate_hz: 50.0
+
+# ── 串口配置 ──
+serial:
+  port: "/dev/ttyACM0"
+  baudrate: 100000
+
+# ── 运动限幅 ──
+limits:
+  max_linear_x: 0.8         # 最大前向速度 (m/s)
+  max_linear_y: 0.4         # 最大侧向速度 (m/s)
+  max_roll: 0.4             # 最大 roll 角 (rad)
+  max_pitch: 0.4            # 最大 pitch 角 (rad)
+  base_height_min: 80.0     # 身高下限 (mm)
+  base_height_max: 300.0    # 身高上限 (mm)
+  step_height_min: 0.0      # 步高下限 (mm)
+  step_height_max: 150.0    # 步高上限 (mm)
+  step_duration_min: 0.20   # 步频周期下限 (s)
+  step_duration_max: 0.80   # 步频周期上限 (s)
+
+# ── 摇杆响应 ──
+stick:
+  deadzone: 0.05            # 死区 (归一化百分比)
+  exponent: 1.5             # 指数响应曲线 (1.0=线性, >1.0=更细腻的低速控制)
+
+# ── YAML 热加载间隔 ──
+yaml_watch_interval: 1.0    # 文件检查间隔 (s)

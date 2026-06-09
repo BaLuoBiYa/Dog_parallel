@@ -71,12 +71,23 @@ target_link_libraries(joystickTester
     ${PROJECT_NAME}
 )
 
+add_executable(sbusGaitTwistNode
+    src/sbusGaitTwistNode.cpp)
+ament_target_dependencies(sbusGaitTwistNode
+    rclcpp
+    dog_msg
+)
+target_link_libraries(sbusGaitTwistNode
+    ${PROJECT_NAME}
+)
+
 install(
   TARGETS ${PROJECT_NAME}
     subsTester
     twistToGaitTester
     joystickController
     joystickTester
+    sbusGaitTwistNode
   DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
