@@ -42,9 +42,23 @@ namespace Dog8Dof {
         try {
             const YAML::Node root = YAML::LoadFile(configPath_);
 
+            // ── RS485 模式选择 ──
+            useDual485_ = root["use_dual_485"] ? root["use_dual_485"].as<bool>() : true;
+
             // 两路独立 485 端口
-            portNameLeft_ = root["RS485_Port_Left"].as<std::string>();
-            portNameRight_ = root["RS485_Port_Right"].as<std::string>();
+            portNameLeft_ = root["RS485_Port_Left"].as<std::string>("");
+            portNameRight_ = root["RS485_Port_Right"].as<std::string>("");
+
+            if (!useDual485_) {
+                portName_ = root["RS485_Port"].as<std::string>();
+                RCLCPP_INFO(
+                    this->get_logger(), "RS485 模式: 单路共用 (%s)", portName_.c_str());
+            } else {
+                RCLCPP_INFO(this->get_logger(),
+                            "RS485 模式: 两路独立 (L:%s, R:%s)",
+                            portNameLeft_.c_str(),
+                            portNameRight_.c_str());
+            }
             maxRetry_ = root["maxRetry"].as<size_t>(3);
             deactiveDamp_ = root["deactiveDamp"].as<float>(0.1);
             deactiveDampTime_ = root["deactiveDampTime"].as<long>(2);
@@ -118,36 +132,44 @@ namespace Dog8Dof {
     BaseInterface::on_configure(const rclcpp_lifecycle::State &pre) {
         (void)pre;
 
+        port_.reset();
         portLeft_.reset();
         portRight_.reset();
         motor_.clear();
         // 清空智能指针
 
-        try {
-            portLeft_ = std::make_shared<Dog8Dof::SerialPort>(portNameLeft_);
-        } catch (const std::exception &e) {
-            RCLCPP_ERROR(
-                this->get_logger(), "RS485 left port connection failed: %s", e.what());
-            return hardware_interface::CallbackReturn::ERROR;
-        }
+        if (useDual485_) {
+            try {
+                portLeft_ = std::make_shared<Dog8Dof::SerialPort>(portNameLeft_);
+            } catch (const std::exception &e) {
+                RCLCPP_ERROR(this->get_logger(),
+                             "RS485 left port connection failed: %s",
+                             e.what());
+                return hardware_interface::CallbackReturn::ERROR;
+            }
 
-        try {
-            portRight_ = std::make_shared<Dog8Dof::SerialPort>(portNameRight_);
-        } catch (const std::exception &e) {
-            RCLCPP_ERROR(
-                this->get_logger(), "RS485 right port connection failed: %s", e.what());
-            return hardware_interface::CallbackReturn::ERROR;
+            try {
+                portRight_ = std::make_shared<Dog8Dof::SerialPort>(portNameRight_);
+            } catch (const std::exception &e) {
+                RCLCPP_ERROR(this->get_logger(),
+                             "RS485 right port connection failed: %s",
+                             e.what());
+                return hardware_interface::CallbackReturn::ERROR;
+            }
+        } else {
+            try {
+                port_ = std::make_shared<Dog8Dof::SerialPort>(portName_);
+            } catch (const std::exception &e) {
+                RCLCPP_ERROR(
+                    this->get_logger(), "RS485 port connection failed: %s", e.what());
+                return hardware_interface::CallbackReturn::ERROR;
+            }
         }
 
         for (size_t i = 0; i < 8; ++i) {
             try {
-                // 左组电机使用左端口，右组电机使用右端口
-                std::shared_ptr<Dog8Dof::SerialPort> port =
-                    (i == LEFT_MOTOR_INDICES[0] || i == LEFT_MOTOR_INDICES[1] ||
-                     i == LEFT_MOTOR_INDICES[2] || i == LEFT_MOTOR_INDICES[3])
-                        ? portLeft_
-                        : portRight_;
-                motor_.push_back(goM8010Interface(jointMapping_[jointNames_[i]], port));
+                motor_.push_back(
+                    goM8010Interface(jointMapping_[jointNames_[i]], getPortForMotor(i)));
                 motor_[i].setZero(zeroOffsetByIndex_[i]);
             } catch (const std::exception &e) {
                 RCLCPP_ERROR(this->get_logger(),
@@ -261,54 +283,71 @@ namespace Dog8Dof {
         (void)time;
         (void)period;
 
-        bool leftOk = true;
-        bool rightOk = true;
+        bool ok;
 
-        // 左右两路 485 并行通信
-        std::thread leftThread([&]() {
-            for (size_t idx : LEFT_MOTOR_INDICES) {
-                const float pos = static_cast<float>(cmdPos_[idx]);
-                const float vel = static_cast<float>(cmdVel_[idx]);
-                const float tor = static_cast<float>(cmdTau_[idx]);
-                const float kp = static_cast<float>(cmdKp_[idx]);
-                const float kd = static_cast<float>(cmdKd_[idx]);
+        if (useDual485_) {
+            // 两路 485 并行通信
+            bool leftOk = true;
+            bool rightOk = true;
 
-                if (!motor_[idx].setHybrid(tor, pos, vel, kp, kd)) {
-                    RCLCPP_ERROR_STREAM(get_logger(), "Time out on " << jointNames_[idx]);
-                    leftOk = false;
-                }
-            }
-        });
+            std::thread leftThread(
+                [&]() { leftOk = writeMotorGroup(LEFT_MOTOR_INDICES); });
+            std::thread rightThread(
+                [&]() { rightOk = writeMotorGroup(RIGHT_MOTOR_INDICES); });
 
-        std::thread rightThread([&]() {
-            for (size_t idx : RIGHT_MOTOR_INDICES) {
-                const float pos = static_cast<float>(cmdPos_[idx]);
-                const float vel = static_cast<float>(cmdVel_[idx]);
-                const float tor = static_cast<float>(cmdTau_[idx]);
-                const float kp = static_cast<float>(cmdKp_[idx]);
-                const float kd = static_cast<float>(cmdKd_[idx]);
+            leftThread.join();
+            rightThread.join();
 
-                if (!motor_[idx].setHybrid(tor, pos, vel, kp, kd)) {
-                    RCLCPP_ERROR_STREAM(get_logger(), "Time out on " << jointNames_[idx]);
-                    rightOk = false;
-                }
-            }
-        });
+            if (!leftOk)
+                retryCountL_++;
+            if (!rightOk)
+                retryCountR_++;
 
-        leftThread.join();
-        rightThread.join();
+            ok = leftOk && rightOk;
+        } else {
+            // 单路 485 串行通信
+            ok = writeAllMotors();
+            if (!ok)
+                retryCountL_++;
+        }
 
-        if (leftOk && rightOk) {
+        if (ok) {
             retryCountL_ = 0;
             retryCountR_ = 0;
             return hardware_interface::return_type::OK;
         }
 
-        if (leftOk + leftOk >= maxRetry_) {
-            return hardware_interface::return_type::OK;
+        if (retryCountL_ + retryCountR_ >= maxRetry_) {
+            RCLCPP_ERROR(get_logger(), "连续 %d 次写入失败, 触发错误保护", maxRetry_);
+            return hardware_interface::return_type::ERROR;
         }
 
         return hardware_interface::return_type::OK;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 封装: 根据模式获取电机对应的串口指针
+    // ═══════════════════════════════════════════════════════════════
+    std::shared_ptr<Dog8Dof::SerialPort>
+    BaseInterface::getPortForMotor(size_t motorIndex) const {
+        if (useDual485_) {
+            // 两路模式: 左组=portLeft_, 右组=portRight_
+            for (size_t idx : LEFT_MOTOR_INDICES) {
+                if (idx == motorIndex) {
+                    return portLeft_;
+                }
+            }
+            return portRight_;
+        }
+        // 单路模式: 全部共享 port_
+        return port_;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 封装: 向全部 8 个电机写入指令 (单路485模式)
+    // ═══════════════════════════════════════════════════════════════
+    bool BaseInterface::writeAllMotors() {
+        return writeMotorGroup(ALL_MOTOR_INDICES);
     }
 
 } // namespace Dog8Dof

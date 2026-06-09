@@ -60,6 +60,7 @@ namespace Dog8Dof {
 
         static constexpr std::array<size_t, 4> LEFT_MOTOR_INDICES{0, 1, 4, 5};
         static constexpr std::array<size_t, 4> RIGHT_MOTOR_INDICES{2, 3, 6, 7};
+        static constexpr std::array<size_t, 8> ALL_MOTOR_INDICES{0, 1, 2, 3, 4, 5, 6, 7};
 
         std::map<std::string, uint8_t> jointMapping_;
         std::string jointNames_[8] = {"LF_Front",
@@ -71,9 +72,14 @@ namespace Dog8Dof {
                                       "RR_Front",
                                       "RR_Rear"};
 
-        // 两路独立 485 端口
+        // ── RS485 端口模式 ──
+        bool useDual485_{true}; // true=两路独立, false=单路共用
+
+        // 两路独立 485 端口 (useDual485_=true)
+        std::string portName_;
         std::string portNameLeft_;
         std::string portNameRight_;
+        std::shared_ptr<Dog8Dof::SerialPort> port_;
         std::shared_ptr<Dog8Dof::SerialPort> portLeft_;
         std::shared_ptr<Dog8Dof::SerialPort> portRight_;
 
@@ -102,5 +108,31 @@ namespace Dog8Dof {
         std::array<double, 8> cmdTau_{};
         std::array<double, 8> cmdKp_{};
         std::array<double, 8> cmdKd_{};
+
+        // ── 封装辅助方法 ──
+
+        /** 根据模式获取电机对应的串口指针 */
+        std::shared_ptr<Dog8Dof::SerialPort> getPortForMotor(size_t motorIndex) const;
+
+        /** 向一组电机写入指令 (单线程内完成), 支持 array<4> 和 array<8> */
+        template <size_t N> bool writeMotorGroup(const std::array<size_t, N> &indices) {
+            bool allOk = true;
+            for (size_t idx : indices) {
+                const float pos = static_cast<float>(cmdPos_[idx]);
+                const float vel = static_cast<float>(cmdVel_[idx]);
+                const float tor = static_cast<float>(cmdTau_[idx]);
+                const float kp = static_cast<float>(cmdKp_[idx]);
+                const float kd = static_cast<float>(cmdKd_[idx]);
+                if (!motor_[idx].setHybrid(tor, pos, vel, kp, kd)) {
+                    RCLCPP_ERROR_STREAM(rclcpp::get_logger("BaseInterface"),
+                                        "Time out on " << jointNames_[idx]);
+                    allOk = false;
+                }
+            }
+            return allOk;
+        }
+
+        /** 向全部 8 个电机写入指令 (单路485模式) */
+        bool writeAllMotors();
     };
 } // namespace Dog8Dof

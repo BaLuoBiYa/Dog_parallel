@@ -1,5 +1,9 @@
-RS485_Port_Left: /dev/ttyDOGL
-RS485_Port_Right: /dev/ttyDOGR
+# 单路模式
+use_dual_485: false
+RS485_Port: "/dev/ttyUSB0"
+
+# RS485_Port_Left: /dev/ttyDOGL
+# RS485_Port_Right: /dev/ttyDOGR
 maxRetry: 5
 deactiveDamp: 0.1
 deactiveDampTime: 5

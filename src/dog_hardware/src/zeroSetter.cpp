@@ -28,8 +28,20 @@ namespace Dog8Dof {
         try {
             node_ = YAML::LoadFile(configPath_);
 
-            portNameLeft_ = node_["RS485_Port_Left"].as<std::string>();
-            portNameRight_ = node_["RS485_Port_Right"].as<std::string>();
+            // ── RS485 模式选择 ──
+            useDual485_ = node_["use_dual_485"] ? node_["use_dual_485"].as<bool>() : true;
+
+            if (useDual485_) {
+                portNameLeft_ = node_["RS485_Port_Left"].as<std::string>();
+                portNameRight_ = node_["RS485_Port_Right"].as<std::string>();
+                RCLCPP_INFO(logger_,
+                            "RS485 mode: dual (L:%s, R:%s)",
+                            portNameLeft_.c_str(),
+                            portNameRight_.c_str());
+            } else {
+                portName_ = node_["RS485_Port"].as<std::string>();
+                RCLCPP_INFO(logger_, "RS485 mode: single (%s)", portName_.c_str());
+            }
 
             frontAngleIdle_ = node_["idleAngle"]["front"].as<float>();
             rearAngleIdle_ = node_["idleAngle"]["rear"].as<float>();
@@ -55,6 +67,7 @@ namespace Dog8Dof {
             throw std::runtime_error("Can't load joint configs");
         }
 
+        port_.reset();
         portLeft_.reset();
         portRight_.reset();
         motor_.clear();
@@ -65,77 +78,100 @@ namespace Dog8Dof {
         size_t attempt = 0;
         const std::chrono::seconds retryDelay(3);
 
-        // ---- 打开左路 485 ----
-        while (rclcpp::ok()) {
-            ++attempt;
-            try {
-                portLeft_ = std::make_shared<Dog8Dof::SerialPort>(portNameLeft_);
-                RCLCPP_INFO_STREAM(logger_,
-                                   "Opened left serial port "
-                                       << portNameLeft_ << " on attempt " << attempt);
-                break;
-            } catch (const std::exception &e) {
-                RCLCPP_WARN(
-                    logger_, "RS485 left port attempt %zu failed: %s", attempt, e.what());
-                RCLCPP_INFO_STREAM(
-                    logger_,
-                    "Retrying in " << retryDelay.count() << "s (press Ctrl-C to abort)");
-                std::this_thread::sleep_for(retryDelay);
+        // ── 打开串口 ──
+        if (useDual485_) {
+            // ---- 打开左路 485 ----
+            while (rclcpp::ok()) {
+                ++attempt;
+                try {
+                    portLeft_ = std::make_shared<Dog8Dof::SerialPort>(portNameLeft_);
+                    RCLCPP_INFO_STREAM(logger_,
+                                       "Opened left serial port "
+                                           << portNameLeft_ << " on attempt " << attempt);
+                    break;
+                } catch (const std::exception &e) {
+                    RCLCPP_WARN(logger_,
+                                "RS485 left port attempt %zu failed: %s",
+                                attempt,
+                                e.what());
+                    RCLCPP_INFO_STREAM(logger_,
+                                       "Retrying in " << retryDelay.count()
+                                                      << "s (press Ctrl-C to abort)");
+                    std::this_thread::sleep_for(retryDelay);
+                }
+            }
+            if (!portLeft_) {
+                RCLCPP_ERROR(logger_, "RS485 left port connection aborted or failed");
+                throw std::runtime_error("RS485 left port connection failed or aborted");
+            }
+
+            // ---- 打开右路 485 ----
+            attempt = 0;
+            while (rclcpp::ok()) {
+                ++attempt;
+                try {
+                    portRight_ = std::make_shared<Dog8Dof::SerialPort>(portNameRight_);
+                    RCLCPP_INFO_STREAM(logger_,
+                                       "Opened right serial port " << portNameRight_
+                                                                   << " on attempt "
+                                                                   << attempt);
+                    break;
+                } catch (const std::exception &e) {
+                    RCLCPP_WARN(logger_,
+                                "RS485 right port attempt %zu failed: %s",
+                                attempt,
+                                e.what());
+                    RCLCPP_INFO_STREAM(logger_,
+                                       "Retrying in " << retryDelay.count()
+                                                      << "s (press Ctrl-C to abort)");
+                    std::this_thread::sleep_for(retryDelay);
+                }
+            }
+            if (!portRight_) {
+                RCLCPP_ERROR(logger_, "RS485 right port connection aborted or failed");
+                throw std::runtime_error("RS485 right port connection failed or aborted");
+            }
+        } else {
+            // ---- 单路 485 ----
+            while (rclcpp::ok()) {
+                ++attempt;
+                try {
+                    port_ = std::make_shared<Dog8Dof::SerialPort>(portName_);
+                    RCLCPP_INFO_STREAM(
+                        logger_,
+                        "Opened serial port " << portName_ << " on attempt " << attempt);
+                    break;
+                } catch (const std::exception &e) {
+                    RCLCPP_WARN(
+                        logger_, "RS485 port attempt %zu failed: %s", attempt, e.what());
+                    RCLCPP_INFO_STREAM(logger_,
+                                       "Retrying in " << retryDelay.count()
+                                                      << "s (press Ctrl-C to abort)");
+                    std::this_thread::sleep_for(retryDelay);
+                }
+            }
+            if (!port_) {
+                RCLCPP_ERROR(logger_, "RS485 port connection aborted or failed");
+                throw std::runtime_error("RS485 port connection failed or aborted");
             }
         }
-        if (!portLeft_) {
-            RCLCPP_ERROR(logger_, "RS485 left port connection aborted or failed");
-            throw std::runtime_error("RS485 left port connection failed or aborted");
-        }
 
-        // ---- 打开右路 485 ----
-        attempt = 0;
-        while (rclcpp::ok()) {
-            ++attempt;
-            try {
-                portRight_ = std::make_shared<Dog8Dof::SerialPort>(portNameRight_);
-                RCLCPP_INFO_STREAM(logger_,
-                                   "Opened right serial port "
-                                       << portNameRight_ << " on attempt " << attempt);
-                break;
-            } catch (const std::exception &e) {
-                RCLCPP_WARN(logger_,
-                            "RS485 right port attempt %zu failed: %s",
-                            attempt,
-                            e.what());
-                RCLCPP_INFO_STREAM(
-                    logger_,
-                    "Retrying in " << retryDelay.count() << "s (press Ctrl-C to abort)");
-                std::this_thread::sleep_for(retryDelay);
-            }
-        }
-        if (!portRight_) {
-            RCLCPP_ERROR(logger_, "RS485 right port connection aborted or failed");
-            throw std::runtime_error("RS485 right port connection failed or aborted");
-        }
-
-        // ---- 连接电机 ----
+        // ── 连接电机 ──
         attempt = 0;
         while (rclcpp::ok()) {
             ++attempt;
             motor_.clear();
             try {
                 for (size_t i = 0; i < motorNumber_; ++i) {
-                    // 左组电机用左端口，右组用右端口
-                    std::shared_ptr<Dog8Dof::SerialPort> port =
-                        (i == LEFT_MOTOR_INDICES[0] || i == LEFT_MOTOR_INDICES[1] ||
-                         i == LEFT_MOTOR_INDICES[2] || i == LEFT_MOTOR_INDICES[3])
-                            ? portLeft_
-                            : portRight_;
-                    motor_.emplace_back(jointMapping_[jointNames_[i]], port);
+                    motor_.emplace_back(jointMapping_[jointNames_[i]],
+                                        getPortForMotor(i));
                     motor_[i].setZero(0.0f);
                 }
             } catch (const std::exception &e) {
                 RCLCPP_WARN_STREAM(logger_, "Connecting to motor failed: " << e.what());
                 // 重建串口，清空 485 总线残留数据
                 try {
-                    portLeft_->reopen();
-                    portRight_->reopen();
+                    reopenPorts();
                     RCLCPP_INFO_STREAM(logger_, "Serial ports reopened for retry");
                 } catch (const std::exception &re) {
                     RCLCPP_WARN_STREAM(logger_, "Reopen failed: " << re.what());
@@ -297,6 +333,33 @@ namespace Dog8Dof {
         std::rename((configPath_ + ".tmp").c_str(), configPath_.c_str());
 
         RCLCPP_INFO_STREAM(logger_, "All calibrations written to " << configPath_);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 根据模式获取电机对应的串口指针
+    // ═══════════════════════════════════════════════════════════════
+    std::shared_ptr<Dog8Dof::SerialPort> ZeroSetter::getPortForMotor(size_t idx) const {
+        if (useDual485_) {
+            for (size_t leftIdx : LEFT_MOTOR_INDICES) {
+                if (leftIdx == idx) {
+                    return portLeft_;
+                }
+            }
+            return portRight_;
+        }
+        return port_;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 关闭并重新打开所有串口 (清除 485 总线残留)
+    // ═══════════════════════════════════════════════════════════════
+    void ZeroSetter::reopenPorts() {
+        if (useDual485_) {
+            portLeft_->reopen();
+            portRight_->reopen();
+        } else {
+            port_->reopen();
+        }
     }
 
 } // namespace Dog8Dof

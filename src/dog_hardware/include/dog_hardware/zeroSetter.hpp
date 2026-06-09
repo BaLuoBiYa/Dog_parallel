@@ -28,10 +28,21 @@ namespace Dog8Dof {
                                             "RR_Front",
                                             "RR_Rear"};
 
+        // ── RS485 端口模式 ──
+        bool useDual485_{true};
+
+        std::string portName_;
         std::string portNameLeft_;
         std::string portNameRight_;
+        std::shared_ptr<Dog8Dof::SerialPort> port_;
         std::shared_ptr<Dog8Dof::SerialPort> portLeft_;
         std::shared_ptr<Dog8Dof::SerialPort> portRight_;
+
+        /** 根据模式获取电机对应的串口指针 */
+        std::shared_ptr<Dog8Dof::SerialPort> getPortForMotor(size_t idx) const;
+
+        /** 关闭并重新打开所有串口 (清除 485 总线残留) */
+        void reopenPorts();
 
         YAML::Node node_;
         std::string configPath_;
