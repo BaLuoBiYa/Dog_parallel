@@ -29,8 +29,7 @@ namespace Dog8Dof {
         (void)previous_state;
 
         if (standProfile_.empty() || walkProfile_.empty()) {
-            RCLCPP_ERROR(this->get_node()->get_logger(),
-                         "standProfile and walkProfile must not be empty");
+            RCLCPP_ERROR(logger_, "standProfile and walkProfile must not be empty");
             return controller_interface::CallbackReturn::ERROR;
         }
 
@@ -40,9 +39,8 @@ namespace Dog8Dof {
             LF_ = std::make_unique<GaitManager>(
                 period, walkProfile_, standProfile_, jumpProfile_);
         } catch (const std::exception &e) {
-            RCLCPP_ERROR(this->get_node()->get_logger(),
-                         "TrajectoryTrackerSingle configure failed: %s",
-                         e.what());
+            RCLCPP_ERROR(
+                logger_, "TrajectoryTrackerSingle configure failed: %s", e.what());
             return controller_interface::CallbackReturn::ERROR;
         }
 
@@ -109,7 +107,7 @@ namespace Dog8Dof {
     // =========================================================================
     controller_interface::CallbackReturn
     TrajectoryTrackerSingle::on_error(const rclcpp_lifecycle::State &previous_state) {
-        RCLCPP_ERROR(this->get_node()->get_logger(),
+        RCLCPP_ERROR(logger_,
                      "TrajectoryTrackerSingle entered error state from %s",
                      previous_state.label().c_str());
 
@@ -172,7 +170,7 @@ namespace Dog8Dof {
 
         // ---- 跳跃保护：任何非 JUMP 命令在跳跃未完成时直接忽略 ----
         if (msg.gait != GT::JUMP && LF_->isJumping()) {
-            RCLCPP_WARN(this->get_node()->get_logger(),
+            RCLCPP_WARN(logger_,
                         "Jump in progress, ignoring non-jump command (gait=%d)",
                         msg.gait);
             return true;
@@ -180,8 +178,7 @@ namespace Dog8Dof {
 
         GaitParameters params[4];
         if (!converter_.convert(msg, params)) {
-            RCLCPP_WARN(this->get_node()->get_logger(),
-                        "GaitTwist conversion failed, falling back to stand");
+            RCLCPP_WARN(logger_, "GaitTwist conversion failed, falling back to stand");
             return switchToStandMode();
         }
 
@@ -204,7 +201,7 @@ namespace Dog8Dof {
         case GT::JUMP: {
             const uint8_t parID = static_cast<uint8_t>(msg.step_height);
             if (!LF_->setJumpGait(parID)) {
-                RCLCPP_WARN(this->get_node()->get_logger(),
+                RCLCPP_WARN(logger_,
                             "Jump gait activation failed (parID=%d), falling to "
                             "stand",
                             parID);
@@ -214,7 +211,7 @@ namespace Dog8Dof {
             break;
         }
         default:
-            RCLCPP_WARN(this->get_node()->get_logger(), "Unknown gait mode");
+            RCLCPP_WARN(logger_, "Unknown gait mode");
             return false;
         }
         return true;
@@ -264,9 +261,7 @@ namespace Dog8Dof {
                 cmdPos == cmdMap.end() || cmdVel == cmdMap.end() ||
                 cmdEff == cmdMap.end() || cmdKp == cmdMap.end() ||
                 cmdKd == cmdMap.end()) {
-                RCLCPP_ERROR(this->get_node()->get_logger(),
-                             "Missing interface for %s",
-                             jointNames_[i].c_str());
+                RCLCPP_ERROR(logger_, "Missing interface for %s", jointNames_[i].c_str());
                 return false;
             }
             stateIdx_[i] = {stPos->second, stVel->second, stEff->second};

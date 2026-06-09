@@ -84,6 +84,8 @@ namespace Dog8Dof {
         float getPos(size_t i);
         float getVel(size_t i);
         float getTau(size_t i);
+
+        rclcpp::Logger logger_ = rclcpp::get_logger("TrajectoryTrackerSingle");
     };
 
 } // namespace Dog8Dof

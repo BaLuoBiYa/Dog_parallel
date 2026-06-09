@@ -29,8 +29,7 @@ namespace Dog8Dof {
         (void)previous_state;
 
         if (standProfile_.empty() || walkProfile_.empty()) {
-            RCLCPP_ERROR(this->get_node()->get_logger(),
-                         "standProfile and walkProfile must not be empty");
+            RCLCPP_ERROR(logger_, "standProfile and walkProfile must not be empty");
             return controller_interface::CallbackReturn::ERROR;
         }
 
@@ -46,9 +45,7 @@ namespace Dog8Dof {
             RR_ = std::make_unique<GaitManager>(
                 period, walkProfile_, standProfile_, jumpProfile_);
         } catch (const std::exception &e) {
-            RCLCPP_ERROR(this->get_node()->get_logger(),
-                         "TrajectoryTracker configure failed: %s",
-                         e.what());
+            RCLCPP_ERROR(logger_, "TrajectoryTracker configure failed: %s", e.what());
             return controller_interface::CallbackReturn::ERROR;
         }
 
@@ -122,7 +119,7 @@ namespace Dog8Dof {
     // =========================================================================
     controller_interface::CallbackReturn
     TrajectoryTracker::on_error(const rclcpp_lifecycle::State &previous_state) {
-        RCLCPP_ERROR(this->get_node()->get_logger(),
+        RCLCPP_ERROR(logger_,
                      "TrajectoryTracker entered error state from %s",
                      previous_state.label().c_str());
 
@@ -215,18 +212,16 @@ namespace Dog8Dof {
         using GT = dog_msg::msg::GaitTwist;
 
         // ---- 跳跃保护：跳跃未完成时忽略一切 gait 切换命令 ----
-        if (LF_->isJumping() || LR_->isJumping() ||
-            RF_->isJumping() || RR_->isJumping()) {
-            RCLCPP_WARN(this->get_node()->get_logger(),
-                        "Jump in progress, ignoring command (gait=%d)",
-                        msg.gait);
+        if (LF_->isJumping() || LR_->isJumping() || RF_->isJumping() ||
+            RR_->isJumping()) {
+            RCLCPP_WARN(
+                logger_, "Jump in progress, ignoring command (gait=%d)", msg.gait);
             return true; // 不视为错误，但拒绝切换（包括重复 JUMP 命令）
         }
 
         GaitParameters params[4];
         if (!converter_.convert(msg, params)) {
-            RCLCPP_WARN(this->get_node()->get_logger(),
-                        "GaitTwist conversion failed, falling back to stand");
+            RCLCPP_WARN(logger_, "GaitTwist conversion failed, falling back to stand");
             return switchToStandMode();
         }
 
@@ -269,7 +264,7 @@ namespace Dog8Dof {
             const uint8_t parID = static_cast<uint8_t>(msg.step_height);
             if (!LF_->setJumpGait(parID) || !LR_->setJumpGait(parID) ||
                 !RF_->setJumpGait(parID) || !RR_->setJumpGait(parID)) {
-                RCLCPP_WARN(this->get_node()->get_logger(),
+                RCLCPP_WARN(logger_,
                             "Jump gait activation failed (parID=%d), falling to "
                             "stand",
                             parID);
@@ -279,7 +274,7 @@ namespace Dog8Dof {
             break;
         }
         default:
-            RCLCPP_WARN(this->get_node()->get_logger(), "Unknown gait mode");
+            RCLCPP_WARN(logger_, "Unknown gait mode");
             return false;
         }
         return true;
@@ -343,9 +338,7 @@ namespace Dog8Dof {
                 cmdPos == cmdMap.end() || cmdVel == cmdMap.end() ||
                 cmdEff == cmdMap.end() || cmdKp == cmdMap.end() ||
                 cmdKd == cmdMap.end() || stTmp == stMap.end()) {
-                RCLCPP_ERROR(this->get_node()->get_logger(),
-                             "Missing interface for %s",
-                             jointNames_[i].c_str());
+                RCLCPP_ERROR(logger_, "Missing interface for %s", jointNames_[i].c_str());
                 return false;
             }
             stateIdx_[i] = {stPos->second, stVel->second, stEff->second, stTmp->second};
@@ -401,7 +394,7 @@ namespace Dog8Dof {
     void TrajectoryTracker::registerMonitorPublisher() {
         monitorPub_ = this->get_node()->create_publisher<dog_msg::msg::SystemState>(
             monitorTopic_, 10);
-        RCLCPP_INFO(this->get_node()->get_logger(),
+        RCLCPP_INFO(logger_,
                     "Monitor publisher registered on %s (1/%zu rate)",
                     monitorTopic_.c_str(),
                     kMonitorPubDecimation);

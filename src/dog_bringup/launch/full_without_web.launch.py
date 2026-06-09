@@ -53,6 +53,12 @@ def generate_launch_description():
     #     output = "screen"
     # )
 
+    subs_node = Node(
+        package = "dog_remote",
+        executable = "sbusGaitTwistNode",
+        output = "screen"
+    )
+
     statepub_node = Node(
         package="robot_state_publisher",
         executable="robot_state_publisher",
@@ -111,19 +117,19 @@ def generate_launch_description():
     )
 
     # ── 手柄控制节点 ──
-    joystick_node = Node(
-        package="dog_remote",
-        executable="joystickController",
-        name="joystick_controller",
-        output="screen",
-        parameters=[{
-            "device_path": "/dev/input/js0",
-            "deadzone": 0.05,
-            "exponent": 1.5,
-            "max_linear_vel": 0.8,
-            "max_angular_vel": 1.2,
-        }],
-    )
+    # joystick_node = Node(
+    #     package="dog_remote",
+    #     executable="joystickController",
+    #     name="joystick_controller",
+    #     output="screen",
+    #     parameters=[{
+    #         "device_path": "/dev/input/js0",
+    #         "deadzone": 0.05,
+    #         "exponent": 1.5,
+    #         "max_linear_vel": 0.8,
+    #         "max_angular_vel": 1.2,
+    #     }],
+    # )
 
     # event_handler2 = RegisterEventHandler(
     #     event_handler=OnProcessExit(
@@ -138,7 +144,7 @@ def generate_launch_description():
 
             statepub_node,
             zeroSetter_node,
-            joystick_node,
+            subs_node,
             event_handler_sync,
             event_handler0,
             event_handler1,
